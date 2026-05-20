@@ -1,0 +1,5 @@
+# Future: switch to pnpm for faster installs and stricter dependency resolution
+# For now, npm workspaces are used (see root package.json)
+packages:
+  - "apps/*"
+  - "packages/*"

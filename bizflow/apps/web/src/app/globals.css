@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+@theme {
+  --color-app: var(--bg-app);
+  --color-surface: var(--bg-surface);
+  --color-surface-2: var(--bg-surface-2);
+  --color-surface-3: var(--bg-surface-3);
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-input: var(--input-bg);
+  --color-input-border: var(--input-border);
+}
+
+/* ═══════════════════════════════════════════
+   THEME TOKENS — Dark Mode Only
+═══════════════════════════════════════════ */
+html {
+  color-scheme: dark;
+}
+
+:root {
+  --bg-app:        #0d0d1a;
+  --bg-surface:    #13131f;
+  --bg-surface-2:  #1a1a2e;
+  --bg-surface-3:  rgba(255,255,255,0.03);
+  --border:        rgba(255, 255, 255, 0.05);
+  --border-hover:  rgba(139, 92, 246, 0.3);
+  --text-primary:  #ffffff;
+  --text-secondary:rgba(255, 255, 255, 0.5);
+  --text-muted:    rgba(255, 255, 255, 0.3);
+  --input-bg:      rgba(255, 255, 255, 0.05);
+  --input-border:  rgba(255, 255, 255, 0.10);
+  --scrollbar:     rgba(255, 255, 255, 0.10);
+  color-scheme: dark;
+}
+
+/* ═══════════════════════════════════════════
+   LIGHT THEME TOKENS
+═══════════════════════════════════════════ */
+html.light {
+  color-scheme: light;
+}
+
+html.light :root {
+  --bg-app:        #f4f4f8;
+  --bg-surface:    #ffffff;
+  --bg-surface-2:  #f0f0f5;
+  --bg-surface-3:  rgba(0, 0, 0, 0.03);
+  --border:        rgba(0, 0, 0, 0.08);
+  --border-hover:  rgba(109, 40, 217, 0.35);
+  --text-primary:  #0f0f1a;
+  --text-secondary:rgba(15, 15, 26, 0.55);
+  --text-muted:    rgba(15, 15, 26, 0.35);
+  --input-bg:      rgba(0, 0, 0, 0.04);
+  --input-border:  rgba(0, 0, 0, 0.12);
+  --scrollbar:     rgba(0, 0, 0, 0.12);
+  color-scheme: light;
+}
+
+/* ═══════════════════════════════════════════
+   GLOBAL BASE
+═══════════════════════════════════════════ */
+body {
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent horizontal scroll on mobile */
+  overflow-x: hidden;
+}
+
+
+/* ═══════════════════════════════════════════
+   MOBILE / RESPONSIVE UTILITIES
+═══════════════════════════════════════════ */
+
+/* Full dynamic viewport height — fixes mobile browser chrome */
+.h-screen {
+  height: 100dvh;
+}
+
+/* Tap highlight removal for touch devices */
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Better touch scrolling on iOS */
+.overflow-y-auto, .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe-area insets for notched/punch-hole phones */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Prevent content jumping when modals open */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Fluid type scale — slightly smaller base on very small screens */
+@media (max-width: 360px) {
+  html { font-size: 14px; }
+}
+
+
+/* ═══════════════════════════════════════════
+   THEMED UTILITIES  (used via className)
+═══════════════════════════════════════════ */
+.bg-app      { background-color: var(--bg-app); }
+.bg-surface  { background-color: var(--bg-surface); }
+.bg-surface-2{ background-color: var(--bg-surface-2); }
+.border-theme{ border-color: var(--border); }
+.text-primary{ color: var(--text-primary); }
+.text-secondary{ color: var(--text-secondary); }
+.text-muted  { color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════════ */
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
+*::-webkit-scrollbar { width: 5px; height: 5px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 99px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(139, 92, 246, 0.3); }
+
+.scrollbar-hide { scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+/* ═══════════════════════════════════════════
+   SMOOTH TRANSITIONS
+═══════════════════════════════════════════ */
+*, *::before, *::after { transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* ═══════════════════════════════════════════
+   SELECTION
+═══════════════════════════════════════════ */
+::selection { background: rgba(139, 92, 246, 0.3); color: var(--text-primary); }
+
+/* ═══════════════════════════════════════════
+   GLASS / GRADIENT UTILITIES
+═══════════════════════════════════════════ */
+.glass {
+  background: var(--bg-surface-3);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa, #c4b5fd);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ═══════════════════════════════════════════
+   ANIMATED BACKGROUND ORBS (Login page)
+═══════════════════════════════════════════ */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50%       { transform: translateY(-30px) scale(1.05); }
+}
+@keyframes float2 {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50%       { transform: translateY(20px) scale(0.95); }
+}
+.orb-1 { animation: float  8s ease-in-out infinite; }
+.orb-2 { animation: float2 10s ease-in-out infinite; }
+.orb-3 { animation: float  12s ease-in-out infinite 2s; }
+
+/* ═══════════════════════════════════════════
+   SHIMMER / SKELETON
+═══════════════════════════════════════════ */
+@keyframes shimmer {
+  0%   { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.05) 25%,
+    rgba(255,255,255,0.1)  50%,
+    rgba(255,255,255,0.05) 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+  border-radius: 8px;
+}
+
+/* ═══════════════════════════════════════════
+   FORM INPUT (themed)
+═══════════════════════════════════════════ */
+.input-themed {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-primary);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-themed::placeholder { color: var(--text-muted); }
+.input-themed:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+/* ═══════════════════════════════════════════
+   AUTOFILL — prevent browser white flash
+═══════════════════════════════════════════ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-surface-2) inset !important;
+  box-shadow:         0 0 0 1000px var(--bg-surface-2) inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  caret-color: var(--text-primary);
+  border-color: var(--input-border) !important;
+  transition: background-color 99999s ease-in-out 0s;
+}
+
+/* ═══════════════════════════════════════════
+   SELECT & DATE — dark dropdown options
+═══════════════════════════════════════════ */
+select, input[type="date"], input[type="time"], input[type="datetime-local"] {
+  color-scheme: dark;
+}
+html.light select, html.light input[type="date"], html.light input[type="time"], html.light input[type="datetime-local"] {
+  color-scheme: light;
+}
+select option {
+  background-color: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+/* Focus ring consistent with inputs */
+select:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+/* ═══════════════════════════════════════════
+   MODAL INPUTS — consistent focus ring
+═══════════════════════════════════════════ */
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(139, 92, 246, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+/* ═══════════════════════════════════════════
+   AUTH PAGE
+═══════════════════════════════════════════ */
+.auth-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}

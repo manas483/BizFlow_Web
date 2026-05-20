@@ -1,0 +1,416 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Business {
+  id                  String             @id @default(cuid())
+  name                String
+  gstNumber           String?
+  ownerName           String
+  phone               String
+  address             String?
+  businessType        String
+  plan                Plan               @default(STARTER)
+  createdAt           DateTime           @default(now())
+  accountNumber       String?
+  bankName            String?
+  branch              String?
+  ifscCode            String?
+  logoUrl             String?
+  signatureUrl        String?
+  gstInclusive        Boolean            @default(false)
+  onboardingCompleted Boolean            @default(false)
+  onboardingConfig    Json?
+  attendanceRecords   AttendanceRecord[]
+  billsOfSupply       BillOfSupply[]
+  creditNotes         CreditNote[]
+  customers           Customer[]
+  debitNotes          DebitNote[]
+  employees           Employee[]
+  expenses            Expense[]
+  notifications       Notification[]
+  products            Product[]
+  quotations          Quotation[]
+  sales               Sale[]
+  users               User[]
+  userActivities      UserActivity[]
+  invitations         Invitation[]
+  leaveRequests       LeaveRequest[]
+  attendanceTickets   AttendanceTicket[]
+  refreshTokens       RefreshToken[]
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  password      String?
+  role          Role           @default(STAFF)
+  businessId    String
+  emailVerified Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  business      Business       @relation(fields: [businessId], references: [id])
+  employee      Employee?
+  refreshTokens RefreshToken[]
+  deviceTokens  DeviceToken[]
+}
+
+/// Stores hashed OTPs for email verification. Auto-cleaned on use or expiry.
+model EmailVerification {
+  id        String   @id @default(cuid())
+  email     String
+  otpHash   String   // bcrypt hash of the 6-digit OTP
+  expiresAt DateTime
+  attempts  Int      @default(0) // failed attempt counter — max 5
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+model Invitation {
+  id         String   @id @default(cuid())
+  email      String
+  token      String   @unique
+  role       Role
+  businessId String
+  expiresAt  DateTime
+  used       Boolean  @default(false)  // M-12: prevents token replay after acceptance
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, email])
+}
+
+model Product {
+  id             String             @id @default(cuid())
+  name           String
+  sku            String
+  category       String
+  stock          Int                @default(0)
+  minStock       Int                @default(5)
+  purchasePrice  Float
+  sellingPrice   Float
+  supplier       String?
+  businessId     String
+  createdAt      DateTime           @default(now())
+  gstRate        Float              @default(0)
+  hsnCode        String?
+  unit           String             @default("pcs")
+  billItems      BillOfSupplyItem[]
+  business       Business           @relation(fields: [businessId], references: [id])
+  quotationItems QuotationItem[]
+  saleItems      SaleItem[]
+}
+
+model Customer {
+  id             String         @id @default(cuid())
+  name           String
+  phone          String
+  email          String?
+  city           String?
+  dues           Float          @default(0)
+  totalPurchases Float          @default(0)
+  status         String         @default("active")
+  businessId     String
+  createdAt      DateTime       @default(now())
+  address        String?
+  gstNumber      String?
+  state          String?
+  stateCode      String?
+  billsOfSupply  BillOfSupply[]
+  creditNotes    CreditNote[]
+  business       Business       @relation(fields: [businessId], references: [id])
+  debitNotes     DebitNote[]
+  quotations     Quotation[]
+  sales          Sale[]
+}
+
+model Sale {
+  id            String       @id @default(cuid())
+  invoiceNo     String
+  customerId    String
+  total         Float
+  paid          Float        @default(0)
+  status        String
+  notes         String?
+  businessId    String
+  createdAt     DateTime     @default(now())
+  placeOfSupply String?
+  reverseCharge Boolean      @default(false)
+  aggregateDate String?
+  isAggregate   Boolean      @default(false)
+  creditNotes   CreditNote[]
+  debitNotes    DebitNote[]
+  business      Business     @relation(fields: [businessId], references: [id])
+  customer      Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items         SaleItem[]
+
+  @@unique([businessId, invoiceNo])
+}
+
+model SaleItem {
+  id            String  @id @default(cuid())
+  saleId        String
+  productId     String
+  qty           Int
+  price         Float
+  purchasePrice Float   @default(0) // Immutable snapshot of COGS at time of sale
+  gstRate       Float   @default(0)
+  hsnCode       String?
+  discount      Float   @default(0)
+  product       Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sale          Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+}
+
+model CreditNote {
+  id           String   @id @default(cuid())
+  creditNoteNo String   @unique
+  saleId       String
+  customerId   String
+  reason       String
+  amount       Float
+  taxAmount    Float    @default(0)
+  notes        String?
+  businessId   String
+  createdAt    DateTime @default(now())
+  business     Business @relation(fields: [businessId], references: [id])
+  customer     Customer @relation(fields: [customerId], references: [id])
+  sale         Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+}
+
+model DebitNote {
+  id          String   @id @default(cuid())
+  debitNoteNo String   @unique
+  saleId      String
+  customerId  String
+  reason      String
+  amount      Float
+  taxAmount   Float    @default(0)
+  notes       String?
+  businessId  String
+  createdAt   DateTime @default(now())
+  business    Business @relation(fields: [businessId], references: [id])
+  customer    Customer @relation(fields: [customerId], references: [id])
+  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+}
+
+model BillOfSupply {
+  id         String             @id @default(cuid())
+  billNo     String             @unique
+  customerId String
+  total      Float
+  paid       Float              @default(0)
+  status     String
+  supplyType String
+  notes      String?
+  businessId String
+  createdAt  DateTime           @default(now())
+  business   Business           @relation(fields: [businessId], references: [id])
+  customer   Customer           @relation(fields: [customerId], references: [id])
+  items      BillOfSupplyItem[]
+}
+
+model BillOfSupplyItem {
+  id             String       @id @default(cuid())
+  billOfSupplyId String
+  productId      String
+  qty            Int
+  price          Float
+  purchasePrice  Float        @default(0) // Immutable snapshot of COGS at time of sale
+  hsnCode        String?
+  billOfSupply   BillOfSupply @relation(fields: [billOfSupplyId], references: [id], onDelete: Cascade)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Quotation {
+  id            String          @id @default(cuid())
+  quotationNo   String
+  customerId    String
+  total         Float
+  notes         String?
+  placeOfSupply String?
+  reverseCharge Boolean         @default(false)
+  businessId    String
+  createdAt     DateTime        @default(now())
+  validUntil    DateTime?
+  business      Business        @relation(fields: [businessId], references: [id])
+  customer      Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items         QuotationItem[]
+
+  @@unique([businessId, quotationNo])
+}
+
+model QuotationItem {
+  id            String    @id @default(cuid())
+  quotationId   String
+  productId     String
+  qty           Int
+  price         Float
+  purchasePrice Float     @default(0) // Immutable snapshot of COGS at time of quotation
+  discount      Float     @default(0)
+  hsnCode       String?
+  gstRate       Float     @default(0)
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quotation     Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+}
+
+model Expense {
+  id         String   @id @default(cuid())
+  category   String
+  amount     Float
+  note       String?
+  date       DateTime
+  recurring  Boolean  @default(false)
+  businessId String
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id])
+}
+
+model Employee {
+  id                String             @id @default(cuid())
+  userId            String?            @unique
+  name              String
+  email             String
+  phone             String?
+  role              Role               @default(STAFF)
+  department        String
+  designation       String?
+  permissions       Json?
+  salary            Float
+  joinDate          DateTime
+  status            String             @default("INVITATION_SENT")
+  attendance        Int                @default(100)
+  businessId        String
+  createdAt         DateTime           @default(now())
+  attendanceRecords AttendanceRecord[]
+  leaveRequests     LeaveRequest[]
+  attendanceTickets AttendanceTicket[]
+  business          Business           @relation(fields: [businessId], references: [id])
+  user              User?              @relation(fields: [userId], references: [id])
+
+  @@unique([businessId, email])
+}
+
+model AttendanceRecord {
+  id         String   @id @default(cuid())
+  employeeId String
+  date       String
+  status     String
+  note       String?
+  businessId String
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id])
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+}
+
+model LeaveRequest {
+  id          String    @id @default(cuid())
+  employeeId  String
+  businessId  String
+  type        String    // sick | casual | annual | unpaid | other
+  startDate   DateTime
+  endDate     DateTime
+  reason      String
+  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  adminNote   String?
+  appliedAt   DateTime  @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?   // userId of admin
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  business    Business  @relation(fields: [businessId], references: [id])
+}
+
+/// Employee raises a ticket when their recorded attendance is wrong.
+/// Super Admin reviews, corrects the record, and closes the ticket.
+model AttendanceTicket {
+  id             String    @id @default(cuid())
+  employeeId     String
+  businessId     String
+  date           String    // YYYY-MM-DD of the disputed day
+  recordedStatus String?   // what's in the DB (present/absent/leave/half_day)
+  expectedStatus String    // what the employee claims it should be
+  issue          String    // free-text description of the problem
+  status         String    @default("OPEN") // OPEN | IN_REVIEW | RESOLVED | REJECTED
+  adminNote      String?   // admin's resolution message
+  resolvedBy     String?   // userId of admin
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  employee       Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  business       Business  @relation(fields: [businessId], references: [id])
+
+  @@unique([employeeId, date]) // one active ticket per day per employee
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  type       String
+  title      String
+  message    String
+  read       Boolean  @default(false)
+  businessId String
+  targetRole String?  // null = visible to all; set to a Role value to restrict (e.g. "SUPER_ADMIN")
+  userId     String?  // null = role-broadcast; set to target a specific user for personal notifications
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id])
+}
+
+model UserActivity {
+  id         String   @id @default(cuid())
+  businessId String
+  userId     String
+  eventType  String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id])
+}
+
+/// Server-side refresh tokens for mobile JWT auth.
+/// Stored in DB so they can be explicitly revoked on logout.
+model RefreshToken {
+  id         String    @id @default(cuid())
+  token      String    @unique           // random 64-byte hex
+  userId     String
+  businessId String
+  expiresAt  DateTime
+  revokedAt  DateTime?                   // null = still valid
+  userAgent  String?                     // device info from User-Agent header
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+/// FCM / APNs device tokens for push notifications.
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique             // FCM registration token
+  platform  String                       // "android" | "ios" | "web"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum Role {
+  SUPER_ADMIN
+  MANAGER
+  ACCOUNTANT
+  STAFF
+  CUSTOM_ROLE
+}
+
+enum Plan {
+  STARTER
+  PRO
+  ENTERPRISE
+}

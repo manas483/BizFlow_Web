@@ -1,0 +1,242 @@
+{
+  "info": {
+    "_postman_id": "bizflow-api-v1",
+    "name": "BizFlow API v1 — Mobile",
+    "description": "Complete API reference for BizFlow mobile (Flutter) integration.\n\nAuth: Use POST /api/v1/auth/token to obtain access_token and refresh_token.\nSet Authorization: Bearer {{access_token}} on all subsequent requests.\n\nBase URL: {{base_url}}  (e.g. https://your-domain.com)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",      "value": "http://localhost:3000" },
+    { "key": "access_token",  "value": "" },
+    { "key": "refresh_token", "value": "" }
+  ],
+  "item": [
+
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Login (get tokens)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/auth/token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"YourPassword1!\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "const r = pm.response.json();",
+              "if(r.success){ pm.collectionVariables.set('access_token', r.data.access_token); pm.collectionVariables.set('refresh_token', r.data.refresh_token); }"
+            ]}
+          }]
+        },
+        {
+          "name": "Refresh tokens",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/auth/refresh",
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" }
+          }
+        },
+        {
+          "name": "Get current user (me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": "{{base_url}}/api/v1/auth/me"
+          }
+        },
+        {
+          "name": "Logout (revoke refresh token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/auth/logout",
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "📦 Products",
+      "item": [
+        {
+          "name": "List products (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/products?page=1&limit=25&search=&category=&sortBy=createdAt&sortDir=desc",
+              "query": [
+                { "key": "page",     "value": "1" },
+                { "key": "limit",    "value": "25" },
+                { "key": "search",   "value": "" },
+                { "key": "category", "value": "" },
+                { "key": "sortBy",   "value": "createdAt" },
+                { "key": "sortDir",  "value": "desc" },
+                { "key": "lowStock", "value": "false", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get product by ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": "{{base_url}}/api/v1/products/:id"
+          }
+        },
+        {
+          "name": "Create product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/products",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Product Name\",\n  \"sku\": \"SKU001\",\n  \"category\": \"Category\",\n  \"stock\": 100,\n  \"minStock\": 10,\n  \"purchasePrice\": 50,\n  \"sellingPrice\": 100,\n  \"gstRate\": 18,\n  \"hsnCode\": \"1234\",\n  \"unit\": \"pcs\"\n}" }
+          }
+        },
+        {
+          "name": "Update product",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/products/:id",
+            "body": { "mode": "raw", "raw": "{\n  \"stock\": 150,\n  \"sellingPrice\": 110\n}" }
+          }
+        },
+        {
+          "name": "Delete product (SUPER_ADMIN/MANAGER)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": "{{base_url}}/api/v1/products/:id"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "👥 Customers",
+      "item": [
+        {
+          "name": "List customers (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/v1/customers?page=1&limit=25&search=&sortBy=createdAt&sortDir=desc",
+              "query": [
+                { "key": "page", "value": "1" }, { "key": "limit", "value": "25" },
+                { "key": "search", "value": "" }, { "key": "status", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        { "name": "Get customer by ID",   "request": { "method": "GET",    "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/customers/:id" }},
+        { "name": "Create customer",       "request": { "method": "POST",   "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/customers", "body": { "mode": "raw", "raw": "{\n  \"name\": \"Customer Name\",\n  \"phone\": \"+91 9876543210\",\n  \"email\": \"customer@example.com\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"stateCode\": \"27\"\n}" }}},
+        { "name": "Update customer",       "request": { "method": "PUT",    "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/customers/:id", "body": { "mode": "raw", "raw": "{\n  \"phone\": \"+91 9999999999\"\n}" }}},
+        { "name": "Delete customer",       "request": { "method": "DELETE", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/customers/:id" }}
+      ]
+    },
+
+    {
+      "name": "🧾 Quotations",
+      "item": [
+        {
+          "name": "List quotations (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "url": { "raw": "{{base_url}}/api/v1/quotations?page=1&limit=25&search=&sortBy=createdAt&sortDir=desc" }
+          }
+        },
+        { "name": "Create quotation", "request": { "method": "POST", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/quotations", "body": { "mode": "raw", "raw": "{\n  \"customerId\": \"CUSTOMER_ID\",\n  \"items\": [{\"productId\":\"PRODUCT_ID\",\"qty\":2,\"price\":100,\"discount\":0,\"gstRate\":18}],\n  \"notes\": \"Optional notes\",\n  \"placeOfSupply\": \"Maharashtra\",\n  \"reverseCharge\": false,\n  \"validUntil\": \"2026-06-30\"\n}" }}}
+      ]
+    },
+
+    {
+      "name": "💳 Credit Notes",
+      "item": [
+        { "name": "List credit notes (paginated)", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/credit-notes?page=1&limit=25&from=&to=" }}},
+        { "name": "Create credit note", "request": { "method": "POST", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/credit-notes", "body": { "mode": "raw", "raw": "{\n  \"saleId\": \"SALE_ID\",\n  \"customerId\": \"CUSTOMER_ID\",\n  \"reason\": \"Return of goods\",\n  \"amount\": 500,\n  \"taxAmount\": 90,\n  \"notes\": \"Optional\"\n}" }}}
+      ]
+    },
+
+    {
+      "name": "📋 Debit Notes",
+      "item": [
+        { "name": "List debit notes (paginated)", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/debit-notes?page=1&limit=25" }}},
+        { "name": "Create debit note", "request": { "method": "POST", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/debit-notes", "body": { "mode": "raw", "raw": "{\n  \"saleId\": \"SALE_ID\",\n  \"customerId\": \"CUSTOMER_ID\",\n  \"reason\": \"Price adjustment\",\n  \"amount\": 200,\n  \"taxAmount\": 36\n}" }}}
+      ]
+    },
+
+    {
+      "name": "📄 Bill of Supply",
+      "item": [
+        { "name": "List bills (paginated)", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/bill-of-supply?page=1&limit=25&status=&search=" }}},
+        { "name": "Create bill", "request": { "method": "POST", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/bill-of-supply", "body": { "mode": "raw", "raw": "{\n  \"customerId\": \"CUSTOMER_ID\",\n  \"supplyType\": \"exempt\",\n  \"items\": [{\"productId\":\"PRODUCT_ID\",\"qty\":1,\"price\":200}],\n  \"paid\": 200\n}" }}}
+      ]
+    },
+
+    {
+      "name": "💰 Expenses",
+      "item": [
+        { "name": "List expenses (paginated)", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/expenses?page=1&limit=25&category=&from=&to=&sortBy=date&sortDir=desc" }}},
+        { "name": "Get expense by ID", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/expenses/:id" }},
+        { "name": "Create expense", "request": { "method": "POST", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/expenses", "body": { "mode": "raw", "raw": "{\n  \"category\": \"Rent\",\n  \"amount\": 5000,\n  \"date\": \"2026-05-01\",\n  \"note\": \"Monthly office rent\",\n  \"recurring\": true\n}" }}},
+        { "name": "Update expense", "request": { "method": "PUT", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/expenses/:id", "body": { "mode": "raw", "raw": "{\n  \"amount\": 5500\n}" }}},
+        { "name": "Delete expense", "request": { "method": "DELETE", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/expenses/:id" }}
+      ]
+    },
+
+    {
+      "name": "🔔 Notifications",
+      "item": [
+        { "name": "List notifications (paginated)", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/notifications?page=1&limit=25&unread=false" }}}
+      ]
+    },
+
+    {
+      "name": "📊 Dashboard",
+      "item": [
+        { "name": "Stats", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/dashboard/stats" }}
+      ]
+    },
+
+    {
+      "name": "📈 Reports",
+      "item": [
+        { "name": "Summary KPIs", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/reports/summary?period=monthly" }}},
+        { "name": "Chart data", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/reports/charts?period=monthly" }}},
+        { "name": "Top products", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/reports/top-products?period=monthly&limit=5" }}},
+        { "name": "Expenses breakdown", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/reports/expenses?period=monthly" }}},
+        { "name": "GST analytics", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/reports/gst?period=monthly" }}},
+        { "name": "Collection health", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/reports/collection?period=monthly" }}},
+        { "name": "Inventory snapshot", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": { "raw": "{{base_url}}/api/v1/reports/inventory?lowStockLimit=10" }}}
+      ]
+    },
+
+    {
+      "name": "🏢 Business",
+      "item": [
+        { "name": "Get business info", "request": { "method": "GET", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/business" }},
+        { "name": "Update business (SUPER_ADMIN)", "request": { "method": "PUT", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/business", "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Business Name\",\n  \"gstNumber\": \"29ABCDE1234F1Z5\"\n}" }}}
+      ]
+    },
+
+    {
+      "name": "📱 Device Tokens (FCM)",
+      "item": [
+        { "name": "Register FCM token", "request": { "method": "POST", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"},{"key":"Content-Type","value":"application/json"}], "url": "{{base_url}}/api/v1/device-tokens", "body": { "mode": "raw", "raw": "{\n  \"token\": \"FCM_TOKEN_HERE\",\n  \"platform\": \"android\"\n}" }}},
+        { "name": "Deregister FCM token", "request": { "method": "DELETE", "header": [{"key":"Authorization","value":"Bearer {{access_token}}"}], "url": "{{base_url}}/api/v1/device-tokens/:token" }}
+      ]
+    }
+  ]
+}

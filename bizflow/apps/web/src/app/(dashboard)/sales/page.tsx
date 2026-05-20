@@ -1,0 +1,574 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import DashboardLayout from "@/components/layout/DashboardLayout";
+
+function downloadPdf(url: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { StatCard } from "@/components/ui/StatCard";
+import { useSales } from "@/hooks/useSales";
+import { useQuotations } from "@/hooks/useQuotations";
+import { useCreditNotes, useDebitNotes, useBillsOfSupply } from "@/hooks/useInvoiceDocs";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { Search, FileText, Download, TrendingUp, Clock, CheckCircle, AlertCircle, Plus, FileDown, FileUp, FileMinus, Trash2, RefreshCw } from "lucide-react";
+import NewSaleModal from "@/components/modals/NewSaleModal";
+import NewCreditNoteModal from "@/components/modals/NewCreditNoteModal";
+import NewDebitNoteModal from "@/components/modals/NewDebitNoteModal";
+import NewBillOfSupplyModal from "@/components/modals/NewBillOfSupplyModal";
+import NewQuotationModal from "@/components/modals/NewQuotationModal";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import Pagination from "@/components/ui/Pagination";
+import { useDeleteSale } from "@/hooks/useSales";
+import { useDeleteCreditNote, useDeleteDebitNote } from "@/hooks/useInvoiceDocs";
+
+function pctChange(cur: number, prev: number) {
+  if (prev === 0) return cur > 0 ? 100 : 0;
+  return parseFloat((((cur - prev) / prev) * 100).toFixed(1));
+}
+
+export default function SalesPage() {
+  const [activeTab, setActiveTab] = useState("invoices");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [page, setPage] = useState(1);
+
+  const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [cnModalOpen, setCnModalOpen] = useState(false);
+  const [dnModalOpen, setDnModalOpen] = useState(false);
+  const [bosModalOpen, setBosModalOpen] = useState(false);
+  const [quotationModalOpen, setQuotationModalOpen] = useState(false);
+  const [deleteInvoiceTarget, setDeleteInvoiceTarget] = useState<{ id: string; invoiceNo: string } | null>(null);
+  const [deleteCnTarget, setDeleteCnTarget] = useState<{ id: string; no: string } | null>(null);
+  const [deleteDnTarget, setDeleteDnTarget] = useState<{ id: string; no: string } | null>(null);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [salePayTarget, setSalePayTarget] = useState<{ id: string; total: number; paid: number; invoiceNo: string } | null>(null);
+  const [salePayInput, setSalePayInput] = useState("");
+  const [bosPayTarget, setBosPayTarget] = useState<{ id: string; total: number; paid: number; billNo: string } | null>(null);
+  const [bosPayInput, setBosPayInput] = useState("");
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const deleteSale = useDeleteSale();
+  const deleteCreditNote = useDeleteCreditNote();
+  const deleteDebitNote = useDeleteDebitNote();
+
+  const { data: salesPaged, isLoading: salesLoading } = useSales(search, filter, page);
+  const sales = salesPaged?.data ?? [];
+  const { data: allSalesPaged } = useSales("", "all", 1, 100);
+  const allSales = allSalesPaged?.data ?? [];
+  const { data: creditNotes = [], isLoading: cnLoading } = useCreditNotes();
+  const { data: debitNotes = [], isLoading: dnLoading } = useDebitNotes();
+  const { data: bills = [], isLoading: bosLoading } = useBillsOfSupply();
+  const { data: quotations = [], isLoading: quotationsLoading } = useQuotations(search);
+
+  const now = new Date();
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0);
+
+  const isThisMonth = (d: string) => new Date(d) >= thisMonthStart;
+  const isLastMonth = (d: string) => { const dt = new Date(d); return dt >= lastMonthStart && dt <= lastMonthEnd; };
+
+  const totalRevenue   = allSales.reduce((s: number, sale: any) => s + sale.paid, 0);
+  const totalDues      = allSales.reduce((s: number, sale: any) => s + (sale.total - sale.paid), 0);
+  const paidCount      = allSales.filter((s: any) => s.status === "paid").length;
+  const unpaidCount    = allSales.filter((s: any) => s.status !== "paid").length;
+
+  const revThis  = allSales.filter((s: any) => isThisMonth(s.createdAt)).reduce((a: number, s: any) => a + s.paid, 0);
+  const revLast  = allSales.filter((s: any) => isLastMonth(s.createdAt)).reduce((a: number, s: any) => a + s.paid, 0);
+  const dueThis  = allSales.filter((s: any) => isThisMonth(s.createdAt)).reduce((a: number, s: any) => a + (s.total - s.paid), 0);
+  const dueLast  = allSales.filter((s: any) => isLastMonth(s.createdAt)).reduce((a: number, s: any) => a + (s.total - s.paid), 0);
+  const paidThis = allSales.filter((s: any) => isThisMonth(s.createdAt) && s.status === "paid").length;
+  const paidLast = allSales.filter((s: any) => isLastMonth(s.createdAt) && s.status === "paid").length;
+  const unpaidThis = allSales.filter((s: any) => isThisMonth(s.createdAt) && s.status !== "paid").length;
+  const unpaidLast = allSales.filter((s: any) => isLastMonth(s.createdAt) && s.status !== "paid").length;
+
+  const revChange    = pctChange(revThis, revLast);
+  const dueChange    = pctChange(dueThis, dueLast);
+  const paidChange   = pctChange(paidThis, paidLast);
+  const unpaidChange = pctChange(unpaidThis, unpaidLast);
+
+  const handleConvertQuotation = async (q: any) => {
+    setConvertingId(q.id);
+    try {
+      const res = await fetch(`/api/quotations/${q.id}/convert`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Conversion failed");
+      toast.success(`Quotation converted to Invoice ${data.invoiceNo}`);
+      await queryClient.invalidateQueries({ queryKey: ['sales'] });
+      setActiveTab("invoices");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to convert quotation");
+    } finally {
+      setConvertingId(null);
+    }
+  };
+
+  const handleBoSPayUpdate = async () => {
+    if (!bosPayTarget) return;
+    try {
+      const res = await fetch(`/api/bill-of-supply/${bosPayTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paid: parseFloat(bosPayInput) || 0 }),
+      });
+      if (!res.ok) throw new Error("Failed to update payment");
+      // H-N4 FIX: Invalidate query cache instead of hard reload
+      await queryClient.invalidateQueries({ queryKey: ['bills-of-supply'] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update payment");
+    } finally {
+      setBosPayTarget(null);
+    }
+  };
+
+  const handleSalePayUpdate = async () => {
+    if (!salePayTarget) return;
+    const newPaid = parseFloat(salePayInput) || 0;
+    let newStatus = "unpaid";
+    if (newPaid >= salePayTarget.total) newStatus = "paid";
+    else if (newPaid > 0) newStatus = "partial";
+
+    try {
+      const res = await fetch(`/api/sales/${salePayTarget.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paid: newPaid, status: newStatus }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Failed to update payment");
+      }
+      toast.success("Payment recorded successfully");
+      await queryClient.invalidateQueries({ queryKey: ['sales'] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update payment");
+    } finally {
+      setSalePayTarget(null);
+    }
+  };
+
+  return (
+    <DashboardLayout title="Sales & Billing">
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-6">
+        <div>
+          <h2 className="text-xl font-bold text-primary">Sales & Billing</h2>
+          <p className="text-primary/40 text-sm mt-0.5">Manage GST invoices, notes, and bills of supply</p>
+        </div>
+        {/* Action buttons — scrollable row on mobile */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => setSaleModalOpen(true)} className="whitespace-nowrap flex-shrink-0">Tax Invoice</Button>
+          <Button variant="secondary" size="sm" icon={<FileText size={14} />} onClick={() => setQuotationModalOpen(true)} className="whitespace-nowrap flex-shrink-0">Quotation</Button>
+          <Button variant="secondary" size="sm" icon={<FileDown size={14} />} onClick={() => setCnModalOpen(true)} className="whitespace-nowrap flex-shrink-0">Credit Note</Button>
+          <Button variant="secondary" size="sm" icon={<FileUp size={14} />} onClick={() => setDnModalOpen(true)} className="whitespace-nowrap flex-shrink-0">Debit Note</Button>
+          <Button variant="secondary" size="sm" icon={<FileMinus size={14} />} onClick={() => setBosModalOpen(true)} className="whitespace-nowrap flex-shrink-0">Bill of Supply</Button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <StatCard label="Total Revenue" value={formatCurrency(totalRevenue)} change={Math.abs(revChange)} trend={revChange >= 0 ? "up" : "down"} icon={<TrendingUp size={18} />} color="violet" subtitle="vs last month" />
+        <StatCard label="Pending Dues" value={formatCurrency(totalDues)} change={Math.abs(dueChange)} trend={dueChange > 0 ? "up" : "down"} icon={<Clock size={18} />} color="amber" subtitle="vs last month" />
+        <StatCard label="Paid Invoices" value={paidCount.toString()} change={Math.abs(paidChange)} trend={paidChange >= 0 ? "up" : "down"} icon={<CheckCircle size={18} />} color="emerald" subtitle="vs last month" />
+        <StatCard label="Unpaid Invoices" value={unpaidCount.toString()} change={Math.abs(unpaidChange)} trend={unpaidChange > 0 ? "up" : "down"} icon={<AlertCircle size={18} />} color="rose" subtitle="vs last month" />
+      </div>
+
+      <Card>
+        {/* Tabs — horizontally scrollable on mobile */}
+        <div className="flex border-b border-primary/10 px-2 sm:px-4 overflow-x-auto scrollbar-hide">
+          {[
+            { id: "invoices", label: "Tax Invoices" },
+            { id: "quotations", label: "Quotations" },
+            { id: "credit", label: "Credit Notes" },
+            { id: "debit", label: "Debit Notes" },
+            { id: "bos", label: "Bills of Supply" },
+          ].map(t => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
+                activeTab === t.id ? "border-violet-500 text-violet-400" : "border-transparent text-primary/40 hover:text-primary hover:border-primary/20"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "invoices" && (
+          <>
+            <CardHeader>
+              {/* Search + filters — wraps on mobile */}
+              <div className="flex flex-wrap gap-2">
+                <div className="relative flex-1 min-w-[140px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/40 w-3.5 h-3.5" />
+                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search invoices..." className="w-full bg-primary/5 border border-primary/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-primary placeholder:text-primary/40 focus:outline-none focus:border-violet-500/50" />
+                </div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {["all", "paid", "partial", "unpaid"].map((f) => (
+                    <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all flex-shrink-0 ${filter === f ? "bg-violet-600 text-primary" : "bg-primary/5 text-primary/40 hover:text-primary hover:bg-primary/10"}`}>
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CardHeader>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-primary/10">
+                    {["Invoice ID", "Customer", "Date", "Items", "Total", "Paid", "Due", "Status", "Actions"].map((h) => (
+                      <th key={h} className="text-left px-4 py-3 text-primary/40 text-xs font-medium whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-primary/10">
+                  {salesLoading ? (
+                    <tr><td colSpan={9} className="text-center py-12 text-primary/40 text-sm">Loading sales...</td></tr>
+                  ) : sales.length === 0 ? (
+                    <tr><td colSpan={9} className="text-center py-12 text-primary/40 text-sm">No invoices found</td></tr>
+                  ) : sales.map((sale: any) => {
+                    const due = sale.total - sale.paid;
+                    return (
+                      <tr key={sale.id} className="hover:bg-primary/5 transition-colors">
+                        <td className="px-4 py-3.5 text-violet-400 text-xs font-mono">{sale.invoiceNo}</td>
+                        <td className="px-4 py-3.5 text-primary text-sm font-medium">{sale.customer?.name || "Walk-in"}</td>
+                        <td className="px-4 py-3.5 text-primary/40 text-xs">{formatDate(sale.createdAt)}</td>
+                        <td className="px-4 py-3.5 text-primary/40 text-sm text-center">{sale.items?.length || 0}</td>
+                        <td className="px-4 py-3.5 text-primary font-semibold text-sm">{formatCurrency(sale.total)}</td>
+                        <td className="px-4 py-3.5 text-emerald-400 text-sm font-medium">{formatCurrency(sale.paid)}</td>
+                        <td className="px-4 py-3.5 text-sm font-medium">
+                          {due > 0 ? <span className="text-rose-400">{formatCurrency(due)}</span> : <span className="text-primary/40">—</span>}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <Badge variant={sale.status === "paid" ? "success" : sale.status === "partial" ? "warning" : "danger"}>{sale.status}</Badge>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex gap-1 items-center">
+                            <button onClick={() => downloadPdf(`/api/sales/${sale.id}/pdf?copy=original`, `Invoice-${sale.invoiceNo}_original.pdf`)}
+                              aria-label="Download Original (Buyer) PDF"
+                              className="flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-all" title="Original (Buyer)">
+                              <FileText size={10} />Orig
+                            </button>
+                            <button onClick={() => downloadPdf(`/api/sales/${sale.id}/pdf?copy=duplicate`, `Invoice-${sale.invoiceNo}_duplicate.pdf`)}
+                              aria-label="Download Duplicate (Transporter) PDF"
+                              className="flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all" title="Duplicate (Transporter)">
+                              <FileText size={10} />Dup
+                            </button>
+                            <button onClick={() => downloadPdf(`/api/sales/${sale.id}/pdf?copy=triplicate`, `Invoice-${sale.invoiceNo}_triplicate.pdf`)}
+                              aria-label="Download Triplicate (Supplier) PDF"
+                              className="flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all" title="Triplicate (Supplier)">
+                              <FileText size={10} />Trip
+                            </button>
+                            {sale.status !== "paid" && (
+                              <button
+                                onClick={() => { setSalePayTarget({ id: sale.id, total: sale.total, paid: sale.paid, invoiceNo: sale.invoiceNo }); setSalePayInput(String(sale.paid)); }}
+                                className="flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all"
+                                title="Record Payment"
+                              >
+                                <RefreshCw size={10} />Pay
+                              </button>
+                            )}
+                            {/* H-3: Delete invoice */}
+                            <button onClick={() => setDeleteInvoiceTarget({ id: sale.id, invoiceNo: sale.invoiceNo })} aria-label={`Delete invoice ${sale.invoiceNo}`} className="p-1.5 rounded-lg hover:bg-rose-500/15 text-primary/40 hover:text-rose-400 transition-all" title="Delete Invoice"><Trash2 size={13} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {activeTab === "invoices" && salesPaged && salesPaged.totalPages > 1 && (
+          <div className="px-4 pb-4">
+            <Pagination
+              page={salesPaged.page}
+              totalPages={salesPaged.totalPages}
+              total={salesPaged.total}
+              limit={salesPaged.limit}
+              onPage={(p) => setPage(p)}
+            />
+          </div>
+        )}
+
+        {activeTab === "quotations" && (
+          <>
+            <CardHeader>
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/40 w-3.5 h-3.5" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search quotations..." className="w-full bg-primary/5 border border-primary/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-primary placeholder:text-primary/40 focus:outline-none focus:border-violet-500/50" />
+              </div>
+            </CardHeader>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px]">
+                <thead>
+                  <tr className="border-b border-primary/10">
+                    {["Quotation No", "Customer", "Date", "Valid Until", "Items", "Total", "Actions"].map((h) => (
+                      <th key={h} className="text-left px-4 py-3 text-primary/40 text-xs font-medium whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-primary/10">
+                  {quotationsLoading ? (
+                    <tr><td colSpan={7} className="text-center py-12 text-primary/40 text-sm">Loading quotations...</td></tr>
+                  ) : quotations.length === 0 ? (
+                    <tr><td colSpan={7} className="text-center py-12 text-primary/40 text-sm">No quotations found</td></tr>
+                  ) : quotations.map((q: any) => (
+                    <tr key={q.id} className="hover:bg-primary/5 transition-colors">
+                      <td className="px-4 py-3.5 text-violet-400 text-xs font-mono">{q.quotationNo}</td>
+                      <td className="px-4 py-3.5 text-primary text-sm font-medium">{q.customer?.name || "Walk-in"}</td>
+                      <td className="px-4 py-3.5 text-primary/40 text-xs">{formatDate(q.createdAt)}</td>
+                      <td className="px-4 py-3.5 text-primary/40 text-xs">{q.validUntil ? formatDate(q.validUntil) : "—"}</td>
+                      <td className="px-4 py-3.5 text-primary/40 text-sm text-center">{q.items?.length || 0}</td>
+                      <td className="px-4 py-3.5 text-primary font-semibold text-sm">{formatCurrency(q.total)}</td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex gap-1 items-center">
+                          <button onClick={() => downloadPdf(`/api/quotations/${q.id}/pdf`, `Quotation-${q.quotationNo}.pdf`)} className="p-1.5 rounded-lg hover:bg-violet-500/15 text-primary/40 hover:text-violet-400 transition-all" title="Download"><Download size={13} /></button>
+                          {/* H-6: Convert to Invoice */}
+                          <button
+                            onClick={() => handleConvertQuotation(q)}
+                            disabled={convertingId === q.id}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-all disabled:opacity-50"
+                            title="Convert to Tax Invoice"
+                          >
+                            {convertingId === q.id ? <RefreshCw size={11} className="animate-spin" /> : <FileText size={11} />}
+                            Convert
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {activeTab === "credit" && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px]">
+              <thead>
+                <tr className="border-b border-primary/10">
+                  {["CN No", "Date", "Original Invoice", "Customer", "Reason", "Credit Amt", "Actions"].map((h) => (
+                    <th key={h} className="text-left px-4 py-3 text-primary/40 text-xs font-medium whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary/10">
+                {cnLoading ? <tr><td colSpan={7} className="text-center py-12 text-primary/40 text-sm">Loading...</td></tr>
+                : creditNotes.length === 0 ? <tr><td colSpan={7} className="text-center py-12 text-primary/40 text-sm">No credit notes found</td></tr>
+                : creditNotes.map((cn: any) => (
+                  <tr key={cn.id} className="hover:bg-primary/5 transition-colors">
+                    <td className="px-4 py-3.5 text-emerald-400 text-xs font-mono">{cn.creditNoteNo}</td>
+                    <td className="px-4 py-3.5 text-primary/40 text-xs">{formatDate(cn.createdAt)}</td>
+                    <td className="px-4 py-3.5 text-primary/40 text-xs font-mono">{cn.sale?.invoiceNo}</td>
+                    <td className="px-4 py-3.5 text-primary text-sm">{cn.customer?.name}</td>
+                    <td className="px-4 py-3.5 text-primary/60 text-xs capitalize">{cn.reason.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3.5 text-emerald-400 font-semibold text-sm">{formatCurrency(cn.amount + cn.taxAmount)}</td>
+                    <td className="px-4 py-3.5">
+                      {/* H-4: Download + Delete CN */}
+                      <div className="flex gap-1 items-center">
+                        <button onClick={() => downloadPdf(`/api/credit-notes/${cn.id}/pdf`, `CreditNote-${cn.creditNoteNo}.pdf`)} className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-primary/40 hover:text-emerald-400" title="Download" aria-label="Download credit note PDF"><Download size={13} /></button>
+                        <button onClick={() => setDeleteCnTarget({ id: cn.id, no: cn.creditNoteNo })} className="p-1.5 rounded-lg hover:bg-rose-500/15 text-primary/40 hover:text-rose-400" title="Delete" aria-label={`Delete credit note ${cn.creditNoteNo}`}><Trash2 size={13} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {activeTab === "debit" && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px]">
+              <thead>
+                <tr className="border-b border-primary/10">
+                  {["DN No", "Date", "Original Invoice", "Customer", "Reason", "Debit Amt", "Actions"].map((h) => (
+                    <th key={h} className="text-left px-4 py-3 text-primary/40 text-xs font-medium whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary/10">
+                {dnLoading ? <tr><td colSpan={7} className="text-center py-12 text-primary/40 text-sm">Loading...</td></tr>
+                : debitNotes.length === 0 ? <tr><td colSpan={7} className="text-center py-12 text-primary/40 text-sm">No debit notes found</td></tr>
+                : debitNotes.map((dn: any) => (
+                  <tr key={dn.id} className="hover:bg-primary/5 transition-colors">
+                    <td className="px-4 py-3.5 text-amber-400 text-xs font-mono">{dn.debitNoteNo}</td>
+                    <td className="px-4 py-3.5 text-primary/40 text-xs">{formatDate(dn.createdAt)}</td>
+                    <td className="px-4 py-3.5 text-primary/40 text-xs font-mono">{dn.sale?.invoiceNo}</td>
+                    <td className="px-4 py-3.5 text-primary text-sm">{dn.customer?.name}</td>
+                    <td className="px-4 py-3.5 text-primary/60 text-xs capitalize">{dn.reason.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3.5 text-amber-400 font-semibold text-sm">{formatCurrency(dn.amount + dn.taxAmount)}</td>
+                    <td className="px-4 py-3.5">
+                      {/* H-4: Download + Delete DN */}
+                      <div className="flex gap-1 items-center">
+                        <button onClick={() => downloadPdf(`/api/debit-notes/${dn.id}/pdf`, `DebitNote-${dn.debitNoteNo}.pdf`)} className="p-1.5 rounded-lg hover:bg-amber-500/15 text-primary/40 hover:text-amber-400" title="Download" aria-label="Download debit note PDF"><Download size={13} /></button>
+                        <button onClick={() => setDeleteDnTarget({ id: dn.id, no: dn.debitNoteNo })} className="p-1.5 rounded-lg hover:bg-rose-500/15 text-primary/40 hover:text-rose-400" title="Delete" aria-label={`Delete debit note ${dn.debitNoteNo}`}><Trash2 size={13} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {activeTab === "bos" && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px]">
+              <thead>
+                <tr className="border-b border-primary/10">
+                  {["Bill No", "Date", "Customer", "Type", "Total", "Status", "Actions"].map((h) => (
+                    <th key={h} className="text-left px-4 py-3 text-primary/40 text-xs font-medium whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary/10">
+                {bosLoading ? <tr><td colSpan={7} className="text-center py-12 text-primary/40 text-sm">Loading...</td></tr>
+                : bills.length === 0 ? <tr><td colSpan={7} className="text-center py-12 text-primary/40 text-sm">No bills of supply found</td></tr>
+                : bills.map((b: any) => (
+                  <tr key={b.id} className="hover:bg-primary/5 transition-colors">
+                    <td className="px-4 py-3.5 text-blue-400 text-xs font-mono">{b.billNo}</td>
+                    <td className="px-4 py-3.5 text-primary/40 text-xs">{formatDate(b.createdAt)}</td>
+                    <td className="px-4 py-3.5 text-primary text-sm">{b.customer?.name}</td>
+                    <td className="px-4 py-3.5"><Badge variant="default" className="capitalize">{b.supplyType}</Badge></td>
+                    <td className="px-4 py-3.5 text-blue-400 font-semibold text-sm">{formatCurrency(b.total)}</td>
+                    <td className="px-4 py-3.5"><Badge variant={b.status === "paid" ? "success" : b.status === "partial" ? "warning" : "danger"}>{b.status}</Badge></td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex gap-1 items-center">
+                        <button onClick={() => downloadPdf(`/api/bill-of-supply/${b.id}/pdf`, `BillOfSupply-${b.billNo}.pdf`)} className="p-1.5 rounded-lg hover:bg-blue-500/15 text-primary/40 hover:text-blue-400" title="Download"><Download size={13} /></button>
+                        {/* H-5: Update payment status */}
+                        {b.status !== "paid" && (
+                          <button
+                            onClick={() => { setBosPayTarget({ id: b.id, total: b.total, paid: b.paid, billNo: b.billNo }); setBosPayInput(String(b.paid)); }}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all"
+                            title="Update Payment"
+                          >
+                            <RefreshCw size={11} /> Pay
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <NewSaleModal open={saleModalOpen} onClose={() => setSaleModalOpen(false)} />
+      <NewQuotationModal open={quotationModalOpen} onClose={() => setQuotationModalOpen(false)} />
+      <NewCreditNoteModal open={cnModalOpen} onClose={() => setCnModalOpen(false)} />
+      <NewDebitNoteModal open={dnModalOpen} onClose={() => setDnModalOpen(false)} />
+      <NewBillOfSupplyModal open={bosModalOpen} onClose={() => setBosModalOpen(false)} />
+
+      {/* H-3: Delete invoice confirm */}
+      <ConfirmDialog
+        open={!!deleteInvoiceTarget}
+        title="Delete Invoice"
+        message={`Delete invoice ${deleteInvoiceTarget?.invoiceNo}? Stock will be restored and this cannot be undone.`}
+        confirmLabel="Delete Invoice"
+        loading={deleteSale.isPending}
+        onConfirm={async () => {
+          if (!deleteInvoiceTarget) return;
+          try { await deleteSale.mutateAsync(deleteInvoiceTarget.id); } catch (err: any) { toast.error(err.message || "Failed to delete invoice"); }
+          setDeleteInvoiceTarget(null);
+        }}
+        onCancel={() => setDeleteInvoiceTarget(null)}
+      />
+
+      {/* H-4: Delete CN confirm */}
+      <ConfirmDialog
+        open={!!deleteCnTarget}
+        title="Delete Credit Note"
+        message={`Delete credit note ${deleteCnTarget?.no}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteCreditNote.isPending}
+        onConfirm={async () => {
+          if (!deleteCnTarget) return;
+          try { await deleteCreditNote.mutateAsync(deleteCnTarget.id); } catch { toast.error("Failed to delete credit note"); }
+          setDeleteCnTarget(null);
+        }}
+        onCancel={() => setDeleteCnTarget(null)}
+      />
+
+      {/* H-4: Delete DN confirm */}
+      <ConfirmDialog
+        open={!!deleteDnTarget}
+        title="Delete Debit Note"
+        message={`Delete debit note ${deleteDnTarget?.no}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteDebitNote.isPending}
+        onConfirm={async () => {
+          if (!deleteDnTarget) return;
+          try { await deleteDebitNote.mutateAsync(deleteDnTarget.id); } catch { toast.error("Failed to delete debit note"); }
+          setDeleteDnTarget(null);
+        }}
+        onCancel={() => setDeleteDnTarget(null)}
+      />
+
+      {/* H-5: BoS payment update dialog */}
+      {bosPayTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="rounded-2xl p-6 w-80 space-y-4" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+            <p className="text-primary font-semibold">Update BoS Payment — {bosPayTarget.billNo}</p>
+            <p className="text-primary/40 text-xs">Total: ₹{bosPayTarget.total.toLocaleString()}</p>
+            <div>
+              <label className="text-primary/40 text-xs mb-1.5 block">Amount Paid (₹)</label>
+              <input
+                type="number" min={0} max={bosPayTarget.total}
+                value={bosPayInput}
+                onChange={e => setBosPayInput(e.target.value)}
+                className="w-full bg-primary/5 border border-primary/10 rounded-xl px-4 py-2.5 text-sm text-primary focus:outline-none focus:border-violet-500/50"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setBosPayTarget(null)} className="flex-1 py-2 rounded-xl text-sm text-primary/60 hover:text-primary hover:bg-primary/5 transition-all">Cancel</button>
+              <button onClick={handleBoSPayUpdate} className="flex-1 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-all">Update</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice payment update dialog */}
+      {salePayTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="rounded-2xl p-6 w-80 space-y-4" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+            <p className="text-primary font-semibold">Record Payment — {salePayTarget.invoiceNo}</p>
+            <p className="text-primary/40 text-xs">Invoice Total: ₹{salePayTarget.total.toLocaleString()}</p>
+            <div>
+              <label className="text-primary/40 text-xs mb-1.5 block">Amount Received (₹)</label>
+              <input
+                type="number" min={0} max={salePayTarget.total}
+                value={salePayInput}
+                onChange={e => setSalePayInput(e.target.value)}
+                className="w-full bg-primary/5 border border-primary/10 rounded-xl px-4 py-2.5 text-sm text-primary focus:outline-none focus:border-violet-500/50"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setSalePayTarget(null)} className="flex-1 py-2 rounded-xl text-sm text-primary/60 hover:text-primary hover:bg-primary/5 transition-all">Cancel</button>
+              <button onClick={handleSalePayUpdate} className="flex-1 py-2 rounded-xl text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all">Record</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
+  );
+}
