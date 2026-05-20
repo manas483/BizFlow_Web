@@ -10,19 +10,19 @@ abstract final class AppColors {
   // ══════════════════════════════════════════════════════
   //  BRAND — Violet/Indigo gradient palette
   // ══════════════════════════════════════════════════════
-  static const Color brand50  = Color(0xFFF5F3FF);
-  static const Color brand100 = Color(0xFFEDE9FE);
-  static const Color brand200 = Color(0xFFDDD6FE);
-  static const Color brand300 = Color(0xFFC4B5FD);
-  static const Color brand400 = Color(0xFFA78BFA);
-  static const Color brand500 = Color(0xFF8B5CF6); // Primary accent (web)
-  static const Color brand600 = Color(0xFF7C3AED);
-  static const Color brand700 = Color(0xFF6D28D9);
-  static const Color brand800 = Color(0xFF5B21B6);
-  static const Color brand900 = Color(0xFF4C1D95);
+  static const Color brand50  = Color(0xFFEEF2FF);
+  static const Color brand100 = Color(0xFFE0E7FF);
+  static const Color brand200 = Color(0xFFC7D2FE);
+  static const Color brand300 = Color(0xFFA5B4FC);
+  static const Color brand400 = Color(0xFF818CF8);
+  static const Color brand500 = Color(0xFF6366F1); // Indigo primary
+  static const Color brand600 = Color(0xFF4F46E5);
+  static const Color brand700 = Color(0xFF4338CA);
+  static const Color brand800 = Color(0xFF3730A3);
+  static const Color brand900 = Color(0xFF312E81);
 
-  /// Indigo accent used in Material3 seed
-  static const Color indigo500 = Color(0xFF6366F1);
+  /// Violet accent
+  static const Color violet500 = Color(0xFF8B5CF6);
 
   // ══════════════════════════════════════════════════════
   //  DARK MODE — matches web :root tokens
@@ -42,10 +42,10 @@ abstract final class AppColors {
   // ══════════════════════════════════════════════════════
   //  LIGHT MODE — matches web html.light :root tokens
   // ══════════════════════════════════════════════════════
-  static const Color lightBg       = Color(0xFFF4F4F8);
+  static const Color lightBg       = Color(0xFFF8F9FB); // Crisper off-white
   static const Color lightSurface  = Color(0xFFFFFFFF);
-  static const Color lightSurface2 = Color(0xFFF0F0F5);
-  static const Color lightSurface3 = Color(0x08000000); // rgba(0,0,0,0.03)
+  static const Color lightSurface2 = Color(0xFFF3F4F6);
+  static const Color lightSurface3 = Color(0x0A000000); // rgba(0,0,0,0.04)
   static const Color lightBorder   = Color(0x14000000); // rgba(0,0,0,0.08)
   static const Color lightBorderHover = Color(0x596D28D9); // rgba(109,40,217,0.35)
   static const Color lightTextPrimary   = Color(0xFF0F0F1A);
@@ -57,10 +57,19 @@ abstract final class AppColors {
   // ══════════════════════════════════════════════════════
   //  SEMANTIC
   // ══════════════════════════════════════════════════════
-  static const Color success   = Color(0xFF22C55E);
-  static const Color warning   = Color(0xFFF59E0B);
-  static const Color error     = Color(0xFFEF4444);
-  static const Color info      = Color(0xFF3B82F6);
+  static const Color success   = Color(0xFF10B981); // Emerald
+  static const Color warning   = Color(0xFFF59E0B); // Amber
+  static const Color error     = Color(0xFFEF4444); // Red
+  static const Color info      = Color(0xFF3B82F6); // Blue
+
+  // ══════════════════════════════════════════════════════
+  //  PASTEL SURFACES (for icons / badges)
+  // ══════════════════════════════════════════════════════
+  static const Color pastelSuccess = Color(0xFFD1FAE5);
+  static const Color pastelWarning = Color(0xFFFEF3C7);
+  static const Color pastelError   = Color(0xFFFEE2E2);
+  static const Color pastelInfo    = Color(0xFFDBEAFE);
+  static const Color pastelBrand   = Color(0xFFE0E7FF);
 
   // ══════════════════════════════════════════════════════
   //  STATUS COLORS (stock indicators, etc.)

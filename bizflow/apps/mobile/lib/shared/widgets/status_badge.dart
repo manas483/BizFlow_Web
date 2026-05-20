@@ -51,14 +51,29 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final color = _color;
+    
+    Color getBgColor() {
+      if (isDark) return color.withValues(alpha: 0.15);
+      switch (variant) {
+        case BadgeVariant.success: return AppColors.pastelSuccess;
+        case BadgeVariant.warning: return AppColors.pastelWarning;
+        case BadgeVariant.error:   return AppColors.pastelError;
+        case BadgeVariant.info:    return AppColors.pastelInfo;
+        case BadgeVariant.brand:   return AppColors.pastelBrand;
+        case BadgeVariant.neutral: return AppColors.stockOut.withValues(alpha: 0.1);
+      }
+    }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: getBgColor(),
         borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        border: Border.all(
+          color: isDark ? color.withValues(alpha: 0.25) : Colors.transparent,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -384,7 +384,22 @@ class KpiCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final effectiveIconColor = iconColor ?? AppColors.brand500;
-    final effectiveIconBg = iconBgColor ?? effectiveIconColor.withValues(alpha: 0.12);
+    
+    // In light mode, if it's a known semantic color, use its pastel variant for the background
+    Color getBgColor() {
+      if (isDark) return effectiveIconColor.withValues(alpha: 0.15);
+      if (iconBgColor != null) return iconBgColor!;
+      
+      if (effectiveIconColor == AppColors.success) return AppColors.pastelSuccess;
+      if (effectiveIconColor == AppColors.warning) return AppColors.pastelWarning;
+      if (effectiveIconColor == AppColors.error) return AppColors.pastelError;
+      if (effectiveIconColor == AppColors.info) return AppColors.pastelInfo;
+      if (effectiveIconColor == AppColors.brand500) return AppColors.pastelBrand;
+      
+      return effectiveIconColor.withValues(alpha: 0.12);
+    }
+
+    final effectiveIconBg = getBgColor();
 
     return GlassCard(
       onTap: onTap,
@@ -398,7 +413,10 @@ class KpiCard extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   color: effectiveIconBg,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark ? effectiveIconColor.withValues(alpha: 0.2) : Colors.transparent,
+                  ),
                 ),
                 child: Icon(icon, size: 20, color: effectiveIconColor),
               ),

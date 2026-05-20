@@ -12,17 +12,17 @@ abstract final class AppShadows {
   // ══════════════════════════════════════════════════════
   static const List<BoxShadow> cardDark = [
     BoxShadow(
-      color: Color(0x33000000),
-      blurRadius: 12,
+      color: Color(0x26000000), // 15% black
+      blurRadius: 16,
       offset: Offset(0, 4),
     ),
   ];
 
   static const List<BoxShadow> elevatedDark = [
     BoxShadow(
-      color: Color(0x66000000),
-      blurRadius: 24,
-      offset: Offset(0, 8),
+      color: Color(0x40000000), // 25% black
+      blurRadius: 32,
+      offset: Offset(0, 12),
     ),
   ];
 
@@ -48,17 +48,17 @@ abstract final class AppShadows {
   // ══════════════════════════════════════════════════════
   static const List<BoxShadow> cardLight = [
     BoxShadow(
-      color: Color(0x0D000000),
-      blurRadius: 12,
+      color: Color(0x08000000), // 3% black for ultra-soft shadow
+      blurRadius: 16,
       offset: Offset(0, 4),
     ),
   ];
 
   static const List<BoxShadow> elevatedLight = [
     BoxShadow(
-      color: Color(0x1A000000),
-      blurRadius: 24,
-      offset: Offset(0, 8),
+      color: Color(0x0D000000), // 5% black
+      blurRadius: 32,
+      offset: Offset(0, 12),
     ),
   ];
 

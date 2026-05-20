@@ -150,22 +150,13 @@ class _AppTextFieldState extends State<AppTextField>
               border: OutlineInputBorder(
                 borderRadius: AppRadius.input,
                 borderSide: BorderSide(
-                  color: hasError
-                      ? AppColors.error
-                      : (_borderColor.value ??
-                          (isDark
-                              ? AppColors.darkInputBorder
-                              : AppColors.lightInputBorder)),
+                  color: hasError ? AppColors.error : Colors.transparent,
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: AppRadius.input,
                 borderSide: BorderSide(
-                  color: hasError
-                      ? AppColors.error
-                      : (isDark
-                          ? AppColors.darkInputBorder
-                          : AppColors.lightInputBorder),
+                  color: hasError ? AppColors.error : Colors.transparent,
                 ),
               ),
               focusedBorder: OutlineInputBorder(

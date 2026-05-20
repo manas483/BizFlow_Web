@@ -237,18 +237,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen>
     final isTablet = width >= 600;
 
     return Scaffold(
-      body: RefreshIndicator(
-        color: AppColors.brand500,
-        onRefresh: _loadDashboard,
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-
-            // ── Glassmorphic SliverAppBar ─────────────
-            SliverAppBar(
-              floating: true,
-              snap: true,
-              toolbarHeight: 68,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: const Alignment(0, -0.4),
+            colors: [
+              AppColors.brand500.withValues(alpha: isDark ? 0.15 : 0.08),
+              AppColors.brand500.withValues(alpha: 0.0),
+            ],
+          ),
+        ),
+        child: RefreshIndicator(
+          color: AppColors.brand500,
+          onRefresh: _loadDashboard,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              // ── Glassmorphic SliverAppBar ─────────────
+              SliverAppBar(
+                floating: true,
+                snap: true,
+                toolbarHeight: 68,
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
               title: Row(
                 children: [
                   Expanded(

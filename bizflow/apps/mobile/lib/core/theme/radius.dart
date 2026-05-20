@@ -24,13 +24,13 @@ abstract final class AppRadius {
   static final BorderRadius radiusXxl = BorderRadius.circular(xxl);
   static final BorderRadius radiusFull = BorderRadius.circular(full);
 
-  // ── Card radius (matches web 12px) ────────────────────
-  static final BorderRadius card = BorderRadius.circular(md);
+  // ── Card radius (matches reference ~20px) ─────────────
+  static final BorderRadius card = BorderRadius.circular(xl);
 
   // ── Button radius ─────────────────────────────────────
-  static final BorderRadius button = BorderRadius.circular(md);
+  static final BorderRadius button = BorderRadius.circular(lg);
 
-  // ── Input radius (matches web 12px) ───────────────────
+  // ── Input radius (matches reference ~12px) ────────────
   static final BorderRadius input = BorderRadius.circular(md);
 
   // ── Bottom sheet ──────────────────────────────────────

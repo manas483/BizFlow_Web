@@ -18,12 +18,12 @@ abstract final class AppSpacing {
   static const double mega = 64.0;
 
   // ── Page-level padding ────────────────────────────────
-  static const double pagePaddingH = 16.0; // Horizontal
-  static const double pagePaddingV = 12.0; // Vertical (top of scrollable)
+  static const double pagePaddingH = 20.0; // Increased for better breathing room
+  static const double pagePaddingV = 16.0; // Increased vertical margin
 
   // ── Card internal padding ─────────────────────────────
-  static const double cardPaddingH = 16.0;
-  static const double cardPaddingV = 14.0;
+  static const double cardPaddingH = 20.0;
+  static const double cardPaddingV = 16.0;
 
   // ── Section spacing ───────────────────────────────────
   static const double sectionGap  = 24.0;  // Between major sections

@@ -42,11 +42,11 @@ class _PressableCardState extends State<PressableCard>
       vsync: this,
       duration: const Duration(milliseconds: 100),
       reverseDuration: const Duration(milliseconds: 180),
-      lowerBound: 0.97,
+      lowerBound: 0.98,
       upperBound: 1.0,
       value: 1.0,
     );
-    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack);
+    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCirc);
   }
 
   @override

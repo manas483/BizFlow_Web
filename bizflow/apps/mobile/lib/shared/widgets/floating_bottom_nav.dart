@@ -50,25 +50,25 @@ class FloatingBottomNav extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bottomPadding = MediaQuery.of(context).viewPadding.bottom;
 
-    return Container(
-      height: AppSpacing.bottomNavHeight + bottomPadding,
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-          ),
-        ),
-      ),
-      child: ClipRect(
+    return Padding(
+      padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, bottomPadding > 0 ? bottomPadding : AppSpacing.lg),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
         child: BackdropFilter(
           filter: isDark
-              ? ImageFilter.blur(sigmaX: 20, sigmaY: 20)
-              : ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              ? ImageFilter.blur(sigmaX: 24, sigmaY: 24)
+              : ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
+            height: AppSpacing.bottomNavHeight,
             color: isDark
-                ? AppColors.darkSurface.withValues(alpha: 0.85)
-                : AppColors.lightSurface.withValues(alpha: 0.9),
-            padding: EdgeInsets.only(bottom: bottomPadding),
+                ? AppColors.darkSurface.withValues(alpha: 0.75)
+                : AppColors.lightSurface.withValues(alpha: 0.85),
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+              ),
+              borderRadius: BorderRadius.circular(32),
+            ),
             child: Row(
               children: _buildItems(context),
             ),

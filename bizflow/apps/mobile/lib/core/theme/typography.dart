@@ -54,9 +54,9 @@ abstract final class AppTypography {
   /// KPI card value — large bold number
   static TextStyle kpiValue(Color color) => GoogleFonts.inter(
     fontSize: 28,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w800, // Punchier weight
     color: color,
-    letterSpacing: -0.5,
+    letterSpacing: -1.0, // Tighter tracking for large numbers
     height: 1.2,
   );
 
