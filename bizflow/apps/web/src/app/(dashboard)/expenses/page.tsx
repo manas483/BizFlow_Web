@@ -109,7 +109,14 @@ export default function ExpensesPage() {
                   </div>
                   <div>
                     <p className="text-primary text-sm font-medium">{expense.category}</p>
-                    <p className="text-primary/40 text-xs">{expense.note || formatDate(expense.date)}</p>
+                    <p className="text-primary/40 text-xs flex items-center gap-2 flex-wrap mt-0.5">
+                      <span>{expense.note || formatDate(expense.date)}</span>
+                      {expense.invoiceNumbers && expense.invoiceNumbers.length > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-violet-400 font-medium bg-violet-500/10 px-1.5 py-0.5 rounded">
+                          Invoices: {expense.invoiceNumbers.join(", ")}
+                        </span>
+                      )}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0 ml-4">

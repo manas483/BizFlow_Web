@@ -93,6 +93,8 @@ model Product {
   stock          Int                @default(0)
   minStock       Int                @default(5)
   purchasePrice  Float
+  basePurchasePrice Float           @default(0)
+  transportCost  Float              @default(0)
   sellingPrice   Float
   supplier       String?
   businessId     String
@@ -100,6 +102,10 @@ model Product {
   gstRate        Float              @default(0)
   hsnCode        String?
   unit           String             @default("pcs")
+  unitsPerBag    Int                @default(1)
+  purchaseDate   DateTime?
+  purchaseFrom   String?
+  purchaseInvoiceNo String?
   billItems      BillOfSupplyItem[]
   business       Business           @relation(fields: [businessId], references: [id])
   quotationItems QuotationItem[]
@@ -259,15 +265,16 @@ model QuotationItem {
 }
 
 model Expense {
-  id         String   @id @default(cuid())
-  category   String
-  amount     Float
-  note       String?
-  date       DateTime
-  recurring  Boolean  @default(false)
-  businessId String
-  createdAt  DateTime @default(now())
-  business   Business @relation(fields: [businessId], references: [id])
+  id             String   @id @default(cuid())
+  category       String
+  amount         Float
+  note           String?
+  date           DateTime
+  recurring      Boolean  @default(false)
+  businessId     String
+  invoiceNumbers String[] @default([])
+  createdAt      DateTime @default(now())
+  business       Business @relation(fields: [businessId], references: [id])
 }
 
 model Employee {

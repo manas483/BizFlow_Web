@@ -7,11 +7,17 @@ export const productSchema = z.object({
   stock: z.coerce.number().int().min(0).default(0),
   minStock: z.coerce.number().int().min(0).default(5),
   purchasePrice: z.coerce.number().min(0).default(0),
-  sellingPrice: z.coerce.number().min(0),
+  basePurchasePrice: z.coerce.number().min(0).default(0),
+  transportCost: z.coerce.number().min(0).default(0),
+  sellingPrice: z.coerce.number().min(0).default(0),
   unit: z.string().max(20).optional().default('pcs'),
+  unitsPerBag: z.coerce.number().int().min(1).default(1),
   supplier: z.string().max(100).optional().nullable(),
   hsnCode: z.string().max(20).optional().nullable(),
   gstRate: z.coerce.number().min(0).max(100).default(0),
+  purchaseDate: z.string().optional().nullable(),
+  purchaseFrom: z.string().max(100).optional().nullable(),
+  purchaseInvoiceNo: z.string().max(100).optional().nullable(),
 });
 
 export const customerSchema = z.object({
@@ -70,6 +76,7 @@ export const expenseSchema = z.object({
   date: z.string().min(1, "Date is required"),
   note: z.string().max(500).optional().nullable(),
   recurring: z.boolean().default(false),
+  invoiceNumbers: z.array(z.string()).optional().default([]),
 });
 
 export const employeeSchema = z.object({

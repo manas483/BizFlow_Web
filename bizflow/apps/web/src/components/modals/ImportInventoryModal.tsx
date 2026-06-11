@@ -7,7 +7,8 @@ import Modal from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import {
   Upload, Download, FileSpreadsheet, CheckCircle2, XCircle,
-  AlertTriangle, RotateCcw, ChevronDown, ChevronUp, Loader2, X
+  AlertTriangle, RotateCcw, ChevronDown, ChevronUp, Loader2,
+  FileText, Pencil, Trash2, Plus
 } from "lucide-react";
 
 type Step = "upload" | "validating" | "review" | "importing" | "done";
@@ -18,6 +19,20 @@ interface ValidationSummary {
 interface RowError { row: number; column: string; message: string; severity: "error" | "warning"; }
 interface ImportResults { created: number; updated: number; skipped: number; failed: number; }
 
+interface InvoiceProduct {
+  name: string; sku: string; category: string;
+  stock: number; unitsPerBag: number;
+  basePurchasePrice: number; transportCost: number;
+  purchasePrice: number; sellingPrice: number;
+  unit: string; supplier: string;
+  purchaseInvoiceNo: string; purchaseDate: string;
+  gstRate: number; hsnCode: string;
+}
+
+interface InvoiceInfo {
+  invoiceNumber: string; supplier: string; purchaseDate: string;
+}
+
 export default function ImportInventoryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,7 +41,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
   const [file, setFile] = useState<File | null>(null);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
-  // Validation state
+  // Validation state (Excel)
   const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
   const [errors, setErrors] = useState<RowError[]>([]);
   const [warnings, setWarnings] = useState<RowError[]>([]);
@@ -35,6 +50,12 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
   const [columnMapping, setColumnMapping] = useState<Record<string, string | null>>({});
   const [unmapped, setUnmapped] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<Record<string, string>>({});
+
+  // PDF Invoice state
+  const [isInvoicePdf, setIsInvoicePdf] = useState(false);
+  const [invoiceInfo, setInvoiceInfo] = useState<InvoiceInfo | null>(null);
+  const [invoiceProducts, setInvoiceProducts] = useState<InvoiceProduct[]>([]);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
   // Import state
   const [importResults, setImportResults] = useState<ImportResults | null>(null);
@@ -46,6 +67,8 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     setErrors([]); setWarnings([]); setImportResults(null);
     setImportError(null); setProgress(0); setColumnMapping({});
     setUnmapped([]); setSuggestions({});
+    setIsInvoicePdf(false); setInvoiceInfo(null); setInvoiceProducts([]);
+    setEditingIdx(null);
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -78,21 +101,50 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
       const data = await res.json();
       setProgress(100);
       if (!res.ok) { setImportError(data.error ?? "Validation failed"); setStep("upload"); return; }
-      setValidationSummary(data.validation?.summary ?? null);
-      setErrors(data.validation?.errors ?? []);
-      setWarnings(data.validation?.warnings ?? []);
-      setColumnMapping(data.columnMapping ?? {});
-      setUnmapped(data.unmappedHeaders ?? []);
-      setSuggestions(data.mappingSuggestions ?? {});
-      setStep("review");
+
+      if (data.isInvoicePdf) {
+        // PDF Invoice flow
+        setIsInvoicePdf(true);
+        setInvoiceInfo(data.invoiceInfo);
+        const products: InvoiceProduct[] = (data.validation?.processedRows ?? []).map((r: any) => ({
+          name: r.data.name ?? "",
+          sku: r.data.sku ?? "",
+          category: r.data.category ?? "",
+          stock: Number(r.data.stock ?? 0),
+          unitsPerBag: Number(r.data.unitsPerBag ?? 1),
+          basePurchasePrice: Number(r.data.basePurchasePrice ?? 0),
+          transportCost: Number(r.data.transportCost ?? 0),
+          purchasePrice: Number(r.data.purchasePrice ?? 0),
+          sellingPrice: Number(r.data.sellingPrice ?? 0),
+          unit: r.data.unit ?? "pcs",
+          supplier: r.data.supplier ?? "",
+          purchaseInvoiceNo: r.data.purchaseInvoiceNo ?? "",
+          purchaseDate: r.data.purchaseDate ?? "",
+          gstRate: Number(r.data.gstRate ?? 0),
+          hsnCode: r.data.hsnCode ?? "",
+        }));
+        setInvoiceProducts(products);
+        setValidationSummary(data.validation?.summary ?? null);
+        setStep("review");
+      } else {
+        // Excel/CSV flow
+        setIsInvoicePdf(false);
+        setValidationSummary(data.validation?.summary ?? null);
+        setErrors(data.validation?.errors ?? []);
+        setWarnings(data.validation?.warnings ?? []);
+        setColumnMapping(data.columnMapping ?? {});
+        setUnmapped(data.unmappedHeaders ?? []);
+        setSuggestions(data.mappingSuggestions ?? {});
+        setStep("review");
+      }
     } catch { setImportError("Network error. Please try again."); setStep("upload"); }
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
     const f = e.dataTransfer.files[0];
-    if (f && /\.(xlsx|xls|csv)$/i.test(f.name)) processFile(f);
-    else toast.error("Please upload an Excel (.xlsx, .xls) or CSV file.");
+    if (f && /\.(xlsx|xls|csv|pdf)$/i.test(f.name)) processFile(f);
+    else toast.error("Please upload an Excel (.xlsx, .xls, .csv) or PDF invoice file.");
   }, [processFile]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,6 +152,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     if (f) processFile(f);
   };
 
+  // Excel import (existing flow)
   const handleImport = async () => {
     if (!file) return;
     setStep("importing"); setProgress(10);
@@ -118,13 +171,55 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     } catch { setImportError("Network error during import."); setStep("review"); }
   };
 
+  // Invoice PDF confirmed import
+  const handleInvoiceConfirmImport = async () => {
+    if (invoiceProducts.length === 0) return;
+    setStep("importing"); setProgress(10);
+    try {
+      setProgress(40);
+      const res = await fetch("/api/inventory/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ products: invoiceProducts }),
+      });
+      setProgress(80);
+      const data = await res.json();
+      if (!res.ok) { setImportError(data.error ?? "Import failed"); setStep("review"); return; }
+      setImportResults(data.results);
+      setProgress(100);
+      setStep("done");
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    } catch { setImportError("Network error during import."); setStep("review"); }
+  };
+
+  // Edit invoice product inline
+  const updateInvoiceProduct = (idx: number, field: keyof InvoiceProduct, value: string | number) => {
+    setInvoiceProducts(prev => {
+      const updated = [...prev];
+      const p = { ...updated[idx], [field]: value };
+      // Auto-recalc landed cost when purchase cost changes
+      if (field === "basePurchasePrice" || field === "transportCost") {
+        p.purchasePrice = Number(p.basePurchasePrice) + Number(p.transportCost);
+      }
+      updated[idx] = p;
+      return updated;
+    });
+  };
+
+  const removeInvoiceProduct = (idx: number) => {
+    setInvoiceProducts(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const hasErrors = (validationSummary?.errors ?? 0) > 0;
   const mappedCount = Object.values(columnMapping).filter(Boolean).length;
+
+  const isPdf = file?.name.toLowerCase().endsWith(".pdf");
 
   return (
     <Modal open={open} onClose={handleClose} title="Import Inventory" size="2xl"
       icon={<FileSpreadsheet size={16} />} iconColor="bg-emerald-500/20 text-emerald-400"
-      subtitle="Bulk update inventory from Excel or CSV">
+      subtitle={isInvoicePdf ? "Import from PDF Invoice" : "Bulk update inventory from Excel, CSV, or Invoice PDF"}>
 
       {/* Step Indicator */}
       <div className="flex items-center gap-1 mb-5">
@@ -137,7 +232,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
               <div className={`flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
                 ${done ? "bg-emerald-500/10 text-emerald-400" : active ? "bg-violet-500/10 text-violet-400" : "bg-primary/5 text-primary/30"}`}>
                 {done ? <CheckCircle2 size={12} /> : <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px]">{i+1}</span>}
-                {s === "upload" ? "Upload" : s === "review" ? "Validate" : "Complete"}
+                {s === "upload" ? "Upload" : s === "review" ? "Verify" : "Complete"}
               </div>
               {i < 2 && <div className={`w-4 h-px ${done ? "bg-emerald-500/40" : "bg-primary/10"}`} />}
             </div>
@@ -169,17 +264,21 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
             onClick={() => fileInputRef.current?.click()}
             className={`relative rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all
               ${dragOver ? "border-violet-500/60 bg-violet-500/5" : "border-primary/10 hover:border-primary/20 hover:bg-primary/3"}`}>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" className="hidden" onChange={handleFileChange} />
             {step === "validating" ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-violet-500/10 flex items-center justify-center">
                   <Loader2 size={22} className="text-violet-400 animate-spin" />
                 </div>
-                <p className="text-sm font-medium text-primary">Analysing your file…</p>
+                <p className="text-sm font-medium text-primary">
+                  {isPdf ? "Extracting invoice data…" : "Analysing your file…"}
+                </p>
                 <div className="w-48 h-1.5 bg-primary/10 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-violet-600 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                 </div>
-                <p className="text-xs text-primary/40">Smart validation in progress</p>
+                <p className="text-xs text-primary/40">
+                  {isPdf ? "Reading invoice items" : "Smart validation in progress"}
+                </p>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
@@ -188,8 +287,8 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                   <Upload size={22} className={dragOver ? "text-violet-400" : "text-primary/30"} />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-primary">Drop your Excel file here</p>
-                  <p className="text-xs text-primary/40 mt-1">or click to browse · .xlsx, .xls, .csv supported</p>
+                  <p className="text-sm font-medium text-primary">Drop your file here</p>
+                  <p className="text-xs text-primary/40 mt-1">or click to browse · .xlsx, .xls, .csv, <span className="text-violet-400 font-medium">.pdf invoice</span> supported</p>
                 </div>
               </div>
             )}
@@ -204,8 +303,136 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
         </div>
       )}
 
-      {/* ── STEP: REVIEW ── */}
-      {step === "review" && validationSummary && (
+      {/* ── STEP: REVIEW (Invoice PDF) ── */}
+      {step === "review" && isInvoicePdf && invoiceInfo && (
+        <div className="space-y-4">
+          {/* Invoice Header */}
+          <div className="rounded-xl p-4" style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)" }}>
+            <div className="flex items-center gap-2 mb-2">
+              <FileText size={16} className="text-violet-400" />
+              <p className="text-sm font-semibold text-primary">Invoice Detected</p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <p className="text-[10px] text-primary/40 uppercase tracking-wider">Invoice No.</p>
+                <p className="text-xs font-medium text-primary mt-0.5">{invoiceInfo.invoiceNumber}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-primary/40 uppercase tracking-wider">Supplier</p>
+                <p className="text-xs font-medium text-primary mt-0.5">{invoiceInfo.supplier}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-primary/40 uppercase tracking-wider">Date</p>
+                <p className="text-xs font-medium text-primary mt-0.5">{invoiceInfo.purchaseDate}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Editable Products Table */}
+          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+            <div className="px-3 py-2 flex items-center justify-between" style={{ background: "var(--bg-surface-2)" }}>
+              <p className="text-xs font-semibold text-primary">
+                {invoiceProducts.length} Products — Review & Edit
+              </p>
+              <p className="text-[10px] text-primary/40">Click any value to edit</p>
+            </div>
+            <div className="max-h-[320px] overflow-y-auto">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--bg-surface-2)" }}>
+                    <th className="px-2 py-1.5 text-left text-primary/50 font-medium">Item Name</th>
+                    <th className="px-2 py-1.5 text-left text-primary/50 font-medium">Category</th>
+                    <th className="px-2 py-1.5 text-left text-primary/50 font-medium w-20">HSN/SAC</th>
+                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium w-16">GST %</th>
+                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium">Stock</th>
+                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium">Pack Size</th>
+                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium">Purchase ₹</th>
+                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium">Selling ₹</th>
+                    <th className="px-2 py-1.5 text-center text-primary/50 font-medium w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoiceProducts.map((p, idx) => (
+                    <tr key={idx} className="border-b hover:bg-primary/3 transition-colors group"
+                      style={{ borderColor: "var(--border)" }}>
+                      <td className="px-2 py-1.5">
+                        {editingIdx === idx ? (
+                          <input className="w-full bg-primary/5 border border-violet-500/40 text-primary text-[11px] outline-none px-1.5 py-0.5 rounded"
+                            value={p.name} onChange={(e) => updateInvoiceProduct(idx, "name", e.target.value)}
+                            onBlur={() => setEditingIdx(null)} autoFocus />
+                        ) : (
+                          <span className="text-primary cursor-pointer hover:text-violet-400 transition-colors border-b border-dashed border-primary/25 pb-0.5"
+                            onClick={() => setEditingIdx(idx)}>{p.name}</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-primary/60">{p.category}</td>
+                      <td className="px-2 py-1.5">
+                        <input className="w-20 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] outline-none px-1.5 py-0.5 transition-colors"
+                          value={p.hsnCode || ""} onChange={(e) => updateInvoiceProduct(idx, "hsnCode", e.target.value)} />
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <input type="number" className="w-12 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
+                          value={p.gstRate} onChange={(e) => updateInvoiceProduct(idx, "gstRate", Number(e.target.value))} min={0} max={100} />
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <input type="number" className="w-14 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
+                          value={p.stock} onChange={(e) => updateInvoiceProduct(idx, "stock", Number(e.target.value))} min={0} />
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <input type="number" className="w-12 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
+                          value={p.unitsPerBag} onChange={(e) => updateInvoiceProduct(idx, "unitsPerBag", Number(e.target.value))} min={1} />
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <input type="number" className="w-16 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
+                          value={p.basePurchasePrice} onChange={(e) => updateInvoiceProduct(idx, "basePurchasePrice", Number(e.target.value))} min={0} step="any" />
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <input type="number" className="w-16 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
+                          value={p.sellingPrice} onChange={(e) => updateInvoiceProduct(idx, "sellingPrice", Number(e.target.value))} min={0} step="any" />
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        <button onClick={() => removeInvoiceProduct(idx)}
+                          className="opacity-0 group-hover:opacity-100 text-rose-400/60 hover:text-rose-400 transition-all" title="Remove">
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+            <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
+            <p className="text-xs text-emerald-400">
+              {invoiceProducts.length} products extracted from invoice. Review the data above and click <strong>Confirm & Import</strong>.
+            </p>
+          </div>
+
+          {importError && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
+              <XCircle size={14} className="text-rose-400 flex-shrink-0" />
+              <p className="text-xs text-rose-400">{importError}</p>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <Button variant="secondary" size="sm" icon={<RotateCcw size={13} />} onClick={reset} className="flex-1">
+              Re-upload
+            </Button>
+            <Button size="sm" className="flex-1" onClick={handleInvoiceConfirmImport}
+              disabled={invoiceProducts.length === 0}>
+              Confirm & Import {invoiceProducts.length} Products
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP: REVIEW (Excel/CSV — existing flow) ── */}
+      {step === "review" && !isInvoicePdf && validationSummary && (
         <div className="space-y-4">
           {/* Summary cards */}
           <div className="grid grid-cols-4 gap-2">
@@ -328,7 +555,9 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
             <Loader2 size={28} className="text-violet-400 animate-spin" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-semibold text-primary">Importing products…</p>
+            <p className="text-sm font-semibold text-primary">
+              {isInvoicePdf ? "Importing invoice products…" : "Importing products…"}
+            </p>
             <p className="text-xs text-primary/40 mt-1">Please do not close this window</p>
           </div>
           <div className="w-64 h-2 bg-primary/10 rounded-full overflow-hidden">
@@ -348,7 +577,11 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
             </div>
             <div className="text-center">
               <p className="text-base font-bold text-primary">Import Complete!</p>
-              <p className="text-xs text-primary/40 mt-1">Your inventory has been updated successfully.</p>
+              <p className="text-xs text-primary/40 mt-1">
+                {isInvoicePdf && invoiceInfo
+                  ? `Invoice ${invoiceInfo.invoiceNumber} has been imported successfully.`
+                  : "Your inventory has been updated successfully."}
+              </p>
             </div>
           </div>
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth, AuthError } from '@/lib/api-guard';
 import { expenseSchema } from '@/lib/validations';
+import { recalculateTransportCosts } from '@/lib/expense-calculations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -48,6 +49,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     });
 
+    await recalculateTransportCosts(session.user.businessId);
+
     return NextResponse.json(expense);
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
@@ -70,6 +73,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     await prisma.expense.delete({ where: { id } });
+
+    await recalculateTransportCosts(session.user.businessId);
+
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof AuthError) return error.response;

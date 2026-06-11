@@ -33,7 +33,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const parsed = productSchema.partial().safeParse(await req.json());
     if (!parsed.success) return validationError(parsed.error.issues);
 
-    const product = await prisma.product.update({ where: { id }, data: parsed.data });
+    const { purchaseDate, ...rest } = parsed.data;
+    const product = await prisma.product.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(purchaseDate !== undefined ? { purchaseDate: purchaseDate ? new Date(purchaseDate) : null } : {}),
+      },
+    });
     return ok(product, { message: 'Product updated' });
   } catch (e) {
     if (e instanceof AuthError) return e.response;

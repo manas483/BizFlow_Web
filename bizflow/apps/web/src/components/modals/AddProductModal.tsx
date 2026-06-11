@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import Modal, { FormField, ModalInput, ModalFooter } from "@/components/ui/Modal";
 import { CustomSelect } from "@/components/ui/CustomSelect";
-import { Package } from "lucide-react";
+import { Package, Calendar } from "lucide-react";
 import { useCreateProduct } from "@/hooks/useProducts";
 import { useBusiness } from "@/hooks/useBusiness";
 import { getBusinessProfile } from "@/lib/business-intelligence";
@@ -21,10 +21,51 @@ const CATEGORIES = [
 export default function AddProductModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    name: "", sku: "", category: "Grains", unit: "pcs", stock: "", minStock: "",
-    purchasePrice: "", sellingPrice: "", supplier: "",
+    name: "", sku: "", category: "Grains", unit: "pcs", noOfBags: "", unitsPerBag: "1", stock: "", minStock: "",
+    basePurchasePrice: "", transportCost: "", purchasePrice: "", sellingPrice: "", supplier: "",
     hsnCode: "", gstRate: "0",
+    purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "",
   });
+
+  // Bidirectional calculations for Bags, Packets in 1 Bag, and Stock
+  const handleBagsChange = (bagsVal: string) => {
+    const bags = parseFloat(bagsVal) || 0;
+    const perBag = parseFloat(form.unitsPerBag) || 1;
+    setForm(f => ({
+      ...f,
+      noOfBags: bagsVal,
+      stock: bagsVal ? String(Math.round(bags * perBag)) : ""
+    }));
+  };
+
+  const handleUnitsPerBagChange = (perBagVal: string) => {
+    const perBag = parseFloat(perBagVal) || 1;
+    const bags = parseFloat(form.noOfBags) || 0;
+    setForm(f => ({
+      ...f,
+      unitsPerBag: perBagVal,
+      stock: form.noOfBags ? String(Math.round(bags * perBag)) : f.stock
+    }));
+  };
+
+  const handleStockChange = (stockVal: string) => {
+    const stock = parseFloat(stockVal) || 0;
+    const perBag = parseFloat(form.unitsPerBag) || 1;
+    setForm(f => ({
+      ...f,
+      stock: stockVal,
+      noOfBags: stockVal ? String(Number((stock / perBag).toFixed(2))) : ""
+    }));
+  };
+
+  // Auto-calculate purchase price (After) = basePurchasePrice (Before) + transportCost
+  useEffect(() => {
+    const base = parseFloat(form.basePurchasePrice) || 0;
+    const transport = parseFloat(form.transportCost) || 0;
+    if (base > 0 || transport > 0) {
+      setForm(f => ({ ...f, purchasePrice: (base + transport).toFixed(2) }));
+    }
+  }, [form.basePurchasePrice, form.transportCost]);
 
   const createProduct = useCreateProduct();
   const { data: business } = useBusiness();
@@ -70,11 +111,17 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
         ...form,
         stock: parseInt(form.stock) || 0,
         minStock: parseInt(form.minStock) || 0,
+        unitsPerBag: parseInt(form.unitsPerBag) || 1,
+        basePurchasePrice: parseFloat(form.basePurchasePrice) || 0,
+        transportCost: parseFloat(form.transportCost) || 0,
         purchasePrice: parseFloat(form.purchasePrice) || 0,
         sellingPrice: parseFloat(form.sellingPrice) || 0,
         gstRate: parseFloat(form.gstRate) || 0,
+        purchaseDate: form.purchaseDate || null,
+        purchaseFrom: form.supplier || null,
+        purchaseInvoiceNo: form.purchaseInvoiceNo || null,
       });
-      setForm({ name: "", sku: "", category: "Grains", unit: "pcs", stock: "", minStock: "", purchasePrice: "", sellingPrice: "", supplier: "", hsnCode: "", gstRate: "0" });
+      setForm({ name: "", sku: "", category: "Grains", unit: "pcs", noOfBags: "", unitsPerBag: "1", stock: "", minStock: "", basePurchasePrice: "", transportCost: "", purchasePrice: "", sellingPrice: "", supplier: "", hsnCode: "", gstRate: "0", purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "" });
       onClose();
     } catch (error: any) {
       console.error(error);
@@ -92,11 +139,11 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <FormField label="Product Name" required>
+          <FormField label="Item Name" required>
             <ModalInput required placeholder={`e.g. ${sampleProduct.name}`} value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </FormField>
-          <FormField label="SKU / Barcode">
+          <FormField label="Item Code / Barcode">
             <ModalInput placeholder={`e.g. ${sampleProduct.sku}`} value={form.sku}
               onChange={(e) => setForm({ ...form, sku: e.target.value })} />
           </FormField>
@@ -110,7 +157,7 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
               options={categoriesList}
             />
           </FormField>
-          <FormField label="Unit">
+          <FormField label="Unit of Measure (UOM)">
             <CustomSelect
               value={form.unit}
               onChange={(v) => setForm({ ...form, unit: v })}
@@ -119,31 +166,55 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField label="Initial Stock" required>
+        <div className="grid grid-cols-3 gap-4">
+          <FormField label="Opening Stock" required>
             <ModalInput type="number" required min="0" placeholder="0" value={form.stock}
               onChange={(e) => setForm({ ...form, stock: e.target.value })} />
           </FormField>
-          <FormField label="Low Stock Alert Level">
+          <FormField label="Reorder Level">
             <ModalInput type="number" min="0" placeholder="10" value={form.minStock}
               onChange={(e) => setForm({ ...form, minStock: e.target.value })} />
+          </FormField>
+          <FormField label="Pack Size">
+            <ModalInput type="number" min="1" placeholder="1" value={form.unitsPerBag}
+              onChange={(e) => setForm({ ...form, unitsPerBag: e.target.value })} />
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <FormField label="Supplier / Vendor">
+            <ModalInput placeholder={`e.g. ${sampleSupplier}`} value={form.supplier}
+              onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
+          </FormField>
+          <FormField label="Purchase Date">
+            <ModalInput type="date" placeholder="YYYY-MM-DD" value={form.purchaseDate}
+              onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} />
+          </FormField>
+          <FormField label="Invoice Number">
+            <ModalInput placeholder="e.g. INV-001" value={form.purchaseInvoiceNo}
+              onChange={(e) => setForm({ ...form, purchaseInvoiceNo: e.target.value })} />
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <FormField label="Purchase Cost (₹/Unit)">
+            <ModalInput type="number" min="0" step="any" placeholder="0.00" value={form.basePurchasePrice}
+              onChange={(e) => setForm({ ...form, basePurchasePrice: e.target.value })} />
+          </FormField>
+          <FormField label="Additional Cost (₹/Unit)">
+            <ModalInput type="number" min="0" step="any" placeholder="0.00" value={form.transportCost}
+              onChange={(e) => setForm({ ...form, transportCost: e.target.value })} />
+          </FormField>
+          <FormField label="Landed Cost (₹/Unit)">
+            <ModalInput type="number" min="0" step="any" placeholder="Auto-calculated" value={form.purchasePrice}
+              onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} />
+            <p className="text-[10px] text-primary/30 mt-0.5">Purchase Cost + Additional Cost</p>
           </FormField>
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          <FormField label="Supplier">
-            <ModalInput placeholder={`e.g. ${sampleSupplier}`} value={form.supplier}
-              onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
-          </FormField>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-          <FormField label="Purchase Price (₹)" required>
-            <ModalInput type="number" required min="0" step="any" placeholder="0.00" value={form.purchasePrice}
-              onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} />
-          </FormField>
-          <FormField label="Selling Price (₹)" required>
-            <ModalInput type="number" required min="0" step="any" placeholder="0.00" value={form.sellingPrice}
+          <FormField label="Selling Price (₹/Unit)">
+            <ModalInput type="number" min="0" step="any" placeholder="0.00" value={form.sellingPrice}
               onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} />
           </FormField>
         </div>

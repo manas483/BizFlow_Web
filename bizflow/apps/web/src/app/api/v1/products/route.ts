@@ -59,8 +59,13 @@ export async function POST(req: NextRequest) {
     const parsed  = productSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error.issues);
 
+    const { purchaseDate, ...rest } = parsed.data;
     const product = await prisma.product.create({
-      data: { ...parsed.data, businessId: session.user.businessId },
+      data: {
+        ...rest,
+        ...(purchaseDate ? { purchaseDate: new Date(purchaseDate) } : {}),
+        businessId: session.user.businessId,
+      },
     });
 
     await prisma.userActivity.create({

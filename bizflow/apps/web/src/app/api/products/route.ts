@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth, AuthError } from '@/lib/api-guard';
 import { productSchema } from '@/lib/validations';
+import { recalculateTransportCosts } from '@/lib/expense-calculations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest) {
@@ -41,12 +42,17 @@ export async function POST(req: NextRequest) {
 
     const validatedData = productSchema.parse(body);
 
+    const { purchaseDate, ...rest } = validatedData;
+
     const product = await prisma.product.create({
       data: {
-        ...validatedData,
+        ...rest,
+        purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
         businessId: session.user.businessId,
       }
     });
+
+    await recalculateTransportCosts(session.user.businessId);
 
     await (prisma as any).userActivity.create({
       data: {

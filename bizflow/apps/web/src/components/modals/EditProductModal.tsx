@@ -21,9 +21,10 @@ const FALLBACK_CATEGORIES = [
 export default function EditProductModal({ product, onClose }: { product: any; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    name: "", sku: "", category: "Other", unit: "pcs", stock: "", minStock: "",
-    purchasePrice: "", sellingPrice: "", supplier: "",
+    name: "", sku: "", category: "Other", unit: "pcs", unitsPerBag: "1", stock: "", minStock: "",
+    basePurchasePrice: "", transportCost: "", purchasePrice: "", sellingPrice: "", supplier: "",
     hsnCode: "", gstRate: "0",
+    purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "",
   });
 
   const { data: business } = useBusiness();
@@ -56,16 +57,31 @@ export default function EditProductModal({ product, onClose }: { product: any; o
         sku: product.sku ?? "",
         category: product.category ?? (categoriesList[0]?.value ?? "Other"),
         unit: product.unit ?? primaryUnit,
+        unitsPerBag: String(product.unitsPerBag ?? 1),
         stock: String(product.stock ?? 0),
         minStock: String(product.minStock ?? 5),
+        basePurchasePrice: String(product.basePurchasePrice ?? 0),
+        transportCost: String(product.transportCost ?? 0),
         purchasePrice: String(product.purchasePrice ?? 0),
         sellingPrice: String(product.sellingPrice ?? 0),
         supplier: product.supplier ?? "",
         hsnCode: product.hsnCode ?? "",
         gstRate: String(product.gstRate ?? 0),
+        purchaseDate: product.purchaseDate ? new Date(product.purchaseDate).toISOString().split('T')[0] : "",
+        purchaseFrom: product.purchaseFrom ?? "",
+        purchaseInvoiceNo: product.purchaseInvoiceNo ?? "",
       });
     }
   }, [product]);
+
+  // Auto-calculate purchase price (After) = basePurchasePrice (Before) + transportCost
+  useEffect(() => {
+    const base = parseFloat(form.basePurchasePrice) || 0;
+    const transport = parseFloat(form.transportCost) || 0;
+    if (base > 0 || transport > 0) {
+      setForm(f => ({ ...f, purchasePrice: (base + transport).toFixed(2) }));
+    }
+  }, [form.basePurchasePrice, form.transportCost]);
 
   const updateProduct = useUpdateProduct();
 
@@ -79,13 +95,19 @@ export default function EditProductModal({ product, onClose }: { product: any; o
         sku: form.sku,
         category: form.category,
         unit: form.unit,
+        unitsPerBag: parseInt(form.unitsPerBag) || 1,
         stock: parseInt(form.stock) || 0,
         minStock: parseInt(form.minStock) || 5,
+        basePurchasePrice: parseFloat(form.basePurchasePrice) || 0,
+        transportCost: parseFloat(form.transportCost) || 0,
         purchasePrice: parseFloat(form.purchasePrice) || 0,
         sellingPrice: parseFloat(form.sellingPrice) || 0,
         supplier: form.supplier || null,
         hsnCode: form.hsnCode || null,
         gstRate: parseFloat(form.gstRate) || 0,
+        purchaseDate: form.purchaseDate || null,
+        purchaseFrom: form.supplier || null,
+        purchaseInvoiceNo: form.purchaseInvoiceNo || null,
       });
       onClose();
     } catch { toast.error("Failed to update product"); }
@@ -98,10 +120,10 @@ export default function EditProductModal({ product, onClose }: { product: any; o
       icon={<Package size={18} />} iconColor="bg-violet-500/20 text-violet-400" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <FormField label="Product Name" required>
+          <FormField label="Item Name" required>
             <ModalInput required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </FormField>
-          <FormField label="SKU / Barcode">
+          <FormField label="Item Code / Barcode">
             <ModalInput value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
           </FormField>
         </div>
@@ -111,7 +133,7 @@ export default function EditProductModal({ product, onClose }: { product: any; o
             {/* Dynamic — driven by business type (e.g. Pharmacy shows medicines, not grains) */}
             <CustomSelect value={form.category} onChange={(v) => setForm({ ...form, category: v })} options={categoriesList} />
           </FormField>
-          <FormField label="Unit">
+          <FormField label="Unit of Measure (UOM)">
             {/* Dynamic — primary unit for the business type appears first */}
             <CustomSelect
               value={form.unit}
@@ -121,27 +143,52 @@ export default function EditProductModal({ product, onClose }: { product: any; o
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField label="Stock">
+        <div className="grid grid-cols-3 gap-4">
+          <FormField label="Opening Stock">
             <ModalInput type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
           </FormField>
-          <FormField label="Low Stock Alert">
+          <FormField label="Reorder Level">
             <ModalInput type="number" min="0" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} />
+          </FormField>
+          <FormField label="Pack Size">
+            <ModalInput type="number" min="1" value={form.unitsPerBag} onChange={(e) => setForm({ ...form, unitsPerBag: e.target.value })} />
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <FormField label="Supplier / Vendor">
+            <ModalInput value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
+          </FormField>
+          <FormField label="Purchase Date">
+            <ModalInput type="date" value={form.purchaseDate}
+              onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })} />
+          </FormField>
+          <FormField label="Invoice Number">
+            <ModalInput value={form.purchaseInvoiceNo}
+              onChange={(e) => setForm({ ...form, purchaseInvoiceNo: e.target.value })} />
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <FormField label="Purchase Cost (₹/Unit)">
+            <ModalInput type="number" min="0" step="any" value={form.basePurchasePrice}
+              onChange={(e) => setForm({ ...form, basePurchasePrice: e.target.value })} />
+          </FormField>
+          <FormField label="Additional Cost (₹/Unit)">
+            <ModalInput type="number" min="0" step="any" value={form.transportCost}
+              onChange={(e) => setForm({ ...form, transportCost: e.target.value })} />
+          </FormField>
+          <FormField label="Landed Cost (₹/Unit)">
+            <ModalInput type="number" min="0" step="any" value={form.purchasePrice}
+              onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} />
+            <p className="text-[10px] text-primary/30 mt-0.5">Purchase Cost + Additional Cost</p>
           </FormField>
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          <FormField label="Supplier">
-            <ModalInput value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
-          </FormField>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-          <FormField label="Purchase Price (₹)" required>
-            <ModalInput type="number" required min="0" step="any" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} />
-          </FormField>
-          <FormField label="Selling Price (₹)" required>
-            <ModalInput type="number" required min="0" step="any" value={form.sellingPrice} onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} />
+          <FormField label="Selling Price (₹/Unit)">
+            <ModalInput type="number" min="0" step="any" value={form.sellingPrice}
+              onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} />
           </FormField>
         </div>
 

@@ -1,9 +1,8 @@
-"use client";
-
 import { useState, useEffect } from "react";
 import { X, Save, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useUpdateExpense } from "@/hooks/useExpenses";
+import { CustomMultiSelect } from "@/components/ui/CustomMultiSelect";
 
 const CATEGORIES = [
   "Rent", "Electricity", "Salary", "Transport", "Misc",
@@ -19,6 +18,7 @@ export default function EditExpenseModal({ expense, onClose }: EditExpenseModalP
   const updateExpense = useUpdateExpense();
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [invoices, setInvoices] = useState<string[]>([]);
 
   const [form, setForm] = useState({
     category: "",
@@ -26,7 +26,95 @@ export default function EditExpenseModal({ expense, onClose }: EditExpenseModalP
     date: "",
     note: "",
     recurring: false,
+    invoiceNumbers: [] as string[],
   });
+
+  // Load distinct invoice numbers when modal opens
+  useEffect(() => {
+    if (expense) {
+      fetch("/api/products/purchase-invoices")
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) setInvoices(data);
+        })
+        .catch(err => console.error("Failed to load purchase invoices", err));
+    }
+  }, [expense]);
+
+  const [previewProducts, setPreviewProducts] = useState<any[]>([]);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
+  // Fetch products associated with both currently and previously selected invoices
+  useEffect(() => {
+    const allInvs = Array.from(new Set([...form.invoiceNumbers, ...(expense?.invoiceNumbers || [])])).filter(Boolean);
+    if (expense && allInvs.length > 0) {
+      setLoadingPreview(true);
+      fetch(`/api/products/purchase-invoices?invoices=${allInvs.join(",")}`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setPreviewProducts(data);
+          } else {
+            setPreviewProducts([]);
+          }
+        })
+        .catch(err => {
+          console.error("Failed to load preview products", err);
+          setPreviewProducts([]);
+        })
+        .finally(() => setLoadingPreview(false));
+    } else {
+      setPreviewProducts([]);
+    }
+  }, [expense, form.invoiceNumbers]);
+
+  const getPreviewDetails = () => {
+    const amount = parseFloat(form.amount) || 0;
+    if (previewProducts.length === 0) return [];
+
+    // Calculate old contribution
+    const oldInvs = expense?.invoiceNumbers || [];
+    const oldAmount = expense?.amount || 0;
+    const oldProducts = previewProducts.filter(p => p.purchaseInvoiceNo && oldInvs.includes(p.purchaseInvoiceNo));
+    const totalOldUnits = oldProducts.reduce((sum, p) => sum + (p.stock || 0) / (p.unitsPerBag || 1), 0);
+    const oldContributionPerTransportUnit = totalOldUnits > 0 ? oldAmount / totalOldUnits : 0;
+
+    // Calculate new contribution
+    const newInvs = form.invoiceNumbers;
+    const newProducts = previewProducts.filter(p => p.purchaseInvoiceNo && newInvs.includes(p.purchaseInvoiceNo));
+    const totalNewUnits = newProducts.reduce((sum, p) => sum + (p.stock || 0) / (p.unitsPerBag || 1), 0);
+    const newContributionPerTransportUnit = totalNewUnits > 0 ? amount / totalNewUnits : 0;
+
+    return previewProducts.map(p => {
+      const unitsPerBag = p.unitsPerBag || 1;
+      const isOriginallyAffected = p.purchaseInvoiceNo && oldInvs.includes(p.purchaseInvoiceNo);
+      const isCurrentlyAffected = p.purchaseInvoiceNo && newInvs.includes(p.purchaseInvoiceNo);
+
+      const oldContribution = isOriginallyAffected ? (oldContributionPerTransportUnit / unitsPerBag) : 0;
+      const newContribution = isCurrentlyAffected ? (newContributionPerTransportUnit / unitsPerBag) : 0;
+
+      const newAdditional = p.transportCost - oldContribution + newContribution;
+      const newLanded = p.basePurchasePrice + newAdditional;
+      const change = newContribution - oldContribution;
+
+      return {
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        invoice: p.purchaseInvoiceNo,
+        stock: p.stock,
+        unitsPerBag,
+        currentLanded: p.purchasePrice,
+        currentAdditional: p.transportCost,
+        newAdditional,
+        newLanded,
+        change,
+        isCurrentlyAffected
+      };
+    });
+  };
+
+  const previewDetails = getPreviewDetails();
 
   // Populate form when expense loads
   useEffect(() => {
@@ -39,6 +127,7 @@ export default function EditExpenseModal({ expense, onClose }: EditExpenseModalP
           : "",
         note: expense.note ?? "",
         recurring: expense.recurring ?? false,
+        invoiceNumbers: expense.invoiceNumbers ?? [],
       });
     }
   }, [expense]);
@@ -61,6 +150,7 @@ export default function EditExpenseModal({ expense, onClose }: EditExpenseModalP
           date: form.date,
           note: form.note || null,
           recurring: form.recurring,
+          invoiceNumbers: form.invoiceNumbers,
         },
       });
       setSaved(true);
@@ -125,6 +215,78 @@ export default function EditExpenseModal({ expense, onClose }: EditExpenseModalP
               )}
             </select>
           </div>
+
+          {/* Associate Invoice(s) */}
+          <div>
+            <label className="text-primary/40 text-xs mb-1.5 block">Associate Invoice(s)</label>
+            <CustomMultiSelect
+              value={form.invoiceNumbers}
+              onChange={(v) => setForm({ ...form, invoiceNumbers: v })}
+              options={invoices.map(inv => ({ value: inv, label: inv }))}
+              placeholder="Select invoices..."
+            />
+          </div>
+
+          {/* Landed Cost Preview Card */}
+          {(form.invoiceNumbers.length > 0 || (expense?.invoiceNumbers && expense.invoiceNumbers.length > 0)) && (
+            <div className="rounded-xl overflow-hidden bg-violet-500/5 border border-violet-500/10 backdrop-blur-sm">
+              <div className="px-4 py-2.5 flex items-center justify-between border-b border-violet-500/10 bg-violet-500/10">
+                <span className="text-xs font-semibold text-violet-300">Landed Cost Allocation Preview</span>
+                {loadingPreview && <span className="text-[10px] text-violet-400 animate-pulse">Calculating...</span>}
+              </div>
+              <div className="p-4 space-y-3">
+                {loadingPreview ? (
+                  <div className="text-center py-4 text-xs text-primary/40">Loading invoice details...</div>
+                ) : previewDetails.length === 0 ? (
+                  <div className="text-center py-4 text-xs text-primary/40">
+                    {parseFloat(form.amount) > 0 
+                      ? "No stock found in selected invoices to allocate costs." 
+                      : "Enter an amount to see the cost allocation breakdown."}
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                    <table className="w-full text-left text-[11px]">
+                      <thead>
+                        <tr className="text-primary/40 border-b border-primary/5 pb-1">
+                          <th className="font-medium pb-1.5">Product</th>
+                          <th className="font-medium text-center pb-1.5">Invoice</th>
+                          <th className="font-medium text-right pb-1.5">Stock</th>
+                          <th className="font-medium text-right pb-1.5">Add. Cost Delta</th>
+                          <th className="font-medium text-right pb-1.5">Projected Landed</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-primary/5">
+                        {previewDetails.map((item) => {
+                          const delta = item.change;
+                          return (
+                            <tr key={item.id} className={`text-primary/70 hover:text-primary ${!item.isCurrentlyAffected ? "opacity-40" : ""}`}>
+                              <td className="py-2 pr-2">
+                                <div className="font-medium">{item.name}</div>
+                                {item.sku && <div className="text-[9px] text-primary/30 font-mono">{item.sku}</div>}
+                                {!item.isCurrentlyAffected && <span className="text-[9px] text-rose-400 bg-rose-500/10 px-1 py-0.2 rounded font-medium mt-0.5 inline-block">Removed</span>}
+                              </td>
+                              <td className="py-2 text-center text-primary/50">{item.invoice}</td>
+                              <td className="py-2 text-right">
+                                {item.stock} <span className="text-[9px] text-primary/30">({(item.stock / item.unitsPerBag).toFixed(1)} bag)</span>
+                              </td>
+                              <td className={`py-2 text-right font-medium ${delta > 0 ? "text-emerald-400" : delta < 0 ? "text-rose-400" : "text-primary/40"}`}>
+                                {delta > 0 ? `+${delta.toFixed(2)}` : delta < 0 ? `${delta.toFixed(2)}` : "—"}
+                                <div className="text-[9px] text-primary/30">Total: {item.newAdditional.toFixed(2)}</div>
+                              </td>
+                              <td className="py-2 text-right">
+                                <div className="line-through text-primary/30 text-[10px]">{item.currentLanded.toFixed(2)}</div>
+                                <div className="font-semibold text-violet-400">₹{item.newLanded.toFixed(2)}</div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Amount */}
           <div>

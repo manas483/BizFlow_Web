@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireAuth, AuthError } from '@/lib/api-guard';
 import { productSchema } from '@/lib/validations';
+import { recalculateTransportCosts } from '@/lib/expense-calculations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -39,11 +40,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const validatedData = productSchema.partial().parse(body);
+    const { purchaseDate, ...rest } = validatedData;
 
     const product = await prisma.product.update({
       where: { id },
-      data: validatedData,
+      data: {
+        ...rest,
+        ...(purchaseDate !== undefined ? { purchaseDate: purchaseDate ? new Date(purchaseDate) : null } : {}),
+      },
     });
+
+    await recalculateTransportCosts(session.user.businessId);
 
     return NextResponse.json(product);
   } catch (error) {
@@ -67,6 +74,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     await prisma.product.delete({ where: { id } });
+
+    await recalculateTransportCosts(session.user.businessId);
+
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof AuthError) return error.response;

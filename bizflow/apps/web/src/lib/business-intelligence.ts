@@ -24,6 +24,7 @@ export interface SeedProduct {
   minStock: number;
   hsnCode: string;
   gstRate: number;
+  unitsPerBag?: number;
 }
 
 export interface DashboardWidget {
@@ -215,11 +216,27 @@ const profiles: Record<BusinessTypeKey, BusinessProfile> = {
       "Monitor pesticide batch expiry dates regularly",
     ],
     seedProducts: [
-      { name: "Urea (50kg)", category: "Fertilizers", sku: "FT-001", unit: "bag", purchasePrice: 265, sellingPrice: 310, stock: 200, minStock: 50, hsnCode: "3102", gstRate: 0 },
-      { name: "DAP (50kg)", category: "Fertilizers", sku: "FT-002", unit: "bag", purchasePrice: 1350, sellingPrice: 1450, stock: 150, minStock: 30, hsnCode: "3105", gstRate: 0 },
-      { name: "NPK 10-26-26 (50kg)", category: "Fertilizers", sku: "FT-003", unit: "bag", purchasePrice: 1200, sellingPrice: 1320, stock: 80, minStock: 20, hsnCode: "3105", gstRate: 0 },
-      { name: "Chlorpyrifos 20EC (1L)", category: "Pesticides", sku: "PS-001", unit: "btl", purchasePrice: 350, sellingPrice: 420, stock: 30, minStock: 10, hsnCode: "3808", gstRate: 18 },
-      { name: "Hybrid Paddy Seeds (5kg)", category: "Seeds", sku: "SD-001", unit: "bag", purchasePrice: 280, sellingPrice: 360, stock: 100, minStock: 25, hsnCode: "1006", gstRate: 0 },
+      { name: "Matix Urea 45 Kg", sku: "MTX-UR-45", category: "Fertilizers", stock: 20, unitsPerBag: 1, purchasePrice: 260, sellingPrice: 290, minStock: 10, hsnCode: "31021000", gstRate: 0, unit: "bag" },
+      { name: "GR 28:28:0 50 Kg", sku: "GR-2828-50", category: "Fertilizers", stock: 15, unitsPerBag: 1, purchasePrice: 1890, sellingPrice: 2050, minStock: 8, hsnCode: "31055100", gstRate: 0, unit: "bag" },
+      { name: "IPL DAP 50 Kg", sku: "IPL-DP-50", category: "Fertilizers", stock: 10, unitsPerBag: 1, purchasePrice: 1345, sellingPrice: 1450, minStock: 10, hsnCode: "31053000", gstRate: 0, unit: "bag" },
+      { name: "NR DAP 50 Kg", sku: "NR-DP-50", category: "Fertilizers", stock: 10, unitsPerBag: 1, purchasePrice: 1345, sellingPrice: 1450, minStock: 10, hsnCode: "31053000", gstRate: 0, unit: "bag" },
+      { name: "GR 20:20:0:13 50 Kg", sku: "GR-2020-50", category: "Fertilizers", stock: 20, unitsPerBag: 1, purchasePrice: 1790, sellingPrice: 1920, minStock: 10, hsnCode: "31055100", gstRate: 0, unit: "bag" },
+      { name: "NR 20:20:0:13 50 Kg", sku: "NR-2020-50", category: "Fertilizers", stock: 20, unitsPerBag: 1, purchasePrice: 1790, sellingPrice: 1920, minStock: 10, hsnCode: "31055900", gstRate: 0, unit: "bag" },
+      { name: "IPL MOP 50 Kg", sku: "IPL-MP-50", category: "Fertilizers", stock: 25, unitsPerBag: 1, purchasePrice: 1845, sellingPrice: 1980, minStock: 10, hsnCode: "31042000", gstRate: 0, unit: "bag" },
+      { name: "NR TSP 46% 50 Kg", sku: "NR-TS-50", category: "Fertilizers", stock: 10, unitsPerBag: 1, purchasePrice: 1295, sellingPrice: 1400, minStock: 5, hsnCode: "31031100", gstRate: 0, unit: "bag" },
+      { name: "Trump-162LS", sku: "TRM-162", category: "Seeds", stock: 10, unitsPerBag: 5, purchasePrice: 1000, sellingPrice: 1200, minStock: 5, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Yashraj", sku: "YSH-RJ", category: "Seeds", stock: 6, unitsPerBag: 6, purchasePrice: 510, sellingPrice: 620, minStock: 3, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Pan 804 (Jamuna)", sku: "PAN-804", category: "Seeds", stock: 12, unitsPerBag: 6, purchasePrice: 730, sellingPrice: 850, minStock: 6, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "NP-7075", sku: "NP-7075", category: "Seeds", stock: 12, unitsPerBag: 6, purchasePrice: 672, sellingPrice: 780, minStock: 6, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Vishal Gaurav", sku: "VSH-GR", category: "Seeds", stock: 12, unitsPerBag: 6, purchasePrice: 600, sellingPrice: 700, minStock: 6, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Sindhu", sku: "SND-HU", category: "Seeds", stock: 8, unitsPerBag: 4, purchasePrice: 970, sellingPrice: 1100, minStock: 4, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Kalachampa Gold", sku: "KLC-GD", category: "Seeds", stock: 8, unitsPerBag: 4, purchasePrice: 760, sellingPrice: 880, minStock: 4, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Chemfree Vamax 4 KG", sku: "CF-VMX-4", category: "Soil Conditioners", stock: 18, unitsPerBag: 1, purchasePrice: 550, sellingPrice: 650, minStock: 5, hsnCode: "3101", gstRate: 0, unit: "pcs" },
+      { name: "Shaktiman Oorja (FCO) 1 KG", sku: "SM-ORJ-1", category: "Soil Conditioners", stock: 25, unitsPerBag: 1, purchasePrice: 90, sellingPrice: 120, minStock: 10, hsnCode: "3101", gstRate: 0, unit: "pcs" },
+      { name: "Matix Zinc Sulphate (33%) 1 KG", sku: "MTX-ZN-1", category: "Soil Conditioners", stock: 20, unitsPerBag: 1, purchasePrice: 190, sellingPrice: 240, minStock: 5, hsnCode: "2833", gstRate: 0, unit: "pcs" },
+      { name: "PROM (Prabhat) 50 KG", sku: "PRM-PB-50", category: "Soil Conditioners", stock: 5, unitsPerBag: 1, purchasePrice: 1250, sellingPrice: 1450, minStock: 2, hsnCode: "3101", gstRate: 0, unit: "pcs" },
+      { name: "Nashak 500 ml", sku: "NSK-500", category: "Pesticides", stock: 20, unitsPerBag: 1, purchasePrice: 275, sellingPrice: 350, minStock: 5, hsnCode: "3808", gstRate: 0, unit: "pcs" },
+      { name: "Nashak 250 ml", sku: "NSK-250", category: "Pesticides", stock: 40, unitsPerBag: 1, purchasePrice: 150, sellingPrice: 200, minStock: 10, hsnCode: "3808", gstRate: 0, unit: "pcs" }
     ],
     customerPlaceholder: { name: "Kisan Agro Farm", email: "contact@kisanfarm.in" },
   },
@@ -430,4 +447,44 @@ export function getOnboardingConfig(businessType: string) {
     emoji: profile.emoji,
     tagline: profile.tagline,
   };
+}
+
+export function findProductIntelligence(
+  businessType: string,
+  name: string,
+  sku?: string
+): Partial<SeedProduct> | null {
+  const profile = getBusinessProfile(businessType);
+  if (!profile || !profile.seedProducts) return null;
+
+  const searchSku = sku?.trim().toLowerCase();
+  const searchName = name?.trim().toLowerCase();
+
+  // 1. Try exact SKU match
+  if (searchSku) {
+    const matched = profile.seedProducts.find(
+      (p) => p.sku?.trim().toLowerCase() === searchSku
+    );
+    if (matched) return matched;
+  }
+
+  // 2. Try exact name match
+  if (searchName) {
+    const matched = profile.seedProducts.find(
+      (p) => p.name.trim().toLowerCase() === searchName
+    );
+    if (matched) return matched;
+  }
+
+  // 3. Try partial name match (e.g., "Trump-162" inside "Trump-162LS")
+  if (searchName) {
+    const matched = profile.seedProducts.find(
+      (p) =>
+        p.name.trim().toLowerCase().includes(searchName) ||
+        searchName.includes(p.name.trim().toLowerCase())
+    );
+    if (matched) return matched;
+  }
+
+  return null;
 }
