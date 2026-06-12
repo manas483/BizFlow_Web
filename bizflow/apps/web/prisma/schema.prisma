@@ -42,6 +42,19 @@ model Business {
   leaveRequests       LeaveRequest[]
   attendanceTickets   AttendanceTicket[]
   refreshTokens       RefreshToken[]
+  // ── Accounting & Finance relations ──
+  accounts            Account[]
+  journalEntries      JournalEntry[]
+  bankAccounts        BankAccount[]
+  cashBookEntries     CashBookEntry[]
+  bankBookEntries     BankBookEntry[]
+  bankReconciliations BankReconciliation[]
+  gstReturns          GstReturn[]
+  tdsEntries          TdsEntry[]
+  accountsReceivable  AccountsReceivable[]
+  accountsPayable     AccountsPayable[]
+  // ── Loan & EMI relations ──
+  loans               LoanMaster[]
 }
 
 model User {
@@ -133,6 +146,7 @@ model Customer {
   debitNotes     DebitNote[]
   quotations     Quotation[]
   sales          Sale[]
+  accountsReceivable AccountsReceivable[]
 }
 
 model Sale {
@@ -420,4 +434,374 @@ enum Plan {
   STARTER
   PRO
   ENTERPRISE
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Accounting & Finance
+// ═══════════════════════════════════════════════════════════════════════════════
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum JournalStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+enum TransactionType {
+  RECEIPT
+  PAYMENT
+}
+
+enum ReconciliationStatus {
+  PENDING
+  MATCHED
+  UNMATCHED
+}
+
+enum LoanType {
+  TERM_LOAN
+  PERSONAL_LOAN
+  BUSINESS_LOAN
+  HOME_LOAN
+  VEHICLE_LOAN
+  GOLD_LOAN
+  WORKING_CAPITAL
+  OTHER
+}
+
+enum LoanStatus {
+  ACTIVE
+  CLOSED
+  DEFAULTED
+  RESTRUCTURED
+  FORECLOSED
+  OVERDUE
+}
+
+enum EMIStatus {
+  PENDING
+  PAID
+  OVERDUE
+  PARTIALLY_PAID
+}
+
+/// Chart of Accounts — hierarchical account tree for double-entry bookkeeping.
+/// Account codes and names are user-defined (not hardcoded).
+model Account {
+  id             String       @id @default(cuid())
+  code           String                              // e.g. "1000", "2100" — user-defined
+  name           String                              // e.g. "Cash in Hand", "Trade Receivables"
+  accountType    AccountType                         // ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE
+  parentId       String?                             // self-referencing for sub-accounts
+  description    String?
+  openingBalance Float        @default(0)
+  isActive       Boolean      @default(true)
+  isSystemAccount Boolean     @default(false)        // true for auto-created defaults
+  businessId     String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  parent         Account?     @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children       Account[]    @relation("AccountHierarchy")
+  business       Business     @relation(fields: [businessId], references: [id])
+  journalLines   JournalLine[]
+  cashBookEntries CashBookEntry[]
+  bankBookEntries BankBookEntry[]
+
+  @@unique([businessId, code])
+  @@index([businessId, accountType])
+}
+
+/// Journal Entry — the header for a set of balanced debit/credit lines.
+model JournalEntry {
+  id          String        @id @default(cuid())
+  entryNumber String                                // auto-generated: JE-0001, JE-0002, etc.
+  date        DateTime
+  narration   String                                // description / memo
+  reference   String?                               // external ref (invoice no, cheque no, etc.)
+  status      JournalStatus @default(DRAFT)
+  totalAmount Float         @default(0)             // sum of debits (= sum of credits when balanced)
+  businessId  String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  business    Business      @relation(fields: [businessId], references: [id])
+  lines       JournalLine[]
+
+  @@unique([businessId, entryNumber])
+  @@index([businessId, date])
+}
+
+/// Journal Line — individual debit or credit entry within a journal entry.
+model JournalLine {
+  id             String       @id @default(cuid())
+  journalEntryId String
+  accountId      String
+  debit          Float        @default(0)
+  credit         Float        @default(0)
+  narration      String?
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account        Account      @relation(fields: [accountId], references: [id])
+
+  @@index([journalEntryId])
+  @@index([accountId])
+}
+
+/// Accounts Receivable — tracks money owed TO the business by customers.
+model AccountsReceivable {
+  id          String   @id @default(cuid())
+  customerId  String
+  invoiceRef  String                                // reference to sale/invoice
+  amount      Float                                 // original invoice amount
+  paidAmount  Float    @default(0)
+  dueDate     DateTime
+  status      String   @default("OUTSTANDING")      // OUTSTANDING, PARTIALLY_PAID, PAID, OVERDUE
+  notes       String?
+  businessId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  customer    Customer @relation(fields: [customerId], references: [id])
+  business    Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, status])
+  @@index([businessId, dueDate])
+}
+
+/// Accounts Payable — tracks money owed BY the business to suppliers/vendors.
+model AccountsPayable {
+  id           String   @id @default(cuid())
+  supplierName String
+  invoiceRef   String                               // supplier invoice reference
+  amount       Float
+  paidAmount   Float    @default(0)
+  dueDate      DateTime
+  status       String   @default("OUTSTANDING")     // OUTSTANDING, PARTIALLY_PAID, PAID, OVERDUE
+  category     String?                              // e.g. "Raw Material", "Services"
+  notes        String?
+  businessId   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  business     Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, status])
+  @@index([businessId, dueDate])
+}
+
+/// Cash Book — records all cash receipts and payments.
+model CashBookEntry {
+  id              String          @id @default(cuid())
+  date            DateTime
+  transactionType TransactionType                   // RECEIPT or PAYMENT
+  accountId       String                            // which ledger account this hits
+  amount          Float
+  narration       String
+  reference       String?                           // voucher/receipt number
+  businessId      String
+  createdAt       DateTime        @default(now())
+  account         Account         @relation(fields: [accountId], references: [id])
+  business        Business        @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, date])
+}
+
+/// Bank Account — bank accounts associated with the business.
+model BankAccount {
+  id              String             @id @default(cuid())
+  accountName     String                             // e.g. "HDFC Current Account"
+  bankName        String
+  accountNumber   String
+  ifscCode        String?
+  branch          String?
+  currentBalance  Float              @default(0)
+  isActive        Boolean            @default(true)
+  businessId      String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  business        Business           @relation(fields: [businessId], references: [id])
+  bankBookEntries BankBookEntry[]
+  reconciliations BankReconciliation[]
+
+  @@unique([businessId, accountNumber])
+}
+
+/// Bank Book — records all bank transactions (deposits, withdrawals, transfers).
+model BankBookEntry {
+  id                   String               @id @default(cuid())
+  date                 DateTime
+  transactionType      TransactionType                 // RECEIPT or PAYMENT
+  bankAccountId        String
+  accountId            String                           // ledger account
+  amount               Float
+  narration            String
+  reference            String?                          // cheque no, NEFT ref, etc.
+  reconciliationStatus ReconciliationStatus @default(PENDING)
+  reconciliationDate   DateTime?
+  businessId           String
+  createdAt            DateTime             @default(now())
+  bankAccount          BankAccount          @relation(fields: [bankAccountId], references: [id])
+  account              Account              @relation(fields: [accountId], references: [id])
+  business             Business             @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, date])
+  @@index([bankAccountId, reconciliationStatus])
+}
+
+/// Bank Reconciliation — reconciliation session for matching bank statements.
+model BankReconciliation {
+  id                  String      @id @default(cuid())
+  bankAccountId       String
+  statementDate       DateTime
+  statementBalance    Float
+  bookBalance         Float
+  adjustedBalance     Float?
+  reconciledEntries   Json?                             // array of bankBookEntry IDs that were matched
+  unreconciledEntries Json?                             // array of bankBookEntry IDs not matched
+  notes               String?
+  status              String      @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED
+  businessId          String
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  bankAccount         BankAccount @relation(fields: [bankAccountId], references: [id])
+  business            Business    @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, bankAccountId])
+}
+
+/// GST Return — tracks GST filing data per period.
+model GstReturn {
+  id             String   @id @default(cuid())
+  period         String                               // "2024-01", "2024-Q1", etc.
+  returnType     String                               // "GSTR1", "GSTR3B", "GSTR9", etc.
+  filingDate     DateTime?
+  status         String   @default("PENDING")         // PENDING, FILED, REVISED
+  totalTaxable   Float    @default(0)
+  totalCgst      Float    @default(0)
+  totalSgst      Float    @default(0)
+  totalIgst      Float    @default(0)
+  totalCess      Float    @default(0)
+  totalTax       Float    @default(0)
+  data           Json?                                // detailed breakdown per rate slab
+  notes          String?
+  businessId     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  business       Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, period, returnType])
+}
+
+/// TDS Entry — tracks TDS deductions made by the business.
+model TdsEntry {
+  id            String   @id @default(cuid())
+  section       String                               // e.g. "194C", "194J" — user-entered
+  deducteeName  String
+  deducteePan   String?
+  paymentDate   DateTime
+  paymentAmount Float
+  tdsRate       Float                                // percentage
+  tdsAmount     Float
+  depositDate   DateTime?
+  challanNo     String?
+  status        String   @default("DEDUCTED")        // DEDUCTED, DEPOSITED, FILED
+  notes         String?
+  businessId    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  business      Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, section])
+  @@index([businessId, paymentDate])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Loan & EMI Management
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Loan Master — definition of a loan with all parameters.
+model LoanMaster {
+  id                 String        @id @default(cuid())
+  loanNumber         String                              // auto-generated: LOAN-0001
+  borrowerName       String                              // who took the loan
+  loanType           LoanType      @default(TERM_LOAN)
+  amount             Float                               // principal amount
+  interestRate       Float                               // annual interest rate (%)
+  tenure             Int                                 // in months
+  startDate          DateTime
+  endDate            DateTime?                           // computed from start + tenure
+  emiAmount          Float?                              // computed EMI amount
+  totalInterest      Float?                              // total interest over loan life
+  totalPayable       Float?                              // principal + total interest
+  outstandingBalance Float?                              // current outstanding
+  status             LoanStatus    @default(ACTIVE)
+  lender             String?                             // SBI, HDFC, ICICI, NBFC, etc.
+  purpose            String?                             // Business Expansion, Working Capital, etc.
+  notes              String?
+  businessId         String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  business           Business      @relation(fields: [businessId], references: [id])
+  schedule           LoanSchedule[]
+  payments           LoanPayment[]
+  documents          LoanDocument[]
+
+  @@unique([businessId, loanNumber])
+  @@index([businessId, status])
+}
+
+/// Loan Schedule — pre-computed EMI schedule (one row per EMI installment).
+model LoanSchedule {
+  id                String    @id @default(cuid())
+  loanId            String
+  installmentNumber Int
+  dueDate           DateTime
+  emiAmount         Float
+  principalAmount   Float
+  interestAmount    Float
+  openingBalance    Float
+  closingBalance    Float
+  status            EMIStatus @default(PENDING)
+  paidDate          DateTime?
+  paidAmount        Float?
+  loan              LoanMaster @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@unique([loanId, installmentNumber])
+  @@index([loanId, status])
+  @@index([dueDate])
+}
+
+/// Loan Payment — actual payments recorded against a loan.
+model LoanPayment {
+  id              String   @id @default(cuid())
+  loanId          String
+  paymentDate     DateTime
+  amount          Float
+  principalPaid   Float    @default(0)
+  interestPaid    Float    @default(0)
+  paymentType     String   @default("EMI")           // EMI, PREPAYMENT, PARTIAL, CLOSURE
+  reference       String?                            // cheque/txn reference
+  notes           String?
+  createdAt       DateTime @default(now())
+  loan            LoanMaster @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId, paymentDate])
+}
+
+/// Loan Document — files attached to a loan (agreement, KYC, sanction letter, etc.).
+model LoanDocument {
+  id        String     @id @default(cuid())
+  loanId    String
+  name      String                              // display name
+  docType   String     @default("OTHER")        // AGREEMENT | SANCTION | KYC | PAN | AADHAAR | PROPERTY | OTHER
+  fileData  String                              // base64 encoded file content
+  mimeType  String?                             // e.g. application/pdf, image/png
+  fileSize  Int?                                // bytes
+  createdAt DateTime   @default(now())
+  loan      LoanMaster @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
 }

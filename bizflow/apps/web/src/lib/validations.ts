@@ -168,3 +168,147 @@ export const registerSchema = z.object({
       "Please enter a valid phone number"
     ),
 });
+
+// ── Accounting & Finance Schemas ──────────────────────────────────────────────
+
+export const accountSchema = z.object({
+  code: z.string().min(1, "Account code is required").max(20),
+  name: z.string().min(1, "Account name is required").max(100),
+  accountType: z.enum(['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE']),
+  parentId: z.string().optional().nullable(),
+  description: z.string().max(500).optional().nullable(),
+  openingBalance: z.coerce.number().default(0),
+  isActive: z.boolean().default(true),
+});
+
+export const journalLineSchema = z.object({
+  accountId: z.string().min(1, "Account is required"),
+  debit: z.coerce.number().min(0).default(0),
+  credit: z.coerce.number().min(0).default(0),
+  narration: z.string().max(500).optional().nullable(),
+});
+
+export const journalEntrySchema = z.object({
+  date: z.string().min(1, "Date is required"),
+  narration: z.string().min(1, "Narration is required").max(500),
+  reference: z.string().max(100).optional().nullable(),
+  lines: z.array(journalLineSchema).min(2, "At least two lines required for a journal entry"),
+}).refine(
+  (data) => {
+    const totalDebit = data.lines.reduce((sum, l) => sum + l.debit, 0);
+    const totalCredit = data.lines.reduce((sum, l) => sum + l.credit, 0);
+    return Math.abs(totalDebit - totalCredit) < 0.01;
+  },
+  { message: "Total debits must equal total credits", path: ["lines"] }
+);
+
+export const cashBookEntrySchema = z.object({
+  date: z.string().min(1, "Date is required"),
+  transactionType: z.enum(['RECEIPT', 'PAYMENT']),
+  accountId: z.string().min(1, "Account is required"),
+  amount: z.coerce.number().min(0.01, "Amount must be positive"),
+  narration: z.string().min(1, "Narration is required").max(500),
+  reference: z.string().max(100).optional().nullable(),
+});
+
+export const bankAccountSchema = z.object({
+  accountName: z.string().min(1, "Account name is required").max(100),
+  bankName: z.string().min(1, "Bank name is required").max(100),
+  accountNumber: z.string().min(1, "Account number is required").max(50),
+  ifscCode: z.string().max(20).optional().nullable(),
+  branch: z.string().max(100).optional().nullable(),
+  currentBalance: z.coerce.number().default(0),
+});
+
+export const bankBookEntrySchema = z.object({
+  date: z.string().min(1, "Date is required"),
+  transactionType: z.enum(['RECEIPT', 'PAYMENT']),
+  bankAccountId: z.string().min(1, "Bank account is required"),
+  accountId: z.string().min(1, "Ledger account is required"),
+  amount: z.coerce.number().min(0.01, "Amount must be positive"),
+  narration: z.string().min(1, "Narration is required").max(500),
+  reference: z.string().max(100).optional().nullable(),
+});
+
+export const bankReconciliationSchema = z.object({
+  bankAccountId: z.string().min(1, "Bank account is required"),
+  statementDate: z.string().min(1, "Statement date is required"),
+  statementBalance: z.coerce.number(),
+  reconciledEntries: z.array(z.string()).optional().default([]),
+  notes: z.string().max(500).optional().nullable(),
+});
+
+export const gstReturnSchema = z.object({
+  period: z.string().min(1, "Period is required"),
+  returnType: z.string().min(1, "Return type is required"),
+  filingDate: z.string().optional().nullable(),
+  status: z.string().default("PENDING"),
+  totalTaxable: z.coerce.number().min(0).default(0),
+  totalCgst: z.coerce.number().min(0).default(0),
+  totalSgst: z.coerce.number().min(0).default(0),
+  totalIgst: z.coerce.number().min(0).default(0),
+  totalCess: z.coerce.number().min(0).default(0),
+  data: z.any().optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+}).refine(
+  (d) => {
+    if (d.status === "FILED" || d.status === "REVISED") return !!d.filingDate;
+    return true;
+  },
+  { message: "Filing Date is required when status is Filed or Revised", path: ["filingDate"] }
+);
+
+export const tdsEntrySchema = z.object({
+  section: z.string().min(1, "TDS section is required"),
+  deducteeName: z.string().min(1, "Deductee name is required").max(100),
+  deducteePan: z.string().max(20).optional().nullable(),
+  paymentDate: z.string().min(1, "Payment date is required"),
+  paymentAmount: z.coerce.number().min(0.01, "Payment amount must be positive"),
+  tdsRate: z.coerce.number().min(0).max(100),
+  tdsAmount: z.coerce.number().min(0),
+  depositDate: z.string().optional().nullable(),
+  challanNo: z.string().max(50).optional().nullable(),
+  status: z.string().default("DEDUCTED"),
+  notes: z.string().max(500).optional().nullable(),
+});
+
+export const receivableSchema = z.object({
+  customerId: z.string().min(1, "Customer is required"),
+  invoiceRef: z.string().min(1, "Invoice reference is required").max(100),
+  amount: z.coerce.number().min(0.01, "Amount must be positive"),
+  paidAmount: z.coerce.number().min(0).default(0),
+  dueDate: z.string().min(1, "Due date is required"),
+  notes: z.string().max(500).optional().nullable(),
+});
+
+export const payableSchema = z.object({
+  supplierName: z.string().min(1, "Supplier name is required").max(100),
+  invoiceRef: z.string().min(1, "Invoice reference is required").max(100),
+  amount: z.coerce.number().min(0.01, "Amount must be positive"),
+  paidAmount: z.coerce.number().min(0).default(0),
+  dueDate: z.string().min(1, "Due date is required"),
+  category: z.string().max(50).optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+});
+
+// ── Loan & EMI Schemas ────────────────────────────────────────────────────────
+
+export const loanMasterSchema = z.object({
+  borrowerName: z.string().min(1, "Borrower name is required").max(100),
+  loanType: z.enum(['TERM_LOAN', 'PERSONAL_LOAN', 'BUSINESS_LOAN', 'HOME_LOAN', 'VEHICLE_LOAN', 'GOLD_LOAN', 'WORKING_CAPITAL', 'OTHER']).default('TERM_LOAN'),
+  amount: z.coerce.number().min(1, "Loan amount must be positive"),
+  interestRate: z.coerce.number().min(0).max(100),
+  tenure: z.coerce.number().int().min(1, "Tenure must be at least 1 month"),
+  startDate: z.string().min(1, "Start date is required"),
+  lender: z.string().max(100).optional().nullable(),
+  purpose: z.string().max(100).optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+});
+
+export const loanPaymentSchema = z.object({
+  paymentDate: z.string().min(1, "Payment date is required"),
+  amount: z.coerce.number().min(0.01, "Amount must be positive"),
+  paymentType: z.string().default("EMI"),
+  reference: z.string().max(100).optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+});

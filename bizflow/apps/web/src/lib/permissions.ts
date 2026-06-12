@@ -9,7 +9,9 @@ export type Permission =
   | "view_reports"
   | "manage_settings"
   | "manage_billing"
-  | "process_payments";
+  | "process_payments"
+  | "manage_accounting"
+  | "manage_loans";
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SUPER_ADMIN: [
@@ -22,6 +24,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "manage_settings",
     "manage_billing",
     "process_payments",
+    "manage_accounting",
+    "manage_loans",
   ],
   MANAGER: [
     "view_dashboard",
@@ -29,6 +33,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "manage_sales",
     "manage_customers",
     "view_reports",
+    "manage_loans",
   ],
   ACCOUNTANT: [
     "view_dashboard",
@@ -36,6 +41,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "manage_sales",
     "manage_billing",
     "process_payments",
+    "manage_accounting",
+    "manage_loans",
   ],
   STAFF: [
     "view_dashboard",

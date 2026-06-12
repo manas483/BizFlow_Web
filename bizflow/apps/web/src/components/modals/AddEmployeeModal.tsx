@@ -37,6 +37,8 @@ const ALL_PERMISSIONS: Permission[] = [
   "manage_settings",
   "manage_billing",
   "process_payments",
+  "manage_accounting",
+  "manage_loans",
 ];
 
 const PERMISSION_LABELS: Record<Permission, string> = {
@@ -49,6 +51,8 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   manage_settings: "Manage Settings",
   manage_billing: "Manage Billing",
   process_payments: "Process Payments",
+  manage_accounting: "Manage Accounting",
+  manage_loans: "Manage Loans",
 };
 
 export default function AddEmployeeModal({ open, onClose }: { open: boolean; onClose: () => void }) {

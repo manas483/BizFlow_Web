@@ -8,7 +8,7 @@ import { hasPermission, Permission } from "@/lib/permissions";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, UserCheck,
   Receipt, BarChart3, Bell, Settings, LogOut, ChevronLeft, ChevronRight, Store,
-  CalendarCheck,
+  CalendarCheck, Calculator, Landmark,
 } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 import { useApp } from "@/context/AppContext";
@@ -23,6 +23,8 @@ const navItems: { href: string; icon: any; label: string; permission: Permission
   { href: "/expenses", icon: Receipt, label: "Expenses", permission: "manage_billing" },
   { href: "/reports", icon: BarChart3, label: "Reports", permission: "view_reports" },
   { href: "/my-attendance", icon: CalendarCheck, label: "My Attendance", permission: "view_dashboard", adminOnly: false },
+  { href: "/accounting", icon: Calculator, label: "Accounting", permission: "manage_accounting" },
+  { href: "/loans", icon: Landmark, label: "Loans", permission: "manage_loans" },
   { href: "/notifications", icon: Bell, label: "Notifications", permission: "view_dashboard" },
   { href: "/settings", icon: Settings, label: "Settings", permission: "manage_settings" },
 ];
