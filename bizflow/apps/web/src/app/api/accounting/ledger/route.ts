@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
           ...(from || to ? {
             date: {
               ...(from ? { gte: new Date(from) } : {}),
-              ...(to ? { lte: new Date(to) } : {}),
+              ...(to ? { lte: new Date(`${to.split('T')[0]}T23:59:59.999Z`) } : {}),
             },
           } : {}),
         },
