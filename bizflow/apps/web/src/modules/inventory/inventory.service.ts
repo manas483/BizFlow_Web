@@ -45,7 +45,9 @@ export class InventoryService {
           productId: product.id,
           type: 'IN',
           quantity: product.stock,
-          notes: 'Initial stock on creation',
+          notes: product.purchaseFrom || product.supplier || 'Initial stock on creation',
+          referenceId: product.purchaseInvoiceNo,
+          createdAt: product.purchaseDate || undefined,
           businessId: session.user.businessId,
         }
       });
@@ -124,9 +126,11 @@ export class InventoryService {
         await tx.stockMovement.create({
           data: {
             productId: updated.id,
-            type: 'ADJUST',
+            type: stockDiff > 0 ? 'IN' : 'ADJUST',
             quantity: stockDiff,
-            notes: 'Manual stock adjustment during product update',
+            notes: stockDiff > 0 ? (updated.purchaseFrom || updated.supplier || 'Restock during product update') : 'Manual stock reduction',
+            referenceId: stockDiff > 0 ? updated.purchaseInvoiceNo : null,
+            createdAt: (stockDiff > 0 && purchaseDate) ? new Date(purchaseDate) : undefined,
             businessId: session.user.businessId,
           }
         });

@@ -135,10 +135,40 @@ export async function POST(req: NextRequest) {
             ?? null;
 
           if (existingId) {
+            const existingProduct = await prisma.product.findUnique({ where: { id: existingId } });
+            const stockDiff = productData.stock - (existingProduct?.stock || 0);
+            
             await prisma.product.update({ where: { id: existingId }, data: productData });
+            
+            if (stockDiff > 0) {
+              await prisma.stockMovement.create({
+                data: {
+                  productId: existingId,
+                  type: 'IN',
+                  quantity: stockDiff,
+                  notes: productData.purchaseFrom || productData.supplier || 'Restock from import',
+                  referenceId: productData.purchaseInvoiceNo || null,
+                  createdAt: productData.purchaseDate || undefined,
+                  businessId,
+                }
+              });
+            }
             results.updated++;
           } else {
-            await prisma.product.create({ data: { ...productData, businessId } });
+            const newProduct = await prisma.product.create({ data: { ...productData, businessId } });
+            if (newProduct.stock > 0) {
+              await prisma.stockMovement.create({
+                data: {
+                  productId: newProduct.id,
+                  type: 'IN',
+                  quantity: newProduct.stock,
+                  notes: newProduct.purchaseFrom || newProduct.supplier || 'Initial stock from import',
+                  referenceId: newProduct.purchaseInvoiceNo || null,
+                  createdAt: newProduct.purchaseDate || undefined,
+                  businessId,
+                }
+              });
+            }
             results.created++;
           }
         } catch (err) {
@@ -343,10 +373,55 @@ export async function POST(req: NextRequest) {
 
         if (processedRow.action === "update" && sku) {
           const existingId = existingSkuMap.get(sku.toLowerCase());
-          if (existingId) { await prisma.product.update({ where: { id: existingId }, data: productData }); results.updated++; }
-          else { await prisma.product.create({ data: { ...productData, businessId } }); results.created++; }
+          if (existingId) { 
+            const existingProduct = await prisma.product.findUnique({ where: { id: existingId } });
+            const stockDiff = productData.stock - (existingProduct?.stock || 0);
+            
+            await prisma.product.update({ where: { id: existingId }, data: productData }); 
+            
+            if (stockDiff > 0) {
+              await prisma.stockMovement.create({
+                data: {
+                  productId: existingId,
+                  type: 'IN',
+                  quantity: stockDiff,
+                  notes: productData.supplier || 'Restock from import',
+                  referenceId: null, // excel imports usually don't have invoice no unless added
+                  createdAt: undefined,
+                  businessId,
+                }
+              });
+            }
+            results.updated++; 
+          }
+          else { 
+            const newProduct = await prisma.product.create({ data: { ...productData, businessId } }); 
+            if (newProduct.stock > 0) {
+              await prisma.stockMovement.create({
+                data: {
+                  productId: newProduct.id,
+                  type: 'IN',
+                  quantity: newProduct.stock,
+                  notes: newProduct.supplier || 'Initial stock from import',
+                  businessId,
+                }
+              });
+            }
+            results.created++; 
+          }
         } else {
-          await prisma.product.create({ data: { ...productData, businessId } });
+          const newProduct = await prisma.product.create({ data: { ...productData, businessId } });
+          if (newProduct.stock > 0) {
+            await prisma.stockMovement.create({
+              data: {
+                productId: newProduct.id,
+                type: 'IN',
+                quantity: newProduct.stock,
+                notes: newProduct.supplier || 'Initial stock from import',
+                businessId,
+              }
+            });
+          }
           results.created++;
         }
       } catch (err) {
