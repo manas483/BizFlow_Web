@@ -132,10 +132,18 @@ function generateStockRegisterData(data: any) {
         
         for (let i = 0; i < maxRows; i++) {
           const inMov = evs.in[i];
-          const purchasedQty = inMov ? inMov.quantity : '';
-          const purchasedRate = inMov ? (p.purchasePrice || '') : '';
-          const fromWhom = inMov ? (inMov.notes || 'Supplier') : '';
-          const challan = inMov ? (inMov.referenceId || '') : '';
+          const isFirstEventOverall = (dateStr === sortedDates[0] && i === 0);
+          
+          let purchasedQty: any = inMov ? inMov.quantity : '';
+          let purchasedRate: any = inMov ? (p.purchasePrice || '') : '';
+          let fromWhom: any = inMov ? (inMov.notes || 'Supplier') : '';
+          let challan: any = inMov ? (inMov.referenceId || '') : '';
+          
+          if (isFirstEventOverall && !inMov && openingBal > 0) {
+             fromWhom = p.purchaseFrom || p.supplier || '';
+             challan = p.purchaseInvoiceNo || '';
+             purchasedRate = p.purchasePrice || '';
+          }
           
           const soldQty = i === 0 ? dailySold : ''; 
           const totalQty = i === 0 ? openingBal + dailyIn : '';
