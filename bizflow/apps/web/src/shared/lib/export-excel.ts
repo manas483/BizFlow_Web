@@ -11,17 +11,6 @@ export function exportRegister(type: 'sale' | 'stock', category: string, data: a
     // Merge headers
     ws['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }, // Title
-      
-      // Vertical merges for headers (row 2 and 3)
-      { s: { r: 2, c: 0 }, e: { r: 3, c: 0 } },  // Date
-      { s: { r: 2, c: 1 }, e: { r: 3, c: 1 } },  // Product Name
-      { s: { r: 2, c: 2 }, e: { r: 3, c: 2 } },  // Opening Balance
-      { s: { r: 2, c: 3 }, e: { r: 2, c: 6 } },  // Received/Purchased From (Horizontal)
-      { s: { r: 2, c: 7 }, e: { r: 3, c: 7 } },  // Total Quantity
-      { s: { r: 2, c: 8 }, e: { r: 3, c: 8 } },  // Quantity Sold
-      { s: { r: 2, c: 9 }, e: { r: 3, c: 9 } },  // Closing Balance
-      { s: { r: 2, c: 10 }, e: { r: 3, c: 10 } }, // Signature
-      { s: { r: 2, c: 11 }, e: { r: 3, c: 11 } }, // Remarks
     ];
 
     // Set column widths
@@ -48,18 +37,6 @@ export function exportRegister(type: 'sale' | 'stock', category: string, data: a
     // Merge headers
     ws['!merges'] = [
       { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }, // Title
-      
-      // Vertical merges for headers
-      { s: { r: 2, c: 0 }, e: { r: 3, c: 0 } },  // Sl No
-      { s: { r: 2, c: 1 }, e: { r: 3, c: 1 } },  // Date
-      { s: { r: 2, c: 2 }, e: { r: 3, c: 2 } },  // Name of the Farmer
-      { s: { r: 2, c: 3 }, e: { r: 3, c: 3 } },  // Village
-      { s: { r: 2, c: 4 }, e: { r: 3, c: 4 } },  // GP
-      { s: { r: 2, c: 5 }, e: { r: 3, c: 5 } },  // Adhar No
-      { s: { r: 2, c: 6 }, e: { r: 2, c: 8 } },  // Sales Details (Horizontal)
-      { s: { r: 2, c: 9 }, e: { r: 3, c: 9 } },  // Amount
-      { s: { r: 2, c: 10 }, e: { r: 3, c: 10 } }, // Cash MR memo No.
-      { s: { r: 2, c: 11 }, e: { r: 3, c: 11 } }, // Signature
     ];
 
     // Set column widths
@@ -93,10 +70,7 @@ function generateStockRegisterData(data: any) {
   rows.push([]); 
   
   rows.push([
-    'Date', 'Product Name', 'Opening Balance', 'Received/Purchased From', '', '', '', 'Total Quantity', 'Quantity Sold', 'Closing Balance', 'Signature', 'Remarks'
-  ]);
-  rows.push([
-    '', '', '', 'From Whom', 'Challan No', 'Quantity', 'Rate', '', '', '', '', ''
+    'Date', 'Product Name', 'Opening Balance', 'Received From', 'Challan No', 'Purchased Qty', 'Rate', 'Total Quantity', 'Quantity Sold', 'Closing Balance', 'Signature', 'Remarks'
   ]);
 
   if (!products || products.length === 0) return rows;
@@ -198,10 +172,7 @@ function generateSaleRegisterData(data: any) {
   rows.push([]);
   
   rows.push([
-    'Sl No', 'Date', 'Name of the Farmer', 'Village', 'GP', 'Adhar No', 'Sales Details', '', '', 'Amount', 'Cash MR memo No.', 'Signature of Farmer'
-  ]);
-  rows.push([
-    '', '', '', '', '', '', `${data.category} name`, 'quantity sold', 'rate', '', '', ''
+    'Sl No', 'Date', 'Name of the Farmer', 'Village', 'GP', 'Adhar No', `${data.category || 'Product'} Name`, 'Quantity Sold', 'Rate', 'Amount', 'Cash MR memo No.', 'Signature'
   ]);
   
   let slNo = 1;
