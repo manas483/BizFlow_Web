@@ -49,6 +49,37 @@ export class InventoryService {
           businessId: session.user.businessId,
         }
       });
+
+      // Auto-create Accounts Payable for the purchase cost
+      if (product.purchasePrice > 0) {
+        const apAmount = product.stock * product.purchasePrice;
+        const supplierName = product.supplier || product.purchaseFrom || product.name;
+        const invoiceRef = product.purchaseInvoiceNo || `PROD-${product.id.slice(0, 8)}`;
+
+        const payable = await prisma.accountsPayable.create({
+          data: {
+            supplierName,
+            invoiceRef,
+            amount: apAmount,
+            paidAmount: 0,
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            category: product.category || 'Purchase',
+            status: 'OUTSTANDING',
+            notes: `Auto-generated: Purchase of ${product.stock} × ${product.name}`,
+            businessId: session.user.businessId,
+          },
+        });
+
+        // Fire journal entry for the payable
+        const { postPayableJournal } = await import('@/shared/lib/auto-journal');
+        await postPayableJournal({
+          payableId: payable.id,
+          supplierName,
+          amount: apAmount,
+          category: 'Purchase',
+          businessId: session.user.businessId,
+        });
+      }
     }
 
     await recalculateTransportCosts(session.user.businessId);
@@ -102,6 +133,37 @@ export class InventoryService {
       }
       return updated;
     });
+
+    // Auto-create Accounts Payable for restocking (stock increased)
+    if (stockDiff > 0 && (product.purchasePrice || 0) > 0) {
+      const apAmount = stockDiff * product.purchasePrice;
+      const supplierName = product.supplier || product.purchaseFrom || product.name;
+      const invoiceRef = product.purchaseInvoiceNo || `RESTOCK-${product.id.slice(0, 8)}-${Date.now()}`;
+
+      const payable = await prisma.accountsPayable.create({
+        data: {
+          supplierName,
+          invoiceRef,
+          amount: apAmount,
+          paidAmount: 0,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+          category: product.category || 'Purchase',
+          status: 'OUTSTANDING',
+          notes: `Auto-generated: Restocking ${stockDiff} × ${product.name}`,
+          businessId: session.user.businessId,
+        },
+      });
+
+      // Fire journal entry for the payable
+      const { postPayableJournal } = await import('@/shared/lib/auto-journal');
+      await postPayableJournal({
+        payableId: payable.id,
+        supplierName,
+        amount: apAmount,
+        category: 'Purchase',
+        businessId: session.user.businessId,
+      });
+    }
 
     await recalculateTransportCosts(session.user.businessId);
 

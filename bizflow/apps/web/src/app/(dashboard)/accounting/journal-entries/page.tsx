@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
 import { Badge } from "@/shared/ui/ui/Badge";
@@ -8,18 +9,24 @@ import { Button } from "@/shared/ui/ui/Button";
 import { StatCard } from "@/shared/ui/ui/StatCard";
 import { useJournalEntries, useUpdateJournalEntry } from "@/shared/hooks/useAccounting";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { BookOpen, Search, Download, Plus, AlertCircle, ArrowLeft } from "lucide-react";
+import { BookOpen, Search, Download, Plus, AlertCircle, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import AddJournalEntryModal from "@/shared/ui/modals/AddJournalEntryModal";
-import Link from "next/link";
 import toast from "react-hot-toast";
 
 export default function JournalEntriesPage() {
+  const router = useRouter();
   const [search, setSearch] = useState("");
+  const [showReversed, setShowReversed] = useState(false);
   const [isNewOpen, setIsNewOpen] = useState(false);
   const { data: entries = [], isLoading } = useJournalEntries();
   const updateEntry = useUpdateJournalEntry();
 
-  const filtered = entries.filter((e: any) => 
+  // Filter: exclude REVERSED unless toggled, then apply search
+  const visibleEntries = showReversed
+    ? entries
+    : entries.filter((e: any) => e.status !== 'REVERSED');
+
+  const filtered = visibleEntries.filter((e: any) => 
     e.entryNumber.toLowerCase().includes(search.toLowerCase()) ||
     e.narration.toLowerCase().includes(search.toLowerCase()) ||
     e.reference?.toLowerCase().includes(search.toLowerCase())
@@ -57,11 +64,9 @@ export default function JournalEntriesPage() {
     <DashboardLayout title="Journal Entries">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
-          <Link href="/accounting">
-            <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back to Accounting">
-              <ArrowLeft size={16} />
-            </Button>
-          </Link>
+          <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+          </Button>
           <div>
             <h2 className="text-xl font-bold text-primary">Journal Entries</h2>
             <p className="text-primary/40 text-sm mt-0.5">Double-entry accounting records and ledger postings</p>
@@ -74,20 +79,33 @@ export default function JournalEntriesPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-        <StatCard label="Total Entries" value={entries.length.toString()} icon={<BookOpen size={18} />} color="blue" />
-        <StatCard label="Active Posted" value={activeEntries.length.toString()} icon={<BookOpen size={18} />} color="emerald" />
+        <StatCard label="Total Entries" value={activeEntries.length.toString()} icon={<BookOpen size={18} />} color="blue" />
+        <StatCard label="Active Posted" value={activeEntries.filter((e: any) => e.status === 'POSTED').length.toString()} icon={<BookOpen size={18} />} color="emerald" />
         <StatCard label="Total Value" value={formatCurrency(totalAmount)} icon={<BookOpen size={18} />} color="violet" />
-        <StatCard label="Drafts / Reversed" value={(entries.length - activeEntries.length).toString()} icon={<AlertCircle size={18} />} color="amber" />
+        <StatCard label="Drafts" value={activeEntries.filter((e: any) => e.status === 'DRAFT').length.toString()} icon={<AlertCircle size={18} />} color="amber" />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Journal History</CardTitle>
-          <div className="relative flex-1 max-w-xs mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/40 w-3.5 h-3.5" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search entries..."
-              className="w-full bg-primary/5 border border-primary/10 rounded-lg pl-8 pr-3 py-1.5 text-xs
-                text-primary placeholder:text-primary/40 focus:outline-none focus:border-violet-500/50" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+            <CardTitle>Journal History</CardTitle>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowReversed(!showReversed)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  showReversed ? 'bg-rose-500/15 text-rose-400' : 'text-primary/40 hover:bg-primary/5'
+                }`}
+              >
+                {showReversed ? <Eye size={13} /> : <EyeOff size={13} />}
+                {showReversed ? 'Hiding Reversed' : 'Show Reversed'}
+              </button>
+              <div className="relative flex-1 min-w-[180px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/40 w-3.5 h-3.5" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search entries..."
+                  className="w-full bg-primary/5 border border-primary/10 rounded-lg pl-8 pr-3 py-1.5 text-xs
+                    text-primary placeholder:text-primary/40 focus:outline-none focus:border-violet-500/50" />
+              </div>
+            </div>
           </div>
         </CardHeader>
         <div className="overflow-x-auto">

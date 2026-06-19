@@ -19,6 +19,7 @@ interface JournalLineInput {
   debit: number;
   credit: number;
   narration?: string;
+  parentCode?: string;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -38,13 +39,15 @@ async function isAutoJournalEnabled(businessId: string): Promise<boolean> {
 /**
  * Find or create a system account by code.
  * If the account doesn't exist, it auto-creates it as a system account.
+ * Optionally accepts a parentCode to link as a sub-account.
  */
 async function findOrCreateAccount(
   businessId: string,
   code: string,
   name: string,
   accountType: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE',
-  tx: any = prisma
+  tx: any = prisma,
+  parentCode?: string
 ): Promise<string> {
   const existing = await tx.account.findFirst({
     where: { businessId, code },
@@ -53,12 +56,24 @@ async function findOrCreateAccount(
 
   if (existing) return existing.id;
 
+  // Resolve parent account ID if a parentCode is provided
+  let parentId: string | undefined;
+  if (parentCode) {
+    // Ensure the parent account exists first
+    const parentAccount = await tx.account.findFirst({
+      where: { businessId, code: parentCode },
+      select: { id: true },
+    });
+    parentId = parentAccount?.id;
+  }
+
   const created = await tx.account.create({
     data: {
       code,
       name,
       accountType,
       isSystemAccount: true,
+      parentId: parentId || null,
       businessId,
     },
   });
@@ -94,7 +109,8 @@ async function createJournal(params: {
         line.accountCode,
         line.accountName,
         line.accountType,
-        tx
+        tx,
+        line.parentCode
       );
       return {
         accountId,
@@ -129,7 +145,7 @@ async function createJournal(params: {
 
 /**
  * Post journal entry for a sale:
- *   Dr Customer A/C (total incl. tax)
+ *   Dr Sundry Debtors – Customer A/C (total incl. tax)
  *   Cr Sales A/C (taxable value)
  *   Cr Output CGST A/C
  *   Cr Output SGST A/C
@@ -149,19 +165,24 @@ export async function postSaleJournal(params: {
   tx?: any;
 }): Promise<void> {
   try {
-    const { saleId, invoiceNo, customerName, total, taxableValue, cgst, sgst, igst, businessId, tx } = params;
+    const { saleId, invoiceNo, customerId, customerName, total, taxableValue, cgst, sgst, igst, businessId, tx } = params;
 
     if (!await isAutoJournalEnabled(businessId)) return;
 
+    // Per-customer debtor sub-account under Trade Receivables (1100)
+    const debtorCode = `1100-${customerId.slice(0, 8).toUpperCase()}`;
+    const debtorName = `Sundry Debtors – ${customerName}`;
+
     const lines: JournalLineInput[] = [
-      // Dr Customer (Receivable — Asset)
+      // Dr Customer (Receivable — Asset) — individual debtor account
       {
-        accountCode: '1100',
-        accountName: 'Trade Receivables',
+        accountCode: debtorCode,
+        accountName: debtorName,
         accountType: 'ASSET',
         debit: total,
         credit: 0,
         narration: `Receivable from ${customerName}`,
+        parentCode: '1100',
       },
       // Cr Sales Revenue
       {
@@ -224,10 +245,11 @@ export async function postSaleJournal(params: {
 /**
  * Post journal entry for customer payment:
  *   Dr Bank/Cash A/C
- *   Cr Customer A/C (Trade Receivables)
+ *   Cr Sundry Debtors – Customer A/C
  */
 export async function postPaymentJournal(params: {
   paymentId: string;
+  customerId: string;
   customerName: string;
   amount: number;
   paymentMethod: 'bank' | 'cash';
@@ -236,12 +258,16 @@ export async function postPaymentJournal(params: {
   tx?: any;
 }): Promise<void> {
   try {
-    const { paymentId, customerName, amount, paymentMethod, reference, businessId, tx } = params;
+    const { paymentId, customerId, customerName, amount, paymentMethod, reference, businessId, tx } = params;
 
     if (!await isAutoJournalEnabled(businessId)) return;
 
     const bankAccountCode = paymentMethod === 'cash' ? '1000' : '1010';
     const bankAccountName = paymentMethod === 'cash' ? 'Cash in Hand' : 'Bank Account';
+
+    // Per-customer debtor sub-account (must match the one from postSaleJournal)
+    const debtorCode = `1100-${customerId.slice(0, 8).toUpperCase()}`;
+    const debtorName = `Sundry Debtors – ${customerName}`;
 
     await createJournal({
       businessId,
@@ -257,12 +283,13 @@ export async function postPaymentJournal(params: {
           narration: `Payment from ${customerName}`,
         },
         {
-          accountCode: '1100',
-          accountName: 'Trade Receivables',
+          accountCode: debtorCode,
+          accountName: debtorName,
           accountType: 'ASSET',
           debit: 0,
           credit: amount,
           narration: `Received from ${customerName}`,
+          parentCode: '1100',
         },
       ],
       tx,
@@ -432,6 +459,10 @@ export async function postPayableJournal(params: {
       ? 'Raw Material Purchase'
       : `${category || 'General'} Expense`;
 
+    // Per-supplier creditor sub-account under Trade Payables (2100)
+    const creditorCode = `2100-${payableId.slice(0, 8).toUpperCase()}`;
+    const creditorName = `Sundry Creditors – ${supplierName}`;
+
     await createJournal({
       businessId,
       narration: `Auto: Payable to ${supplierName}`,
@@ -446,12 +477,13 @@ export async function postPayableJournal(params: {
           narration: `Payable to ${supplierName}`,
         },
         {
-          accountCode: '2100',
-          accountName: 'Trade Payables',
+          accountCode: creditorCode,
+          accountName: creditorName,
           accountType: 'LIABILITY',
           debit: 0,
           credit: amount,
           narration: `Due to ${supplierName}`,
+          parentCode: '2100',
         },
       ],
       tx,

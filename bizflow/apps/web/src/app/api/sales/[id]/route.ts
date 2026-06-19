@@ -71,6 +71,30 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
               data: { dues: { increment: dueDiff } }
             });
           }
+
+          // Auto-create Cash Book entry and Payment Journal for new payment received
+          const paymentDiff = paid - existing.paid;
+          if (paymentDiff > 0) {
+            const { postCashBookEntry, postPaymentJournal } = await import('@/shared/lib/auto-journal');
+            await postCashBookEntry({
+              amount: paymentDiff,
+              type: 'RECEIPT',
+              narration: `Payment received for Invoice ${existing.invoiceNo}`,
+              reference: existing.invoiceNo,
+              businessId: session.user.businessId,
+              date: new Date(),
+              tx,
+            });
+            await postPaymentJournal({
+              paymentId: `${id}-pay-${Date.now()}`,
+              customerId: existing.customerId,
+              customerName: updated.customer?.name ?? 'Customer',
+              amount: paymentDiff,
+              paymentMethod: 'cash',
+              businessId: session.user.businessId,
+              tx,
+            });
+          }
         }
         return updated;
       });
@@ -101,6 +125,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const newTotal = newSubtotal + newTotalGst;
     
     const sale = await prisma.$transaction(async (tx: any) => {
+      // 0. Reverse existing journal entries for this sale to prevent duplicates
+      const relatedJournals = await tx.journalEntry.findMany({
+        where: { businessId: session.user.businessId, reference: `SALE:${id}` },
+        select: { id: true, status: true },
+      });
+      for (const je of relatedJournals) {
+        if (je.status !== 'REVERSED') {
+          await tx.journalEntry.update({
+            where: { id: je.id },
+            data: { status: 'REVERSED' },
+          });
+        }
+      }
+
       // 1. Revert stock for all OLD items
       for (const item of existing.items) {
         await tx.product.update({
@@ -176,6 +214,40 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
       return updated;
     });
+
+    // 7. Fire new journal entry for the updated sale (after transaction commits)
+    const { postSaleJournal } = await import('@/shared/lib/auto-journal');
+    const { extractStateCodeFromGST } = await import('@/shared/lib/gst-engine');
+    const { calculateInvoiceTotal } = await import('@/shared/lib/invoice-engine');
+    const businessInfo = await prisma.business.findUnique({
+      where: { id: session.user.businessId },
+      select: { gstNumber: true, stateCode: true, gstInclusive: true },
+    });
+    const businessStateCode = businessInfo?.stateCode || extractStateCodeFromGST(businessInfo?.gstNumber) || null;
+    const invoiceLines = validatedData.items.map(item => ({
+      qty: item.qty,
+      price: item.price,
+      discount: item.discount || 0,
+      gstRate: item.gstRate || 0,
+    }));
+    const invoiceResult = calculateInvoiceTotal(
+      invoiceLines,
+      businessStateCode,
+      validatedData.placeOfSupply || null,
+      businessInfo?.gstInclusive ?? false,
+    );
+    postSaleJournal({
+      saleId: id,
+      invoiceNo: sale.invoiceNo,
+      customerId: validatedData.customerId,
+      customerName: sale.customer?.name ?? 'Customer',
+      total: newTotal,
+      taxableValue: invoiceResult.totalTaxable,
+      cgst: invoiceResult.totalCgst,
+      sgst: invoiceResult.totalSgst,
+      igst: invoiceResult.totalIgst,
+      businessId: session.user.businessId,
+    }).catch(err => console.error('[AutoJournal] Sale edit re-post failed:', err));
 
     return NextResponse.json(sale);
   } catch (error) {
