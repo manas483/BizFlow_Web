@@ -11,10 +11,7 @@ export function useExportRegister() {
       .then(res => res.json())
       .then(data => {
         if (data.categories) {
-          // ensure Fertiliser, Pesticide, Seed are always available even if empty, or just rely on DB
-          const base = ['Fertiliser', 'Pesticide', 'Seed'];
-          const combined = Array.from(new Set([...base, ...data.categories]));
-          setCategories(combined);
+          setCategories(data.categories);
         }
       })
       .catch(console.error);
