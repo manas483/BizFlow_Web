@@ -12,15 +12,30 @@ export async function GET(req: NextRequest) {
 
     const businessId = session.user.businessId;
 
-    let from: Date | undefined;
-    let to: Date | undefined;
+    const period = searchParams.get('period') || 'monthly';
 
-    if (startDateParam && endDateParam) {
+    let from: Date;
+    let to: Date;
+    const now = new Date();
+
+    if (period === 'daily') {
+      from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    } else if (period === 'weekly') {
+      const day = now.getDay() || 7; 
+      from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1);
+      to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 6, 23, 59, 59, 999);
+    } else if (period === 'yearly') {
+      from = new Date(now.getFullYear(), 0, 1);
+      to = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    } else if (period === 'lifetime') {
+      from = new Date(2000, 0, 1); 
+      to = new Date(2099, 11, 31, 23, 59, 59, 999);
+    } else if (period === 'custom' && startDateParam && endDateParam) {
       from = new Date(startDateParam);
       to = new Date(endDateParam);
       to.setHours(23, 59, 59, 999);
-    } else {
-      const now = new Date();
+    } else { // 'monthly'
       from = new Date(now.getFullYear(), now.getMonth(), 1);
       to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     }

@@ -10,13 +10,14 @@ export function exportRegister(type: 'sale' | 'stock', category: string, data: a
     
     // Merge headers
     ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 13 } }, // Title
-      { s: { r: 2, c: 2 }, e: { r: 2, c: 5 } },  // Received/Purchased From
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }, // Title
+      { s: { r: 2, c: 3 }, e: { r: 2, c: 6 } },  // Received/Purchased From
     ];
 
     // Set column widths
     ws['!cols'] = [
       { wch: 12 }, // Date
+      { wch: 20 }, // Product Name
       { wch: 15 }, // Opening Balance
       { wch: 20 }, // From Whom
       { wch: 15 }, // Challan No
@@ -67,86 +68,101 @@ function generateStockRegisterData(data: any) {
   const { products, sales, stockMovements, period } = data;
   
   const rows: any[][] = [];
+  rows.push([`${data.category?.toUpperCase() || 'CATEGORY'} WISE STOCK REPORT`]);
+  rows.push([]); 
   
-  rows.push([`${data.category.toUpperCase()} WISE STOCK REPORT`]);
-  rows.push([]); // Empty row
-  
-  // Headers
   rows.push([
-    'Date', 'Opening Balance', 'Received/Purchased From', '', '', '', 'Total Quantity', 'Quantity Sold', 'Closing Balance', 'Signature of Dealer', 'Remarks'
+    'Date', 'Product Name', 'Opening Balance', 'Received/Purchased From', '', '', '', 'Total Quantity', 'Quantity Sold', 'Closing Balance', 'Signature', 'Remarks'
   ]);
   rows.push([
-    '', '', 'From Whom', 'Challan No', 'Quantity', 'Rate', '', '', '', '', ''
+    '', '', '', 'From Whom', 'Challan No', 'Quantity', 'Rate', '', '', '', '', ''
   ]);
-  
-  // Create a map of events by Date
-  const eventsByDate: Record<string, { in: any[], out: any[] }> = {};
-  
-  stockMovements.forEach((m: any) => {
-    const d = format(new Date(m.createdAt), 'yyyy-MM-dd');
-    if (!eventsByDate[d]) eventsByDate[d] = { in: [], out: [] };
-    eventsByDate[d].in.push(m);
-  });
-  
-  sales.forEach((s: any) => {
-    const d = format(new Date(s.createdAt), 'yyyy-MM-dd');
-    if (!eventsByDate[d]) eventsByDate[d] = { in: [], out: [] };
-    
-    // Group sale items
-    const qty = s.items.reduce((acc: number, item: any) => acc + item.qty, 0);
-    eventsByDate[d].out.push({ qty, invoiceNo: s.invoiceNo });
-  });
 
-  // Calculate generic opening balance
-  // Assuming products.stock is current stock, we'll just show the movement logic for the report timeframe.
-  // Proper historical stock requires ledger calculation. We'll use a placeholder or basic calculation.
-  let currentStock = products.reduce((acc: number, p: any) => acc + p.stock, 0);
-  
-  // Start from earliest date in period or first event
-  const sortedDates = Object.keys(eventsByDate).sort();
-  
-  sortedDates.forEach(dateStr => {
-    const evs = eventsByDate[dateStr];
+  if (!products || products.length === 0) return rows;
+
+  products.forEach((p: any) => {
+    const pSales = sales.filter((s: any) => s.items?.some((i: any) => i.productId === p.id));
+    const pMovements = stockMovements.filter((m: any) => m.productId === p.id);
+
+    const eventsByDate: Record<string, { in: any[], out: any[] }> = {};
     
-    // We will list each incoming movement, and summarize sales
-    // If multiple ins and outs, we can create multiple rows or combine.
-    // For simplicity, we create one row per IN, and if no IN, just one row for OUT.
-    const maxRows = Math.max(evs.in.length, 1);
+    pMovements.forEach((m: any) => {
+      const d = format(new Date(m.createdAt), 'yyyy-MM-dd');
+      if (!eventsByDate[d]) eventsByDate[d] = { in: [], out: [] };
+      eventsByDate[d].in.push(m);
+    });
     
-    let dailySold = evs.out.reduce((a: number, b: any) => a + b.qty, 0);
-    let dailyIn = evs.in.reduce((a: number, b: any) => a + b.quantity, 0);
-    
-    // Back-calculate opening balance for this specific row line (simplified)
-    const openingBal = currentStock - dailyIn + dailySold; 
-    let runningStock = openingBal;
-    
-    for (let i = 0; i < maxRows; i++) {
-      const inMov = evs.in[i];
-      const purchasedQty = inMov ? inMov.quantity : '';
-      const purchasedRate = inMov ? (inMov.product?.purchasePrice || '') : '';
-      const fromWhom = inMov ? (inMov.notes || 'Supplier') : '';
-      const challan = inMov ? (inMov.referenceId || '') : '';
+    pSales.forEach((s: any) => {
+      const d = format(new Date(s.createdAt), 'yyyy-MM-dd');
+      if (!eventsByDate[d]) eventsByDate[d] = { in: [], out: [] };
       
-      const soldQty = i === 0 ? dailySold : ''; // Only show total daily sold on first row
-      const totalQty = i === 0 ? openingBal + dailyIn : '';
-      runningStock = runningStock + (inMov ? inMov.quantity : 0) - (i === 0 ? dailySold : 0);
-      
+      const item = s.items.find((i: any) => i.productId === p.id);
+      if (item) {
+        eventsByDate[d].out.push({ qty: item.qty, invoiceNo: s.invoiceNo });
+      }
+    });
+
+    const sortedDates = Object.keys(eventsByDate).sort();
+
+    let currentStock = p.stock || 0; 
+    let totalIn = pMovements.reduce((sum: number, m: any) => sum + (m.quantity || 0), 0);
+    let totalOut = 0;
+    pSales.forEach((s: any) => {
+      const item = s.items.find((i: any) => i.productId === p.id);
+      if (item) totalOut += item.qty;
+    });
+
+    let runningStock = currentStock - totalIn + totalOut;
+
+    if (sortedDates.length === 0) {
       rows.push([
-        i === 0 ? dateStr : '',
-        i === 0 ? openingBal : '',
-        fromWhom,
-        challan,
-        purchasedQty,
-        purchasedRate,
-        totalQty,
-        soldQty,
-        i === maxRows - 1 ? runningStock : '',
-        '', // Signature
-        ''  // Remarks
+        format(new Date(), 'yyyy-MM-dd'),
+        p.name,
+        currentStock,
+        '', '', '', '', 
+        currentStock, 
+        0, 
+        currentStock,
+        '', ''
       ]);
+    } else {
+      sortedDates.forEach(dateStr => {
+        const evs = eventsByDate[dateStr];
+        const maxRows = Math.max(evs.in.length, 1);
+        
+        let dailySold = evs.out.reduce((a: number, b: any) => a + b.qty, 0);
+        let dailyIn = evs.in.reduce((a: number, b: any) => a + b.quantity, 0);
+        
+        const openingBal = runningStock; 
+        
+        for (let i = 0; i < maxRows; i++) {
+          const inMov = evs.in[i];
+          const purchasedQty = inMov ? inMov.quantity : '';
+          const purchasedRate = inMov ? (p.purchasePrice || '') : '';
+          const fromWhom = inMov ? (inMov.notes || 'Supplier') : '';
+          const challan = inMov ? (inMov.referenceId || '') : '';
+          
+          const soldQty = i === 0 ? dailySold : ''; 
+          const totalQty = i === 0 ? openingBal + dailyIn : '';
+          runningStock = runningStock + (inMov ? inMov.quantity : 0) - (i === 0 ? dailySold : 0);
+          
+          rows.push([
+            i === 0 ? dateStr : '',
+            i === 0 ? p.name : '',
+            i === 0 ? openingBal : '',
+            fromWhom,
+            challan,
+            purchasedQty,
+            purchasedRate,
+            totalQty,
+            soldQty,
+            i === maxRows - 1 ? runningStock : '',
+            '', 
+            ''  
+          ]);
+        }
+      });
     }
-    
-    currentStock = runningStock;
   });
 
   return rows;

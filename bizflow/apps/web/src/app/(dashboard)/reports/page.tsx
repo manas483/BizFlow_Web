@@ -211,7 +211,7 @@ export default function ReportsPage() {
                           <button 
                             className="w-full text-left px-3 py-1.5 text-xs text-primary/60 hover:bg-primary/5 hover:text-primary transition-colors flex items-center gap-2 rounded-md"
                             onClick={() => {
-                              handleExportRegister('sale', cat, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
+                              handleExportRegister('sale', cat, period, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
                               setIsExportMenuOpen(false);
                             }}
                           >
@@ -220,7 +220,7 @@ export default function ReportsPage() {
                           <button 
                             className="w-full text-left px-3 py-1.5 text-xs text-primary/60 hover:bg-primary/5 hover:text-primary transition-colors flex items-center gap-2 rounded-md"
                             onClick={() => {
-                              handleExportRegister('stock', cat, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
+                              handleExportRegister('stock', cat, period, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
                               setIsExportMenuOpen(false);
                             }}
                           >
