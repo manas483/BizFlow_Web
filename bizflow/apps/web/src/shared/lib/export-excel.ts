@@ -97,9 +97,6 @@ function generateStockRegisterData(data: any) {
       }
     });
 
-    const sortedDates = Object.keys(eventsByDate).sort();
-
-    let currentStock = p.stock || 0; 
     let totalIn = pMovements.reduce((sum: number, m: any) => sum + (m.quantity || 0), 0);
     let totalOut = 0;
     pSales.forEach((s: any) => {
@@ -107,6 +104,31 @@ function generateStockRegisterData(data: any) {
       if (item) totalOut += item.qty;
     });
 
+    const currentStock = p.stock || 0;
+    const initialStock = currentStock - totalIn + totalOut;
+
+    // Inject missing initial stock movement on the purchase date (if any)
+    if (initialStock > 0 && pMovements.length === 0) {
+      const pDate = p.purchaseDate ? new Date(p.purchaseDate) : new Date(p.createdAt);
+      // Only include it in the report if the purchase date falls within the requested period!
+      const fromDate = new Date(period.from);
+      const toDate = new Date(period.to);
+      if (pDate >= fromDate && pDate <= toDate) {
+        const dStr = format(pDate, 'yyyy-MM-dd');
+        if (!eventsByDate[dStr]) eventsByDate[dStr] = { in: [], out: [] };
+        eventsByDate[dStr].in.unshift({
+          quantity: initialStock,
+          notes: p.purchaseFrom || p.supplier || 'Initial Stock',
+          referenceId: p.purchaseInvoiceNo || '',
+          createdAt: pDate,
+        });
+      }
+      // Regardless of whether it's printed in this period, we MUST add it to totalIn 
+      // so that the opening balance is correct!
+      totalIn += initialStock; 
+    }
+
+    const sortedDates = Object.keys(eventsByDate).sort();
     let runningStock = currentStock - totalIn + totalOut;
 
     if (sortedDates.length === 0) {
@@ -132,18 +154,11 @@ function generateStockRegisterData(data: any) {
         
         for (let i = 0; i < maxRows; i++) {
           const inMov = evs.in[i];
-          const isFirstEventOverall = (dateStr === sortedDates[0] && i === 0);
           
           let purchasedQty: any = inMov ? inMov.quantity : '';
           let purchasedRate: any = inMov ? (p.purchasePrice || '') : '';
           let fromWhom: any = inMov ? (inMov.notes || 'Supplier') : '';
           let challan: any = inMov ? (inMov.referenceId || '') : '';
-          
-          if (isFirstEventOverall && !inMov && openingBal > 0) {
-             fromWhom = p.purchaseFrom || p.supplier || '';
-             challan = p.purchaseInvoiceNo || '';
-             purchasedRate = p.purchasePrice || '';
-          }
           
           const soldQty = i === 0 ? dailySold : ''; 
           const totalQty = i === 0 ? openingBal + dailyIn : '';
