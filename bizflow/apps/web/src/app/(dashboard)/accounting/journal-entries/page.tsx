@@ -124,47 +124,49 @@ export default function JournalEntriesPage() {
                 <tr><td colSpan={9} className="text-center py-12 text-primary/40 text-sm">No entries found</td></tr>
               ) : filtered.map((entry: any) => (
                 <tr key={entry.id} className={`hover:bg-primary/5 transition-colors ${entry.status === 'REVERSED' ? 'opacity-50' : ''}`}>
-                  <td className="px-5 py-3.5 text-primary/60 text-sm">{formatDate(entry.date)}</td>
-                  <td className="px-5 py-3.5 text-violet-400 font-mono text-xs font-medium">{entry.entryNumber}</td>
-                  <td className="px-5 py-3.5">{getSourceBadge(entry.reference)}</td>
-                  <td className="px-5 py-3.5 text-primary/40 text-xs">{entry.reference || "—"}</td>
-                  <td className="px-5 py-3.5">
-                    <div className="space-y-1.5">
+                  <td className="px-5 py-3.5 text-primary/60 text-sm align-top">{formatDate(entry.date)}</td>
+                  <td className="px-5 py-3.5 text-violet-400 font-mono text-xs font-medium whitespace-nowrap align-top">{entry.entryNumber}</td>
+                  <td className="px-5 py-3.5 align-top">{getSourceBadge(entry.reference)}</td>
+                  <td className="px-5 py-3.5 text-primary/40 text-[10px] max-w-[120px] truncate align-top" title={entry.reference || ""}>
+                    {entry.reference || "—"}
+                  </td>
+                  <td className="px-5 py-3.5 align-top">
+                    <div className="space-y-1">
                       {entry.lines.map((line: any, idx: number) => (
-                        <div key={idx} className={`flex items-center gap-2 text-xs ${line.credit > 0 ? "ml-4" : ""}`}>
+                        <div key={idx} className={`flex items-center gap-2 text-xs h-6 ${line.credit > 0 ? "ml-6" : ""}`}>
                           <span className="text-primary font-medium">{line.account?.name}</span>
-                          {line.narration && <span className="text-primary/30 truncate max-w-[200px]">- {line.narration}</span>}
+                          {line.narration && <span className="text-primary/40 truncate max-w-[180px] text-[10px]">- {line.narration}</span>}
                         </div>
                       ))}
-                      <div className="text-primary/40 text-xs italic mt-2 border-t border-primary/5 pt-1">
+                      <div className="text-primary/40 text-xs italic mt-2 border-t border-primary/5 pt-1.5">
                         {entry.narration}
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 align-top pt-5">
-                    <div className="space-y-1.5">
+                  <td className="px-5 py-3.5 align-top">
+                    <div className="space-y-1">
                       {entry.lines.map((line: any, idx: number) => (
-                        <div key={idx} className="text-xs text-primary/60 h-[18px]">
+                        <div key={idx} className="flex items-center text-xs text-primary/80 h-6 font-medium">
                           {line.debit > 0 ? formatCurrency(line.debit) : ""}
                         </div>
                       ))}
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 align-top pt-5">
-                    <div className="space-y-1.5">
+                  <td className="px-5 py-3.5 align-top">
+                    <div className="space-y-1">
                       {entry.lines.map((line: any, idx: number) => (
-                        <div key={idx} className="text-xs text-primary/60 h-[18px]">
+                        <div key={idx} className="flex items-center text-xs text-primary/80 h-6 font-medium">
                           {line.credit > 0 ? formatCurrency(line.credit) : ""}
                         </div>
                       ))}
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 align-top pt-5">
+                  <td className="px-5 py-3.5 align-top">
                     <Badge variant={entry.status === "POSTED" ? "success" : entry.status === "REVERSED" ? "danger" : "warning"}>
                       {entry.status}
                     </Badge>
                   </td>
-                  <td className="px-5 py-3.5 align-top pt-5">
+                  <td className="px-5 py-3.5 align-top">
                     <div className="flex items-center gap-2">
                       {entry.status === "DRAFT" && (
                         <Button size="sm" variant="ghost" onClick={() => handlePost(entry.id)}>Post</Button>
