@@ -207,15 +207,14 @@ export default function ReportsPage() {
                     <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
                       {categories.map(cat => (
                         <div key={cat} className="mb-1">
-                          <p className="text-[11px] font-semibold text-primary/80 px-2 pt-1.5 pb-0.5">{cat}</p>
                           <button 
-                            className="w-full text-left px-3 py-1.5 text-xs text-primary/60 hover:bg-primary/5 hover:text-primary transition-colors flex items-center gap-2 rounded-md"
+                            className="w-full text-left px-3 py-1.5 text-xs font-medium text-primary/70 hover:bg-primary/5 hover:text-primary transition-colors flex items-center gap-2 rounded-md"
                             onClick={() => {
                               handleExportRegister('combined', cat, period, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
                               setIsExportMenuOpen(false);
                             }}
                           >
-                            <Package size={12} className="text-violet-400" /> {cat} Register
+                            <Package size={14} className="text-violet-400" /> {cat}
                           </button>
                         </div>
                       ))}
