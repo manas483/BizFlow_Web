@@ -12,6 +12,7 @@ import { BarChart2, TrendingUp, TrendingDown, DollarSign, Package, Users, Percen
 import { trackActivity } from "@/shared/hooks/useRecommendations";
 import { useAiForecast } from "@/shared/hooks/useAiForecast";
 import { useAutomationSettings } from "@/shared/hooks/useAutomationSettings";
+import { useExportRegister } from "@/shared/hooks/useExportRegister";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid,
@@ -52,6 +53,9 @@ export default function ReportsPage() {
 
   const { data: settings } = useAutomationSettings();
   const { data: aiForecast, isLoading: isLoadingForecast, refetch: refetchForecast } = useAiForecast();
+  
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const { categories, isExporting, handleExportRegister, handleExportBI } = useExportRegister();
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#ai-forecast") {
@@ -114,23 +118,7 @@ export default function ReportsPage() {
 
   const handleExport = () => {
     if (!report) return;
-    const exportData = [
-      {
-        Period: period.toUpperCase(),
-        "Total Sales Revenue": summary.totalSales,
-        "COGS": summary.cogs,
-        "Operating Expenses": summary.operatingExpenses,
-        "Gross Profit": summary.grossProfit,
-        "Net Profit": summary.netProfit,
-        "Margin %": summary.profitMargin.toFixed(1) + "%",
-        "Collected Amount": summary.collectedAmount,
-        "Outstanding Dues": summary.outstandingDues,
-        "Pending Collection": summary.pendingCollection,
-        "Inventory Valuation": summary.inventoryValuation,
-        "GST Collected": gstAnalytics.totalGstCollected
-      }
-    ];
-    exportToCSV(exportData, `financial_report_${period}`);
+    handleExportBI(report);
   };
 
   return (
@@ -198,9 +186,64 @@ export default function ReportsPage() {
             <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={() => refetch()} className="ml-auto">
               Refresh
             </Button>
-            <Button variant="primary" size="sm" icon={<FileText size={14} />} onClick={handleExport}>
-              Export Excel
-            </Button>
+            <div className="relative">
+              <Button 
+                variant="primary" 
+                size="sm" 
+                icon={<Download size={14} />} 
+                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                disabled={isExporting}
+              >
+                {isExporting ? 'Exporting...' : 'Export Reports'}
+              </Button>
+              
+              {isExportMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)} />
+                  <div className="absolute right-0 mt-2 w-64 bg-surface border border-primary/10 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col">
+                    <div className="p-2 border-b border-primary/5 bg-primary/5">
+                      <p className="text-[10px] font-bold text-primary/60 uppercase tracking-wider px-2">Registers</p>
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-1">
+                      {categories.map(cat => (
+                        <div key={cat} className="mb-1">
+                          <p className="text-[11px] font-semibold text-primary/80 px-2 pt-1.5 pb-0.5">{cat}</p>
+                          <button 
+                            className="w-full text-left px-3 py-1.5 text-xs text-primary/60 hover:bg-primary/5 hover:text-primary transition-colors flex items-center gap-2 rounded-md"
+                            onClick={() => {
+                              handleExportRegister('sale', cat, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
+                              setIsExportMenuOpen(false);
+                            }}
+                          >
+                            <FileText size={12} className="text-blue-400" /> {cat} Sale Register
+                          </button>
+                          <button 
+                            className="w-full text-left px-3 py-1.5 text-xs text-primary/60 hover:bg-primary/5 hover:text-primary transition-colors flex items-center gap-2 rounded-md"
+                            onClick={() => {
+                              handleExportRegister('stock', cat, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
+                              setIsExportMenuOpen(false);
+                            }}
+                          >
+                            <Package size={12} className="text-emerald-400" /> {cat} Stock Register
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-1 border-t border-primary/10 bg-primary/5 mt-auto">
+                      <button 
+                        className="w-full text-left px-3 py-2 text-xs font-semibold text-violet-400 hover:bg-violet-500/10 transition-colors flex items-center gap-2 rounded-lg"
+                        onClick={() => {
+                          handleExport();
+                          setIsExportMenuOpen(false);
+                        }}
+                      >
+                        <BarChart2 size={14} /> Export General BI Summary
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex gap-3 flex-wrap items-center bg-surface border border-primary/10 p-3 rounded-xl shadow-sm">
