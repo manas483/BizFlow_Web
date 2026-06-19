@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
 import { StatCard } from "@/shared/ui/ui/StatCard";
 import { Button } from "@/shared/ui/ui/Button";
 import { useCashBook } from "@/shared/hooks/useAccounting";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { Wallet, ArrowDownRight, ArrowUpRight, Plus, Calendar, Search } from "lucide-react";
+import { Wallet, ArrowDownRight, ArrowUpRight, Plus, Calendar, Search, ArrowLeft } from "lucide-react";
 import AddCashBookEntryModal from "@/shared/ui/modals/AddCashBookEntryModal";
 
 export default function CashBookPage() {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filters, setFilters] = useState({
     from: "",
@@ -29,9 +31,14 @@ export default function CashBookPage() {
   return (
     <DashboardLayout title="Cash Book">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-primary">Cash Book</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Record and monitor all cash inflows and outflows</p>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+          </Button>
+          <div>
+            <h2 className="text-xl font-bold text-primary">Cash Book</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Record and monitor all cash inflows and outflows</p>
+          </div>
         </div>
         <Button size="sm" icon={<Plus size={14} />} onClick={() => setIsModalOpen(true)}>Add Cash Entry</Button>
       </div>

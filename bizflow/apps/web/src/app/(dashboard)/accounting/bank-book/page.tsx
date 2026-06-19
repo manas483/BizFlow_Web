@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
 import { StatCard } from "@/shared/ui/ui/StatCard";
@@ -8,12 +9,13 @@ import { Button } from "@/shared/ui/ui/Button";
 import { Badge } from "@/shared/ui/ui/Badge";
 import { useBankAccounts, useBankBook } from "@/shared/hooks/useAccounting";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { Landmark, ArrowDownRight, ArrowUpRight, Plus, RefreshCw, CheckCircle, Clock } from "lucide-react";
+import { Landmark, ArrowDownRight, ArrowUpRight, Plus, RefreshCw, CheckCircle, Clock, ArrowLeft } from "lucide-react";
 import AddBankAccountModal from "@/shared/ui/modals/AddBankAccountModal";
 import AddBankBookEntryModal from "@/shared/ui/modals/AddBankBookEntryModal";
 import BankReconciliationModal from "@/shared/ui/modals/BankReconciliationModal";
 
 export default function BankBookPage() {
+  const router = useRouter();
   const [activeAccountTab, setActiveAccountTab] = useState<string>("");
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
@@ -33,9 +35,14 @@ export default function BankBookPage() {
   return (
     <DashboardLayout title="Bank Book & Reconciliation">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-primary">Bank Book & Reconciliation</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Manage bank account registries and reconcile them with physical statements</p>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+          </Button>
+          <div>
+            <h2 className="text-xl font-bold text-primary">Bank Book & Reconciliation</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Manage bank account registries and reconcile them with physical statements</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="ghost" icon={<Plus size={14} />} onClick={() => setIsAccountModalOpen(true)}>Add Bank Account</Button>

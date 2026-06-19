@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
 import { StatCard } from "@/shared/ui/ui/StatCard";
@@ -9,11 +10,12 @@ import { Button } from "@/shared/ui/ui/Button";
 import { useReceivables, useCreateReceivable } from "@/shared/hooks/useAccounting";
 import { useCustomers } from "@/shared/hooks/useCustomers";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { ArrowDownRight, Clock, Plus, Users, Search } from "lucide-react";
+import { ArrowDownRight, Clock, Plus, Users, Search, ArrowLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import Modal, { FormField, ModalInput, ModalFooter, ModalSelect } from "@/shared/ui/ui/Modal";
 
 export default function ReceivablesPage() {
+  const router = useRouter();
   const [status, setStatus] = useState<string>("");
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -77,9 +79,14 @@ export default function ReceivablesPage() {
   return (
     <DashboardLayout title="Accounts Receivable">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-primary">Accounts Receivable (AR)</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Track and analyze outstanding customer invoices and aging buckets</p>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+          </Button>
+          <div>
+            <h2 className="text-xl font-bold text-primary">Accounts Receivable (AR)</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Track and analyze outstanding customer invoices and aging buckets</p>
+          </div>
         </div>
         <Button size="sm" icon={<Plus size={14} />} onClick={handleOpenModal}>Log Outstanding Invoice</Button>
       </div>

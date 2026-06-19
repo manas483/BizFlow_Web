@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
 import { StatCard } from "@/shared/ui/ui/StatCard";
@@ -8,11 +9,12 @@ import { Badge } from "@/shared/ui/ui/Badge";
 import { Button } from "@/shared/ui/ui/Button";
 import { usePayables, useCreatePayable } from "@/shared/hooks/useAccounting";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { ArrowUpRight, Clock, Plus, Landmark, Search } from "lucide-react";
+import { ArrowUpRight, Clock, Plus, Landmark, Search, ArrowLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import Modal, { FormField, ModalInput, ModalFooter } from "@/shared/ui/ui/Modal";
 
 export default function PayablesPage() {
+  const router = useRouter();
   const [status, setStatus] = useState<string>("");
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -73,9 +75,14 @@ export default function PayablesPage() {
   return (
     <DashboardLayout title="Accounts Payable">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-primary">Accounts Payable (AP)</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Track and analyze money owed to suppliers and vendor invoice aging</p>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+          </Button>
+          <div>
+            <h2 className="text-xl font-bold text-primary">Accounts Payable (AP)</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Track and analyze money owed to suppliers and vendor invoice aging</p>
+          </div>
         </div>
         <Button size="sm" icon={<Plus size={14} />} onClick={handleOpenModal}>Log Supplier Invoice</Button>
       </div>

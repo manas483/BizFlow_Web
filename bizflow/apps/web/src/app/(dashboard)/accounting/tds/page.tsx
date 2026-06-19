@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
 import { StatCard } from "@/shared/ui/ui/StatCard";
@@ -8,10 +9,11 @@ import { Button } from "@/shared/ui/ui/Button";
 import { Badge } from "@/shared/ui/ui/Badge";
 import { useTdsEntries } from "@/shared/hooks/useAccounting";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { Shield, Percent, ShieldCheck, Clock, Plus } from "lucide-react";
+import { Shield, Percent, ShieldCheck, Clock, Plus, ArrowLeft } from "lucide-react";
 import AddTdsEntryModal from "@/shared/ui/modals/AddTdsEntryModal";
 
 export default function TdsManagementPage() {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [section, setSection] = useState<string>("");
   const [status, setStatus] = useState<string>("");
@@ -28,9 +30,14 @@ export default function TdsManagementPage() {
   return (
     <DashboardLayout title="TDS Management">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-primary">TDS Management</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Track tax deductions at source (TDS), deposits, and challans</p>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+          </Button>
+          <div>
+            <h2 className="text-xl font-bold text-primary">TDS Management</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Track tax deductions at source (TDS), deposits, and challans</p>
+          </div>
         </div>
         <Button size="sm" icon={<Plus size={14} />} onClick={() => setIsModalOpen(true)}>Create TDS Record</Button>
       </div>

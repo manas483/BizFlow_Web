@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
 import { useAccounts, useGeneralLedger } from "@/shared/hooks/useAccounting";
 import { formatCurrency } from "@/shared/lib/utils";
-import { Search, Calculator, Calendar } from "lucide-react";
+import { Search, Calculator, Calendar, ArrowLeft } from "lucide-react";
 
 export default function GeneralLedgerPage() {
+  const router = useRouter();
   const [accountId, setAccountId] = useState<string>("");
   const [dateRange, setDateRange] = useState({
     from: "",
@@ -39,9 +41,14 @@ export default function GeneralLedgerPage() {
   return (
     <DashboardLayout title="General Ledger">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-primary">General Ledger</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Track transaction history and running balances per account</p>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+          </Button>
+          <div>
+            <h2 className="text-xl font-bold text-primary">General Ledger</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Track transaction history and running balances per account</p>
+          </div>
         </div>
       </div>
 

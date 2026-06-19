@@ -6,8 +6,9 @@ import { Button } from "@/shared/ui/ui/Button";
 import { Badge } from "@/shared/ui/ui/Badge";
 import { useAccounts, useCreateAccount, useDeleteAccount } from "@/shared/hooks/useAccounting";
 import { formatCurrency } from "@/shared/lib/utils";
-import { Plus, Trash2, ChevronRight, FolderTree, Search } from "lucide-react";
+import { Plus, Trash2, ChevronRight, FolderTree, Search, ArrowLeft } from "lucide-react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import AddAccountModal from "@/shared/ui/modals/AddAccountModal";
 import ConfirmDialog from "@/shared/ui/ui/ConfirmDialog";
@@ -21,6 +22,7 @@ const typeColors: Record<string, string> = {
 };
 
 export default function ChartOfAccountsPage() {
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterType, setFilterType] = useState<string>("");
   const [search, setSearch] = useState("");
@@ -61,9 +63,14 @@ export default function ChartOfAccountsPage() {
   return (
     <DashboardLayout title="Chart of Accounts">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-primary">Chart of Accounts</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Manage your account hierarchy for double-entry bookkeeping</p>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+          </Button>
+          <div>
+            <h2 className="text-xl font-bold text-primary">Chart of Accounts</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Manage your account hierarchy for double-entry bookkeeping</p>
+          </div>
         </div>
         <Button size="sm" icon={<Plus size={14} />} onClick={() => setIsModalOpen(true)}>Add Account</Button>
       </div>

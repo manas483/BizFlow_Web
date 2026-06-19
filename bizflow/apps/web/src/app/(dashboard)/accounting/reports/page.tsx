@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
 import { Button } from "@/shared/ui/ui/Button";
 import { useProfitLoss, useBalanceSheet, useCashFlowStatement } from "@/shared/hooks/useAccounting";
 import { formatCurrency } from "@/shared/lib/utils";
-import { FileBarChart, Calendar, ChevronRight } from "lucide-react";
+import { FileBarChart, Calendar, ChevronRight, ArrowLeft } from "lucide-react";
 
 export default function FinancialReportsPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"pl" | "bs" | "cf">("pl");
   const [dateRange, setDateRange] = useState({
     from: new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0], // Jan 1st of current year
@@ -30,9 +32,14 @@ export default function FinancialReportsPage() {
   return (
     <DashboardLayout title="Financial Reports">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-primary">Financial Statements</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Generate GAAP/IFRS-compliant financial statements dynamically</p>
+        <div className="flex items-center gap-3">
+          <Button variant="secondary" className="p-2 w-9 h-9" aria-label="Go back" onClick={() => router.back()}>
+            <ArrowLeft size={16} />
+          </Button>
+          <div>
+            <h2 className="text-xl font-bold text-primary">Financial Statements</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Generate GAAP/IFRS-compliant financial statements dynamically</p>
+          </div>
         </div>
       </div>
 
