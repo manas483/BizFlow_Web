@@ -13,6 +13,8 @@ model Business {
   ownerName           String
   phone               String
   address             String?
+  state               String?
+  stateCode           String?
   businessType        String
   plan                Plan               @default(STARTER)
   createdAt           DateTime           @default(now())
@@ -55,21 +57,36 @@ model Business {
   accountsPayable     AccountsPayable[]
   // ── Loan & EMI relations ──
   loans               LoanMaster[]
+  // ── Security & Administration relations ──
+  customRoles         CustomRole[]
+  auditLogs           AuditLog[]
+  backupRecords       BackupRecord[]
+  require2FA          Boolean            @default(false)
+  // ── Automation & AI relations ──
+  automationSettings  AutomationSettings?
+  warehouses          Warehouse[]
+  aiForecasts         AiForecast[]
+  stockMovements      StockMovement[]
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  name          String
-  password      String?
-  role          Role           @default(STAFF)
-  businessId    String
-  emailVerified Boolean        @default(false)
-  createdAt     DateTime       @default(now())
-  business      Business       @relation(fields: [businessId], references: [id])
-  employee      Employee?
-  refreshTokens RefreshToken[]
-  deviceTokens  DeviceToken[]
+  id                  String         @id @default(cuid())
+  email               String         @unique
+  name                String
+  password            String?
+  role                Role           @default(STAFF)
+  businessId          String
+  emailVerified       Boolean        @default(false)
+  createdAt           DateTime       @default(now())
+  // ── Two-Factor Authentication ──
+  twoFactorEnabled    Boolean        @default(false)
+  twoFactorSecret     String?        // encrypted TOTP secret
+  backupCodes         String[]       @default([])  // hashed backup codes
+  twoFactorVerifiedAt DateTime?      // when 2FA was first verified
+  business            Business       @relation(fields: [businessId], references: [id])
+  employee            Employee?
+  refreshTokens       RefreshToken[]
+  deviceTokens        DeviceToken[]
 }
 
 /// Stores hashed OTPs for email verification. Auto-cleaned on use or expiry.
@@ -99,30 +116,36 @@ model Invitation {
 }
 
 model Product {
-  id             String             @id @default(cuid())
-  name           String
-  sku            String
-  category       String
-  stock          Int                @default(0)
-  minStock       Int                @default(5)
-  purchasePrice  Float
-  basePurchasePrice Float           @default(0)
-  transportCost  Float              @default(0)
-  sellingPrice   Float
-  supplier       String?
-  businessId     String
-  createdAt      DateTime           @default(now())
-  gstRate        Float              @default(0)
-  hsnCode        String?
-  unit           String             @default("pcs")
-  unitsPerBag    Int                @default(1)
-  purchaseDate   DateTime?
-  purchaseFrom   String?
+  id                String             @id @default(cuid())
+  name              String
+  sku               String
+  category          String
+  stock             Int                @default(0)
+  minStock          Int                @default(5)
+  reorderLevel      Int                @default(0)
+  reservedStock     Int                @default(0)
+  purchasePrice     Float
+  basePurchasePrice Float              @default(0)
+  transportCost     Float              @default(0)
+  sellingPrice      Float
+  supplier          String?
+  preferredSupplier String?
+  businessId        String
+  createdAt         DateTime           @default(now())
+  gstRate           Float              @default(0)
+  hsnCode           String?
+  unit              String             @default("pcs")
+  unitsPerBag       Int                @default(1)
+  purchaseDate      DateTime?
+  purchaseFrom      String?
   purchaseInvoiceNo String?
-  billItems      BillOfSupplyItem[]
-  business       Business           @relation(fields: [businessId], references: [id])
-  quotationItems QuotationItem[]
-  saleItems      SaleItem[]
+  billItems         BillOfSupplyItem[]
+  business          Business           @relation(fields: [businessId], references: [id])
+  quotationItems    QuotationItem[]
+  saleItems         SaleItem[]
+  stockMovements    StockMovement[]
+
+  @@index([businessId])
 }
 
 model Customer {
@@ -147,6 +170,8 @@ model Customer {
   quotations     Quotation[]
   sales          Sale[]
   accountsReceivable AccountsReceivable[]
+
+  @@index([businessId])
 }
 
 model Sale {
@@ -280,15 +305,16 @@ model QuotationItem {
 
 model Expense {
   id             String   @id @default(cuid())
-  category       String
-  amount         Float
-  note           String?
-  date           DateTime
-  recurring      Boolean  @default(false)
-  businessId     String
-  invoiceNumbers String[] @default([])
-  createdAt      DateTime @default(now())
-  business       Business @relation(fields: [businessId], references: [id])
+  category           String
+  amount             Float
+  note               String?
+  date               DateTime
+  recurring          Boolean  @default(false)
+  businessId         String
+  invoiceNumbers     String[] @default([])
+  excludedProductIds String[] @default([])
+  createdAt          DateTime @default(now())
+  business           Business @relation(fields: [businessId], references: [id])
 }
 
 model Employee {
@@ -374,21 +400,35 @@ model Notification {
   title      String
   message    String
   read       Boolean  @default(false)
+  priority   String   @default("normal")  // low | normal | high | urgent
+  category   String   @default("general") // inventory | finance | gst | crm | general
+  sourceType String?  // sale | payment | stock | loan | gst | ai
+  sourceId   String?  // ID of the entity that triggered this notification
   businessId String
   targetRole String?  // null = visible to all; set to a Role value to restrict (e.g. "SUPER_ADMIN")
   userId     String?  // null = role-broadcast; set to target a specific user for personal notifications
   createdAt  DateTime @default(now())
   business   Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, category])
+  @@index([businessId, read])
 }
 
 model UserActivity {
   id         String   @id @default(cuid())
   businessId String
   userId     String
+  userName   String   @default("")
   eventType  String
   metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  sessionId  String?
   createdAt  DateTime @default(now())
   business   Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, createdAt])
+  @@index([businessId, userId])
 }
 
 /// Server-side refresh tokens for mobile JWT auth.
@@ -424,9 +464,13 @@ model DeviceToken {
 
 enum Role {
   SUPER_ADMIN
-  MANAGER
+  ADMIN
   ACCOUNTANT
-  STAFF
+  SALES_EXECUTIVE
+  STORE_MANAGER
+  EMPLOYEE
+  MANAGER         // @deprecated — kept for migration compatibility
+  STAFF           // @deprecated — kept for migration compatibility
   CUSTOM_ROLE
 }
 
@@ -797,6 +841,9 @@ model LoanDocument {
   loanId    String
   name      String                              // display name
   docType   String     @default("OTHER")        // AGREEMENT | SANCTION | KYC | PAN | AADHAAR | PROPERTY | OTHER
+  // A-5 FIX Advisory: Storing base64 encoded files directly in the DB will cause
+  // rapid database bloat. Recommend migrating to S3, R2, or Vercel Blob storage 
+  // and storing the URL/key here instead before production scale.
   fileData  String                              // base64 encoded file content
   mimeType  String?                             // e.g. application/pdf, image/png
   fileSize  Int?                                // bytes
@@ -804,4 +851,138 @@ model LoanDocument {
   loan      LoanMaster @relation(fields: [loanId], references: [id], onDelete: Cascade)
 
   @@index([loanId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Security & Administration
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Custom Role — user-defined roles with fine-grained permission sets.
+model CustomRole {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  permissions String[]                           // array of Permission key strings
+  businessId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  business    Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, name])
+}
+
+/// Audit Log — immutable, tamper-evident record of every data mutation.
+model AuditLog {
+  id          String   @id @default(cuid())
+  businessId  String
+  userId      String                             // who performed the action
+  userName    String                             // denormalized for display
+  action      String                             // CREATE | UPDATE | DELETE
+  entityType  String                             // "Sale", "Product", "Employee", etc.
+  entityId    String                             // ID of the affected record
+  entityLabel String?                            // human-readable label (e.g. invoice no)
+  changes     Json?                              // { field: { old: ..., new: ... } }
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  business    Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, createdAt])
+  @@index([businessId, entityType])
+  @@index([businessId, userId])
+}
+
+/// Backup Record — tracks manual and automated data backups.
+model BackupRecord {
+  id          String   @id @default(cuid())
+  businessId  String
+  type        String   @default("MANUAL")        // MANUAL | SCHEDULED | AUTO
+  status      String   @default("COMPLETED")     // IN_PROGRESS | COMPLETED | FAILED
+  fileSize    Int?                                // bytes
+  fileName    String?
+  storageUrl  String?                             // S3/R2 URL if cloud-synced
+  triggeredBy String?                             // userId
+  notes       String?
+  createdAt   DateTime @default(now())
+  business    Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Automation & AI
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Automation Settings — per-business feature toggles for automation modules.
+model AutomationSettings {
+  id                 String  @id @default(cuid())
+  businessId         String  @unique
+  autoGst            Boolean @default(true)
+  autoJournal        Boolean @default(true)
+  autoStockUpdate    Boolean @default(true)
+  autoReorderAlert   Boolean @default(true)
+  aiForecast         Boolean @default(false)
+  aiInsights         Boolean @default(false)
+  emailNotifications Boolean @default(true)
+  whatsappButton     Boolean @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  business           Business @relation(fields: [businessId], references: [id])
+}
+
+/// Warehouse — physical storage locations for inventory tracking.
+model Warehouse {
+  id         String   @id @default(cuid())
+  name       String
+  location   String?
+  isDefault  Boolean  @default(false)
+  businessId String
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id])
+  stockMovements StockMovement[]
+
+  @@unique([businessId, name])
+}
+
+/// AI Forecast — cached AI-generated forecasts and insights.
+model AiForecast {
+  id          String   @id @default(cuid())
+  businessId  String
+  type        String   // "demand" | "sales" | "insight"
+  period      String   // "2026-07" or "2026-Q3" or "daily"
+  data        Json     // forecast results / insight array
+  confidence  Float?   // overall confidence score (0-100)
+  generatedAt DateTime @default(now())
+  expiresAt   DateTime // cache expiry — re-generate after this
+  business    Business @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, type])
+  @@index([businessId, expiresAt])
+}
+
+enum MovementType {
+  IN
+  OUT
+  ADJUST
+  TRANSFER
+}
+
+/// Append-only ledger for all inventory movements
+model StockMovement {
+  id          String       @id @default(cuid())
+  productId   String
+  warehouseId String?      // nullable for now if warehouses aren't strictly enforced
+  type        MovementType
+  quantity    Int          // Positive for IN, negative for OUT
+  referenceId String?      // e.g., saleId, billOfSupplyId, or user note
+  notes       String?      
+  businessId  String
+  createdAt   DateTime     @default(now())
+
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouse   Warehouse?   @relation(fields: [warehouseId], references: [id])
+  business    Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, productId])
+  @@index([businessId, createdAt])
 }
