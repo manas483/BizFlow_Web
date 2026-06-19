@@ -121,14 +121,15 @@ function generateStockRegisterData(data: any) {
         const dStr = format(pDate, 'yyyy-MM-dd');
         if (!eventsByDate[dStr]) eventsByDate[dStr] = { in: [], out: [] };
         eventsByDate[dStr].in.unshift({
-          quantity: 0,
+          quantity: initialStock,
           notes: p.purchaseFrom || p.supplier || '',
           referenceId: p.purchaseInvoiceNo || '',
-          createdAt: pDate,
-          isVirtualInitial: true
+          createdAt: pDate
         });
       }
-      // DO NOT add to totalIn! We want runningStock to start at initialStock, not 0!
+      // Regardless of whether it's printed in this period, we MUST add it to totalIn 
+      // so that the opening balance starts at 0 properly!
+      totalIn += initialStock;
     }
 
     const sortedDates = Object.keys(eventsByDate).sort();
@@ -158,7 +159,7 @@ function generateStockRegisterData(data: any) {
         for (let i = 0; i < maxRows; i++) {
           const inMov = evs.in[i];
           
-          let purchasedQty: any = (inMov && !inMov.isVirtualInitial) ? inMov.quantity : '';
+          let purchasedQty: any = inMov ? inMov.quantity : '';
           let purchasedRate: any = inMov ? (p.purchasePrice || '') : '';
           let fromWhom: any = inMov ? (inMov.notes || 'Supplier') : '';
           let challan: any = inMov ? (inMov.referenceId || '') : '';
