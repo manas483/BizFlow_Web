@@ -209,19 +209,19 @@ function generateSaleRegisterData(data: any) {
     const village = s.customer?.address || ''; // Mapping address to village
     
     // A sale can have multiple items, we'll list them
-    s.items.forEach((item: any, i: number) => {
+    s.items.forEach((item: any) => {
       rows.push([
-        i === 0 ? slNo++ : '',
-        i === 0 ? dateStr : '',
-        i === 0 ? customerName : '',
-        i === 0 ? village : '',
+        slNo++,
+        dateStr,
+        customerName,
+        village,
         '', // GP
         '', // Aadhar
         item.product?.name || '',
         item.qty,
         item.price,
-        i === 0 ? s.total : '',
-        i === 0 ? s.invoiceNo : '',
+        item.qty * item.price, // Amount per item
+        s.invoiceNo,
         '' // Signature
       ]);
     });
