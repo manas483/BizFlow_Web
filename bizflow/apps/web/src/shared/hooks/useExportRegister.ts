@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { exportRegister, exportBIReport } from './export-excel';
+import { exportRegister, exportBIReport } from '@/shared/lib/export-excel';
 
 export function useExportRegister() {
   const [categories, setCategories] = useState<string[]>([]);
