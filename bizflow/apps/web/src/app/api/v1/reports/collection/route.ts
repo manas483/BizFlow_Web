@@ -7,9 +7,9 @@
  */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { ok, err, internalError } from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { ok, err, internalError } from '@/shared/lib/response';
 import { parseDateRange }         from '../_dateRange';
 
 export async function GET(req: NextRequest) {

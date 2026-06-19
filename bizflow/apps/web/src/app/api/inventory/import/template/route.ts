@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { requireAuth, AuthError } from "@/lib/api-guard";
-import { prisma } from "@/lib/db";
-import { getImportTemplate } from "@/lib/inventory-import";
+import { requireAuth, AuthError } from "@/shared/lib/api-guard";
+import { prisma } from "@/shared/lib/db";
+import { getImportTemplate } from "@/shared/lib/inventory-import";
 
 export async function GET() {
   try {

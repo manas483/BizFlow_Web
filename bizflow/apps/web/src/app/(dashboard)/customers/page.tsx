@@ -2,18 +2,25 @@
 
 import { useState } from "react";
 import toast from "react-hot-toast";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { StatCard } from "@/components/ui/StatCard";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination from "@/components/ui/Pagination";
-import { useCustomers, useDeleteCustomer } from "@/hooks/useCustomers";
-import { exportToCSV, formatCurrency, formatDate, getInitials } from "@/lib/utils";
-import { Users, Plus, Search, TrendingUp, AlertCircle, UserCheck, Phone, Pencil, Trash2, Download } from "lucide-react";
-import AddCustomerModal from "@/components/modals/AddCustomerModal";
-import EditCustomerModal from "@/components/modals/EditCustomerModal";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import ConfirmDialog from "@/shared/ui/ui/ConfirmDialog";
+import Pagination from "@/shared/ui/ui/Pagination";
+import { useCustomers, useDeleteCustomer } from "@/shared/hooks/useCustomers";
+import { exportToCSV, formatCurrency, formatDate, getInitials } from "@/shared/lib/utils";
+import { Users, Plus, Search, TrendingUp, AlertCircle, UserCheck, Phone, Pencil, Trash2, Download, ShoppingBag } from "lucide-react";
+import AddCustomerModal from "@/shared/ui/modals/AddCustomerModal";
+import EditCustomerModal from "@/shared/ui/modals/EditCustomerModal";
+
+function getFrequencyLabel(count: number): { label: string; variant: "success" | "warning" | "violet" | "default" | "danger" } {
+  if (count === 0) return { label: "New", variant: "default" };
+  if (count === 1) return { label: "One-time", variant: "warning" };
+  if (count <= 5) return { label: "Occasional", variant: "violet" };
+  return { label: "Regular", variant: "success" };
+}
 
 export default function CustomersPage() {
   const [search, setSearch] = useState("");
@@ -28,13 +35,13 @@ export default function CustomersPage() {
 
   // Stats use all customers from current page (reset to page 1 on search)
   const totalDues = customers.reduce((s: number, c: any) => s + c.dues, 0);
-  const active = customers.filter((c: any) => c.status === "active").length;
+  const totalPurchaseCount = customers.reduce((s: number, c: any) => s + (c.purchaseCount || 0), 0);
   const now = new Date();
   const newThisMonth = customers.filter((c: any) => {
     const d = new Date(c.createdAt);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).length;
-  const totalPurchases = customers.reduce((s: number, c: any) => s + c.totalPurchases, 0);
+  const totalPurchases = customers.reduce((s: number, c: any) => s + (c.computedTotalPurchases || c.totalPurchases || 0), 0);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -53,9 +60,10 @@ export default function CustomersPage() {
       "Email": c.email || "",
       "Phone": c.phone || "",
       "City": c.city || "",
-      "Total Purchases (₹)": c.totalPurchases,
+      "Total Purchases (₹)": c.computedTotalPurchases || c.totalPurchases,
+      "Purchase Count": c.purchaseCount || 0,
       "Dues (₹)": c.dues,
-      "Status": c.status,
+      "Frequency": getFrequencyLabel(c.purchaseCount || 0).label,
       "Joined": formatDate(c.createdAt),
     }));
     exportToCSV(data, "customers_export");
@@ -77,7 +85,7 @@ export default function CustomersPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         <StatCard label="Total Customers" value={customers.length.toString()} icon={<Users size={18} />} color="blue" />
         <StatCard label="New This Month" value={newThisMonth.toString()} icon={<UserCheck size={18} />} color="emerald" />
-        <StatCard label="Total Purchases" value={`₹${(totalPurchases / 1000).toFixed(0)}K`} icon={<TrendingUp size={18} />} color="violet" />
+        <StatCard label="Total Purchases" value={formatCurrency(totalPurchases)} icon={<TrendingUp size={18} />} color="violet" />
         <StatCard label="Total Dues" value={formatCurrency(totalDues)} icon={<AlertCircle size={18} />} color="rose" />
       </div>
 
@@ -95,17 +103,19 @@ export default function CustomersPage() {
           <table className="w-full min-w-[600px]">
             <thead>
               <tr className="border-b border-primary/10">
-                {["Customer", "Phone", "City", "Total Purchases", "Dues", "Joined", "Status", ""].map((h) => (
+                {["Customer", "Phone", "City", "Purchases", "Amount", "Dues", "Joined", "Frequency", ""].map((h) => (
                   <th key={h} className="text-left px-5 py-3 text-primary/40 text-xs font-medium">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-primary/10">
               {isLoading ? (
-                <tr><td colSpan={8} className="text-center py-12 text-primary/40 text-sm">Loading customers...</td></tr>
+                <tr><td colSpan={9} className="text-center py-12 text-primary/40 text-sm">Loading customers...</td></tr>
               ) : customers.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-12 text-primary/40 text-sm">No customers found</td></tr>
-              ) : customers.map((customer: any) => (
+                <tr><td colSpan={9} className="text-center py-12 text-primary/40 text-sm">No customers found</td></tr>
+              ) : customers.map((customer: any) => {
+                const freq = getFrequencyLabel(customer.purchaseCount || 0);
+                return (
                 <tr key={customer.id} className="hover:bg-primary/5 transition-colors group">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
@@ -125,7 +135,13 @@ export default function CustomersPage() {
                     </div>
                   </td>
                   <td className="px-5 py-3.5 text-primary/40 text-sm">{customer.city || "—"}</td>
-                  <td className="px-5 py-3.5 text-primary font-semibold text-sm">{formatCurrency(customer.totalPurchases)}</td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5 text-primary text-sm font-semibold">
+                      <ShoppingBag size={12} className="text-violet-400" />
+                      {customer.purchaseCount || 0}
+                    </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-primary font-semibold text-sm">{formatCurrency(customer.computedTotalPurchases || customer.totalPurchases)}</td>
                   <td className="px-5 py-3.5 text-sm font-medium">
                     {customer.dues > 0
                       ? <span className="text-rose-400">{formatCurrency(customer.dues)}</span>
@@ -133,7 +149,7 @@ export default function CustomersPage() {
                   </td>
                   <td className="px-5 py-3.5 text-primary/40 text-xs">{formatDate(customer.createdAt)}</td>
                   <td className="px-5 py-3.5">
-                    <Badge variant={customer.status === "active" ? "success" : "default"}>{customer.status}</Badge>
+                    <Badge variant={freq.variant}>{freq.label}</Badge>
                   </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -150,7 +166,8 @@ export default function CustomersPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

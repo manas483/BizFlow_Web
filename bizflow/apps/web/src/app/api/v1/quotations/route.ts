@@ -4,10 +4,10 @@
  */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { quotationSchema }        from '@/lib/validations';
-import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { quotationSchema }        from '@/shared/lib/validations';
+import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/shared/lib/response';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest) {
@@ -57,6 +57,12 @@ export async function POST(req: NextRequest) {
     const { customerId, items, notes, placeOfSupply, reverseCharge, validUntil } = parsed.data;
 
     const result = await prisma.$transaction(async (tx: any) => {
+      const customer = await tx.customer.findFirst({
+        where: { id: customerId, businessId: session.user.businessId },
+        select: { id: true }
+      });
+      if (!customer) throw new Error('Customer not found or access denied');
+
       const business    = await tx.business.findUnique({ where: { id: session.user.businessId }, select: { gstInclusive: true } });
       const gstInclusive = business?.gstInclusive ?? false;
 

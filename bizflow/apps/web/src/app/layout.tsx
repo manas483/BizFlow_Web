@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AppProvider } from "@/context/AppContext";
 import { Toaster } from "react-hot-toast";
-import QueryProvider from "@/components/QueryProvider";
+import QueryProvider from "@/shared/ui/QueryProvider";
 import { SessionProvider } from "next-auth/react";
 
 const inter = Inter({

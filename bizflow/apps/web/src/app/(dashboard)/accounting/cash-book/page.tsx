@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { StatCard } from "@/components/ui/StatCard";
-import { Button } from "@/components/ui/Button";
-import { useCashBook } from "@/hooks/useAccounting";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { Button } from "@/shared/ui/ui/Button";
+import { useCashBook } from "@/shared/hooks/useAccounting";
+import { formatCurrency, formatDate } from "@/shared/lib/utils";
 import { Wallet, ArrowDownRight, ArrowUpRight, Plus, Calendar, Search } from "lucide-react";
-import AddCashBookEntryModal from "@/components/modals/AddCashBookEntryModal";
+import AddCashBookEntryModal from "@/shared/ui/modals/AddCashBookEntryModal";
 
 export default function CashBookPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);

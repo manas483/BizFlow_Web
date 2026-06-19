@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { StatCard } from "@/components/ui/StatCard";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { usePayables, useCreatePayable } from "@/hooks/useAccounting";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
+import { usePayables, useCreatePayable } from "@/shared/hooks/useAccounting";
+import { formatCurrency, formatDate } from "@/shared/lib/utils";
 import { ArrowUpRight, Clock, Plus, Landmark, Search } from "lucide-react";
 import toast from "react-hot-toast";
-import Modal, { FormField, ModalInput, ModalFooter } from "@/components/ui/Modal";
+import Modal, { FormField, ModalInput, ModalFooter } from "@/shared/ui/ui/Modal";
 
 export default function PayablesPage() {
   const [status, setStatus] = useState<string>("");

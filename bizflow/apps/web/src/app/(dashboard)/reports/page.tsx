@@ -1,15 +1,17 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { StatCard } from "@/components/ui/StatCard";
-import { Button } from "@/components/ui/Button";
-import { useReports } from "@/hooks/useReports";
-import { CustomSelect } from "@/components/ui/CustomSelect";
-import { formatCurrency, exportToCSV } from "@/lib/utils";
-import { BarChart2, TrendingUp, TrendingDown, DollarSign, Package, Users, Percent, Download, FileText, RefreshCw, AlertTriangle, Scale } from "lucide-react";
-import { trackActivity } from "@/hooks/useRecommendations";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { Button } from "@/shared/ui/ui/Button";
+import { useReports } from "@/shared/hooks/useReports";
+import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
+import { formatCurrency, exportToCSV } from "@/shared/lib/utils";
+import { BarChart2, TrendingUp, TrendingDown, DollarSign, Package, Users, Percent, Download, FileText, RefreshCw, AlertTriangle, Scale, Sparkles, Brain, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { trackActivity } from "@/shared/hooks/useRecommendations";
+import { useAiForecast } from "@/shared/hooks/useAiForecast";
+import { useAutomationSettings } from "@/shared/hooks/useAutomationSettings";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid,
@@ -43,9 +45,19 @@ const PERIODS = [
 ];
 
 export default function ReportsPage() {
+  const [activeTab, setActiveTab] = useState<"financials" | "ai">("financials");
   const [period, setPeriod] = useState<"daily"|"weekly"|"monthly"|"yearly"|"lifetime"|"custom">("monthly");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  const { data: settings } = useAutomationSettings();
+  const { data: aiForecast, isLoading: isLoadingForecast, refetch: refetchForecast } = useAiForecast();
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#ai-forecast") {
+      setActiveTab("ai");
+    }
+  }, []);
 
   useEffect(() => {
     trackActivity("report_viewed", { period });
@@ -124,45 +136,87 @@ export default function ReportsPage() {
   return (
     <DashboardLayout title="Financial Reports & Analytics">
       <div className="flex flex-col gap-4 mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-primary">Financial Reports</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Comprehensive insights into your business performance</p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-primary">Financial Reports</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Comprehensive insights into your business performance</p>
+          </div>
+          {/* Tab Switcher */}
+          <div className="flex bg-primary/5 border border-primary/10 p-1 rounded-xl w-fit">
+            <button
+              onClick={() => setActiveTab("financials")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                activeTab === "financials"
+                  ? "bg-violet-600/20 text-violet-400 border border-violet-500/20 shadow-sm"
+                  : "text-primary/40 hover:text-primary"
+              }`}
+            >
+              <BarChart2 size={14} />
+              Financial Analytics
+            </button>
+            <button
+              id="ai-predictions-tab"
+              onClick={() => setActiveTab("ai")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                activeTab === "ai"
+                  ? "bg-violet-600/20 text-violet-400 border border-violet-500/20 shadow-sm"
+                  : "text-primary/40 hover:text-primary"
+              }`}
+            >
+              <Sparkles size={14} />
+              AI Predictions & Forecasts
+            </button>
+          </div>
         </div>
+
         {/* Filters */}
-        <div className="flex gap-3 flex-wrap items-center bg-surface border border-primary/10 p-3 rounded-xl shadow-sm">
-          <CustomSelect
-            value={period}
-            onChange={(v: any) => setPeriod(v)}
-            options={PERIODS}
-            className="w-40"
-          />
-          {period === "custom" && (
-            <div className="flex gap-2 items-center">
-              <input 
-                type="date" 
-                value={startDate} 
-                onChange={e => setStartDate(e.target.value)}
-                className="bg-primary/5 border border-primary/10 rounded-lg px-3 py-1.5 text-sm text-primary focus:outline-none focus:border-violet-500"
-              />
-              <span className="text-primary/40 text-sm">to</span>
-              <input 
-                type="date" 
-                value={endDate} 
-                onChange={e => setEndDate(e.target.value)}
-                className="bg-primary/5 border border-primary/10 rounded-lg px-3 py-1.5 text-sm text-primary focus:outline-none focus:border-violet-500"
-              />
+        {activeTab === "financials" ? (
+          <div className="flex gap-3 flex-wrap items-center bg-surface border border-primary/10 p-3 rounded-xl shadow-sm">
+            <CustomSelect
+              value={period}
+              onChange={(v: any) => setPeriod(v)}
+              options={PERIODS}
+              className="w-40"
+            />
+            {period === "custom" && (
+              <div className="flex gap-2 items-center">
+                <input 
+                  type="date" 
+                  value={startDate} 
+                  onChange={e => setStartDate(e.target.value)}
+                  className="bg-primary/5 border border-primary/10 rounded-lg px-3 py-1.5 text-sm text-primary focus:outline-none focus:border-violet-500"
+                />
+                <span className="text-primary/40 text-sm">to</span>
+                <input 
+                  type="date" 
+                  value={endDate} 
+                  onChange={e => setEndDate(e.target.value)}
+                  className="bg-primary/5 border border-primary/10 rounded-lg px-3 py-1.5 text-sm text-primary focus:outline-none focus:border-violet-500"
+                />
+              </div>
+            )}
+            <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={() => refetch()} className="ml-auto">
+              Refresh
+            </Button>
+            <Button variant="primary" size="sm" icon={<FileText size={14} />} onClick={handleExport}>
+              Export Excel
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-3 flex-wrap items-center bg-surface border border-primary/10 p-3 rounded-xl shadow-sm">
+            <div className="flex items-center gap-2">
+              <Brain size={16} className="text-violet-400" />
+              <span className="text-xs font-medium text-primary/60">Powered by Google Gemini AI (2.0 Flash)</span>
             </div>
-          )}
-          <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={() => refetch()} className="ml-auto">
-            Refresh
-          </Button>
-          <Button variant="primary" size="sm" icon={<FileText size={14} />} onClick={handleExport}>
-            Export Excel
-          </Button>
-        </div>
+            <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={() => refetchForecast()} className="ml-auto">
+              Re-Analyze
+            </Button>
+          </div>
+        )}
       </div>
 
-      {isLoading ? (
+      {activeTab === "financials" ? (
+        isLoading ? (
         <div className="flex flex-col items-center justify-center py-32 space-y-4">
           <div className="w-8 h-8 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
           <p className="text-primary/40 text-sm animate-pulse">Analyzing financial data...</p>
@@ -460,7 +514,161 @@ export default function ReportsPage() {
             </Card>
           </div>
         </div>
-      )}
+      )
+    ) : (
+      isLoadingForecast ? (
+        <div className="flex flex-col items-center justify-center py-32 space-y-4">
+          <div className="w-8 h-8 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
+          <p className="text-primary/40 text-sm animate-pulse">AI Engine generating forecasts...</p>
+        </div>
+      ) : (
+        settings && !settings.aiForecast ? (
+          <div className="max-w-2xl mx-auto text-center py-16 px-4 bg-gradient-to-br from-surface to-violet-600/5 border border-violet-500/20 rounded-2xl shadow-lg mt-8">
+            <div className="w-16 h-16 bg-violet-500/15 rounded-full flex items-center justify-center mx-auto mb-4 border border-violet-500/30">
+              <Sparkles className="text-violet-400 w-8 h-8 animate-pulse" />
+            </div>
+            <h3 className="text-lg font-bold text-primary mb-2">Enable Gemini AI Forecasting</h3>
+            <p className="text-primary/40 text-sm mb-6 max-w-md mx-auto">
+              Predict product demand, future sales, growth trajectories, and get data-driven movement analysis using Google Gemini.
+            </p>
+            <a href="/settings">
+              <Button variant="primary" size="md">
+                Go to Settings
+              </Button>
+            </a>
+          </div>
+        ) : !aiForecast || (!aiForecast.salesForecasts?.length && !aiForecast.demandForecasts?.length) ? (
+          <div className="text-center py-16 px-4 bg-surface border border-primary/10 rounded-2xl shadow-sm mt-8">
+            <div className="w-12 h-12 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="text-amber-400 w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-primary mb-1">No Forecasting Data Available</h3>
+            <p className="text-primary/40 text-xs mb-4 max-w-sm mx-auto">
+              We need sales history (at least some invoices recorded over the past months) to generate projections.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6 animate-in fade-in duration-300">
+            {/* Sales Projections Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {aiForecast.salesForecasts.map((f, i) => (
+                <Card key={i} className="bg-gradient-to-br from-surface to-violet-600/5 border-violet-500/10 p-5">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <span className="text-[10px] font-semibold bg-violet-500/10 text-violet-400 px-2 py-0.5 rounded-full border border-violet-500/20">
+                        {f.period} Projection
+                      </span>
+                      <h3 className="text-2xl font-black text-primary mt-2">
+                        {formatCurrency(f.expectedRevenue)}
+                      </h3>
+                    </div>
+                    <div className="text-right">
+                      <span className={`inline-flex items-center gap-0.5 text-xs font-bold ${f.growthPercent >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                        {f.growthPercent >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                        {Math.abs(f.growthPercent)}% Growth
+                      </span>
+                      <p className="text-[10px] text-primary/40 mt-1 flex-shrink-0">Confidence: {f.confidence}%</p>
+                    </div>
+                  </div>
+                  <div className="w-full bg-primary/5 rounded-full h-2">
+                    <div className="h-2 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500" style={{ width: `${f.confidence}%` }} />
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {/* Demand Projections Table */}
+            {aiForecast.demandForecasts && aiForecast.demandForecasts.length > 0 && (
+              <Card className="shadow-sm border-primary/10">
+                <CardHeader className="pb-3 border-b border-primary/5">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Brain size={16} className="text-violet-400" /> AI Product Demand Projections
+                  </CardTitle>
+                </CardHeader>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs text-primary/70">
+                    <thead>
+                      <tr className="border-b border-primary/10 text-primary/40">
+                        <th className="px-5 py-3 font-medium">Product Name</th>
+                        <th className="px-5 py-3 font-medium">Category</th>
+                        <th className="px-5 py-3 font-medium">Expected Demand</th>
+                        <th className="px-5 py-3 font-medium">Growth Trend</th>
+                        <th className="px-5 py-3 font-medium">Confidence</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-primary/5">
+                      {aiForecast.demandForecasts.map((d, i) => (
+                        <tr key={i} className="hover:bg-primary/5 transition-colors">
+                          <td className="px-5 py-3.5 font-medium text-primary">{d.productName}</td>
+                          <td className="px-5 py-3.5 text-primary/60">{d.category}</td>
+                          <td className="px-5 py-3.5 font-bold text-primary">{d.expectedDemand} units</td>
+                          <td className="px-5 py-3.5">
+                            <span className={`inline-flex items-center gap-0.5 font-medium text-[10px] rounded px-1.5 py-0.5 border ${
+                              d.trend === "increasing" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                              d.trend === "decreasing" ? "bg-rose-500/10 text-rose-400 border-rose-500/20" :
+                              "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            }`}>
+                              {d.trend === "increasing" ? "Increasing" : d.trend === "decreasing" ? "Decreasing" : "Stable"}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-primary/10 rounded-full h-1.5 shrink-0">
+                                <div className="h-1.5 rounded-full bg-violet-500" style={{ width: `${d.confidence}%` }} />
+                              </div>
+                              <span className="font-semibold text-primary/60">{d.confidence}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+
+            {/* Fast/Slow-Moving Products Side by Side */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Fast Moving */}
+              <Card className="border-emerald-500/10 bg-emerald-500/5">
+                <CardHeader className="pb-3 border-b border-emerald-500/10">
+                  <CardTitle className="text-sm font-semibold text-emerald-400 flex items-center gap-2">
+                    🔥 Fast-Moving Stock
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-3 space-y-2">
+                  {aiForecast.fastMoving?.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-surface border border-emerald-500/10 rounded-lg">
+                      <span className="text-xs font-semibold text-primary">{p}</span>
+                      <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-1.5 rounded">High Demand</span>
+                    </div>
+                  ))}
+                  {!aiForecast.fastMoving?.length && <p className="text-xs text-primary/40 italic text-center py-4">No fast-moving items flagged.</p>}
+                </CardContent>
+              </Card>
+
+              {/* Slow Moving */}
+              <Card className="border-rose-500/10 bg-rose-500/5">
+                <CardHeader className="pb-3 border-b border-rose-500/10">
+                  <CardTitle className="text-sm font-semibold text-rose-400 flex items-center gap-2">
+                    ❄️ Slow-Moving Stock
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-3 space-y-2">
+                  {aiForecast.slowMoving?.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-surface border border-rose-500/10 rounded-lg">
+                      <span className="text-xs font-semibold text-primary">{p}</span>
+                      <span className="text-[10px] bg-rose-500/10 text-rose-400 px-1.5 rounded">Promo Target</span>
+                    </div>
+                  ))}
+                  {!aiForecast.slowMoving?.length && <p className="text-xs text-primary/40 italic text-center py-4">No slow-moving items flagged.</p>}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )
+      )
+    )}
     </DashboardLayout>
   );
 }

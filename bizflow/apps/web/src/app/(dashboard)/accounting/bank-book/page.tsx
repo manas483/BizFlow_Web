@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { StatCard } from "@/components/ui/StatCard";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { useBankAccounts, useBankBook } from "@/hooks/useAccounting";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { Button } from "@/shared/ui/ui/Button";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { useBankAccounts, useBankBook } from "@/shared/hooks/useAccounting";
+import { formatCurrency, formatDate } from "@/shared/lib/utils";
 import { Landmark, ArrowDownRight, ArrowUpRight, Plus, RefreshCw, CheckCircle, Clock } from "lucide-react";
-import AddBankAccountModal from "@/components/modals/AddBankAccountModal";
-import AddBankBookEntryModal from "@/components/modals/AddBankBookEntryModal";
-import BankReconciliationModal from "@/components/modals/BankReconciliationModal";
+import AddBankAccountModal from "@/shared/ui/modals/AddBankAccountModal";
+import AddBankBookEntryModal from "@/shared/ui/modals/AddBankBookEntryModal";
+import BankReconciliationModal from "@/shared/ui/modals/BankReconciliationModal";
 
 export default function BankBookPage() {
   const [activeAccountTab, setActiveAccountTab] = useState<string>("");

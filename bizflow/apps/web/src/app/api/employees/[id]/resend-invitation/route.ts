@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { randomBytes } from 'crypto';
-import { sendEmployeeInvitationEmail } from '@/lib/email';
+import { sendEmployeeInvitationEmail } from '@/shared/lib/email';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -15,7 +15,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const employee = await prisma.employee.findFirst({
       where: { id, businessId: session.user.businessId },
-      include: { user: true },
+      include: { 
+        user: {
+          select: {
+            emailVerified: true,
+            password: true,
+          }
+        }
+      },
     });
 
     if (!employee) {

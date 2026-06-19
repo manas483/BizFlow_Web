@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import Modal from "@/shared/ui/ui/Modal";
@@ -34,6 +34,65 @@ interface InvoiceProduct {
 interface InvoiceInfo {
   invoiceNumber: string; supplier: string; purchaseDate: string;
 }
+
+const CategoryCell = ({ value, options, onChange }: { value: string, options: string[], onChange: (val: string) => void }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState(value || "");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSearch(value || "");
+  }, [value]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+  const showAdd = search.trim() !== "" && !options.some(o => o.toLowerCase() === search.toLowerCase());
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        className="w-28 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] outline-none px-1.5 py-0.5 transition-colors"
+        value={search}
+        onChange={(e) => {
+          setSearch(e.target.value);
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="Category"
+      />
+      {open && (
+        <div className="absolute z-50 w-40 mt-1 rounded-md shadow-xl max-h-48 overflow-y-auto custom-scrollbar"
+          style={{ background: "var(--bg-surface-2)", border: "1px solid var(--border)" }}>
+          {options.map(opt => (
+            <div key={opt}
+              className="px-2 py-1.5 text-[11px] text-primary/80 hover:bg-violet-500/10 hover:text-violet-400 cursor-pointer"
+              onClick={() => {
+                setSearch(opt);
+                onChange(opt);
+                setOpen(false);
+              }}
+            >
+              {opt}
+            </div>
+          ))}
+          {showAdd && (
+            <div className="px-2 py-1.5 text-[11px] text-violet-400 font-medium border-t border-primary/10">
+              Will add "{search}"
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function ImportInventoryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
@@ -229,12 +288,6 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
       icon={<FileSpreadsheet size={16} />} iconColor="bg-emerald-500/20 text-emerald-400"
       subtitle={isInvoicePdf ? "Import from PDF Invoice" : "Bulk update inventory from Excel, CSV, or Invoice PDF"}>
 
-      <datalist id="category-options">
-        {categoriesList.map((c) => (
-          <option key={c} value={c} />
-        ))}
-      </datalist>
-
       {/* Step Indicator */}
       <div className="flex items-center gap-1 mb-5">
         {(["upload", "review", "done"] as const).map((s, i) => {
@@ -380,12 +433,10 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                         )}
                       </td>
                       <td className="px-2 py-1.5">
-                        <input
-                          list="category-options"
-                          className="w-24 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] outline-none px-1.5 py-0.5 transition-colors"
-                          value={p.category || ""}
-                          onChange={(e) => updateInvoiceProduct(idx, "category", e.target.value)}
-                          placeholder="Category"
+                        <CategoryCell 
+                          value={p.category} 
+                          options={categoriesList} 
+                          onChange={(val) => updateInvoiceProduct(idx, "category", val)} 
                         />
                       </td>
                       <td className="px-2 py-1.5">

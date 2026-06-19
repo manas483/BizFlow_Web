@@ -4,34 +4,79 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
-import DashboardLayout from "@/components/layout/DashboardLayout";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 
-function downloadPdf(url: string, filename: string) {
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+async function downloadPdf(url: string, filename: string) {
+  try {
+    const separator = url.includes('?') ? '&' : '?';
+    const fetchUrl = `${url}${separator}t=${Date.now()}`;
+    const res = await fetch(fetchUrl, { cache: 'no-store' });
+    if (!res.ok) {
+      const text = await res.text();
+      let errorMsg = "Failed to download PDF";
+      try {
+        const json = JSON.parse(text);
+        errorMsg = json.error || json.message || errorMsg;
+      } catch {}
+      toast.error(errorMsg);
+      return;
+    }
+    const contentType = res.headers.get("content-type") || "";
+    if (!contentType.includes("application/pdf")) {
+      const text = await res.text();
+      let errorMsg = "Failed to download PDF";
+      try {
+        const json = JSON.parse(text);
+        errorMsg = json.error || json.message || errorMsg;
+      } catch {}
+      toast.error(errorMsg);
+      return;
+    }
+
+    const disposition = res.headers.get('content-disposition');
+    let finalFilename = filename;
+    if (disposition && disposition.indexOf('attachment') !== -1) {
+      const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+      const matches = filenameRegex.exec(disposition);
+      if (matches != null && matches[1]) {
+        finalFilename = matches[1].replace(/['"]/g, '');
+      }
+    }
+
+    const blob = await res.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = finalFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (err: any) {
+    toast.error(err.message || "Failed to download PDF");
+  }
 }
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { StatCard } from "@/components/ui/StatCard";
-import { useSales } from "@/hooks/useSales";
-import { useQuotations } from "@/hooks/useQuotations";
-import { useCreditNotes, useDebitNotes, useBillsOfSupply } from "@/hooks/useInvoiceDocs";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { Search, FileText, Download, TrendingUp, Clock, CheckCircle, AlertCircle, Plus, FileDown, FileUp, FileMinus, Trash2, RefreshCw } from "lucide-react";
-import NewSaleModal from "@/components/modals/NewSaleModal";
-import NewCreditNoteModal from "@/components/modals/NewCreditNoteModal";
-import NewDebitNoteModal from "@/components/modals/NewDebitNoteModal";
-import NewBillOfSupplyModal from "@/components/modals/NewBillOfSupplyModal";
-import NewQuotationModal from "@/components/modals/NewQuotationModal";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import Pagination from "@/components/ui/Pagination";
-import { useDeleteSale } from "@/hooks/useSales";
-import { useDeleteCreditNote, useDeleteDebitNote } from "@/hooks/useInvoiceDocs";
+import { Card, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { useSales } from "@/shared/hooks/useSales";
+import { useQuotations } from "@/shared/hooks/useQuotations";
+import { useCreditNotes, useDebitNotes, useBillsOfSupply } from "@/shared/hooks/useInvoiceDocs";
+import { formatCurrency, formatDate } from "@/shared/lib/utils";
+import { Search, FileText, Download, TrendingUp, Clock, CheckCircle, AlertCircle, Plus, FileDown, FileUp, FileMinus, Trash2, RefreshCw, MessageSquare, Pencil, CreditCard } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import NewSaleModal from "@/shared/ui/modals/NewSaleModal";
+import NewCreditNoteModal from "@/shared/ui/modals/NewCreditNoteModal";
+import NewDebitNoteModal from "@/shared/ui/modals/NewDebitNoteModal";
+import NewBillOfSupplyModal from "@/shared/ui/modals/NewBillOfSupplyModal";
+import NewQuotationModal from "@/shared/ui/modals/NewQuotationModal";
+import ConfirmDialog from "@/shared/ui/ui/ConfirmDialog";
+import Pagination from "@/shared/ui/ui/Pagination";
+import { useDeleteSale } from "@/shared/hooks/useSales";
+import { useDeleteCreditNote, useDeleteDebitNote } from "@/shared/hooks/useInvoiceDocs";
+import { generateWhatsAppUrl, formatInvoiceMessage } from "@/shared/lib/whatsapp";
+import { formatCurrency as fc } from "@/shared/lib/utils";
 
 function pctChange(cur: number, prev: number) {
   if (prev === 0) return cur > 0 ? 100 : 0;
@@ -52,6 +97,7 @@ export default function SalesPage() {
   const [deleteInvoiceTarget, setDeleteInvoiceTarget] = useState<{ id: string; invoiceNo: string } | null>(null);
   const [deleteCnTarget, setDeleteCnTarget] = useState<{ id: string; no: string } | null>(null);
   const [deleteDnTarget, setDeleteDnTarget] = useState<{ id: string; no: string } | null>(null);
+  const [editSaleId, setEditSaleId] = useState<string | null>(null);
   const [convertingId, setConvertingId] = useState<string | null>(null);
   const [salePayTarget, setSalePayTarget] = useState<{ id: string; total: number; paid: number; invoiceNo: string } | null>(null);
   const [salePayInput, setSalePayInput] = useState("");
@@ -124,7 +170,6 @@ export default function SalesPage() {
         body: JSON.stringify({ paid: parseFloat(bosPayInput) || 0 }),
       });
       if (!res.ok) throw new Error("Failed to update payment");
-      // H-N4 FIX: Invalidate query cache instead of hard reload
       await queryClient.invalidateQueries({ queryKey: ['bills-of-supply'] });
     } catch (err: any) {
       toast.error(err.message || "Failed to update payment");
@@ -245,7 +290,7 @@ export default function SalesPage() {
                       <tr key={sale.id} className="hover:bg-primary/5 transition-colors">
                         <td className="px-4 py-3.5 text-violet-400 text-xs font-mono">{sale.invoiceNo}</td>
                         <td className="px-4 py-3.5 text-primary text-sm font-medium">{sale.customer?.name || "Walk-in"}</td>
-                        <td className="px-4 py-3.5 text-primary/40 text-xs">{formatDate(sale.createdAt)}</td>
+                        <td className="px-4 py-3.5 text-primary/40 text-xs">{formatDate(sale.invoiceDate || sale.createdAt)}</td>
                         <td className="px-4 py-3.5 text-primary/40 text-sm text-center">{sale.items?.length || 0}</td>
                         <td className="px-4 py-3.5 text-primary font-semibold text-sm">{formatCurrency(sale.total)}</td>
                         <td className="px-4 py-3.5 text-emerald-400 text-sm font-medium">{formatCurrency(sale.paid)}</td>
@@ -257,32 +302,78 @@ export default function SalesPage() {
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex gap-1 items-center">
-                            <button onClick={() => downloadPdf(`/api/sales/${sale.id}/pdf?copy=original`, `Invoice-${sale.invoiceNo}_original.pdf`)}
-                              aria-label="Download Original (Buyer) PDF"
-                              className="flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 transition-all" title="Original (Buyer)">
-                              <FileText size={10} />Orig
+                            {/* Edit Invoice */}
+                            <button onClick={() => { setEditSaleId(sale.id); setSaleModalOpen(true); }} aria-label="Edit invoice" className="p-1.5 rounded-lg hover:bg-blue-500/15 text-primary/40 hover:text-blue-400 transition-all" title="Edit Invoice">
+                              <Pencil size={14} />
                             </button>
-                            <button onClick={() => downloadPdf(`/api/sales/${sale.id}/pdf?copy=duplicate`, `Invoice-${sale.invoiceNo}_duplicate.pdf`)}
-                              aria-label="Download Duplicate (Transporter) PDF"
-                              className="flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all" title="Duplicate (Transporter)">
-                              <FileText size={10} />Dup
-                            </button>
-                            <button onClick={() => downloadPdf(`/api/sales/${sale.id}/pdf?copy=triplicate`, `Invoice-${sale.invoiceNo}_triplicate.pdf`)}
-                              aria-label="Download Triplicate (Supplier) PDF"
-                              className="flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all" title="Triplicate (Supplier)">
-                              <FileText size={10} />Trip
-                            </button>
+                            
+                            {/* Pay Icon */}
                             {sale.status !== "paid" && (
                               <button
                                 onClick={() => { setSalePayTarget({ id: sale.id, total: sale.total, paid: sale.paid, invoiceNo: sale.invoiceNo }); setSalePayInput(String(sale.paid)); }}
-                                className="flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all"
+                                className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-primary/40 hover:text-emerald-400 transition-all"
                                 title="Record Payment"
                               >
-                                <RefreshCw size={10} />Pay
+                                <CreditCard size={14} />
                               </button>
                             )}
-                            {/* H-3: Delete invoice */}
-                            <button onClick={() => setDeleteInvoiceTarget({ id: sale.id, invoiceNo: sale.invoiceNo })} aria-label={`Delete invoice ${sale.invoiceNo}`} className="p-1.5 rounded-lg hover:bg-rose-500/15 text-primary/40 hover:text-rose-400 transition-all" title="Delete Invoice"><Trash2 size={13} /></button>
+
+                            {/* Download Dropdown */}
+                            <DropdownMenu.Root>
+                              <DropdownMenu.Trigger asChild>
+                                <button className="p-1.5 rounded-lg hover:bg-violet-500/15 text-primary/40 hover:text-violet-400 transition-all" title="Download Invoice">
+                                  <Download size={14} />
+                                </button>
+                              </DropdownMenu.Trigger>
+                              <DropdownMenu.Portal>
+                                <DropdownMenu.Content
+                                  align="end"
+                                  className="z-[9999] min-w-[160px] bg-surface-2 border border-primary/10 rounded-xl p-1 shadow-xl text-sm"
+                                  style={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border)' }}
+                                >
+                                  <DropdownMenu.Item
+                                    className="px-3 py-2 text-primary/80 hover:text-primary hover:bg-primary/5 rounded-lg cursor-pointer outline-none transition-colors"
+                                    onClick={() => downloadPdf(`/api/sales/${sale.id}/pdf?copy=original`, `Invoice-${sale.invoiceNo}_original.pdf`)}
+                                  >
+                                    Original (Buyer)
+                                  </DropdownMenu.Item>
+                                  <DropdownMenu.Item
+                                    className="px-3 py-2 text-primary/80 hover:text-primary hover:bg-primary/5 rounded-lg cursor-pointer outline-none transition-colors"
+                                    onClick={() => downloadPdf(`/api/sales/${sale.id}/pdf?copy=duplicate`, `Invoice-${sale.invoiceNo}_duplicate.pdf`)}
+                                  >
+                                    Duplicate (Transporter)
+                                  </DropdownMenu.Item>
+                                  <DropdownMenu.Item
+                                    className="px-3 py-2 text-primary/80 hover:text-primary hover:bg-primary/5 rounded-lg cursor-pointer outline-none transition-colors"
+                                    onClick={() => downloadPdf(`/api/sales/${sale.id}/pdf?copy=triplicate`, `Invoice-${sale.invoiceNo}_triplicate.pdf`)}
+                                  >
+                                    Triplicate (Supplier)
+                                  </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                              </DropdownMenu.Portal>
+                            </DropdownMenu.Root>
+
+                            {/* Delete invoice */}
+                            <button onClick={() => setDeleteInvoiceTarget({ id: sale.id, invoiceNo: sale.invoiceNo })} aria-label={`Delete invoice ${sale.invoiceNo}`} className="p-1.5 rounded-lg hover:bg-rose-500/15 text-primary/40 hover:text-rose-400 transition-all" title="Delete Invoice"><Trash2 size={14} /></button>
+                            
+                            {/* WhatsApp Share */}
+                            {sale.customer?.phone && (
+                              <button
+                                onClick={() => {
+                                  const msg = formatInvoiceMessage({
+                                    customerName: sale.customer?.name || 'Customer',
+                                    invoiceNo: sale.invoiceNo,
+                                    amount: sale.total,
+                                    companyName: 'BizFlow',
+                                  });
+                                  window.open(generateWhatsAppUrl(sale.customer.phone, msg), '_blank');
+                                }}
+                                className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-primary/40 hover:text-emerald-400 transition-all"
+                                title="Send via WhatsApp"
+                              >
+                                <MessageSquare size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -339,7 +430,6 @@ export default function SalesPage() {
                       <td className="px-4 py-3.5">
                         <div className="flex gap-1 items-center">
                           <button onClick={() => downloadPdf(`/api/quotations/${q.id}/pdf`, `Quotation-${q.quotationNo}.pdf`)} className="p-1.5 rounded-lg hover:bg-violet-500/15 text-primary/40 hover:text-violet-400 transition-all" title="Download"><Download size={13} /></button>
-                          {/* H-6: Convert to Invoice */}
                           <button
                             onClick={() => handleConvertQuotation(q)}
                             disabled={convertingId === q.id}
@@ -381,7 +471,6 @@ export default function SalesPage() {
                     <td className="px-4 py-3.5 text-primary/60 text-xs capitalize">{cn.reason.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3.5 text-emerald-400 font-semibold text-sm">{formatCurrency(cn.amount + cn.taxAmount)}</td>
                     <td className="px-4 py-3.5">
-                      {/* H-4: Download + Delete CN */}
                       <div className="flex gap-1 items-center">
                         <button onClick={() => downloadPdf(`/api/credit-notes/${cn.id}/pdf`, `CreditNote-${cn.creditNoteNo}.pdf`)} className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-primary/40 hover:text-emerald-400" title="Download" aria-label="Download credit note PDF"><Download size={13} /></button>
                         <button onClick={() => setDeleteCnTarget({ id: cn.id, no: cn.creditNoteNo })} className="p-1.5 rounded-lg hover:bg-rose-500/15 text-primary/40 hover:text-rose-400" title="Delete" aria-label={`Delete credit note ${cn.creditNoteNo}`}><Trash2 size={13} /></button>
@@ -416,7 +505,6 @@ export default function SalesPage() {
                     <td className="px-4 py-3.5 text-primary/60 text-xs capitalize">{dn.reason.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3.5 text-amber-400 font-semibold text-sm">{formatCurrency(dn.amount + dn.taxAmount)}</td>
                     <td className="px-4 py-3.5">
-                      {/* H-4: Download + Delete DN */}
                       <div className="flex gap-1 items-center">
                         <button onClick={() => downloadPdf(`/api/debit-notes/${dn.id}/pdf`, `DebitNote-${dn.debitNoteNo}.pdf`)} className="p-1.5 rounded-lg hover:bg-amber-500/15 text-primary/40 hover:text-amber-400" title="Download" aria-label="Download debit note PDF"><Download size={13} /></button>
                         <button onClick={() => setDeleteDnTarget({ id: dn.id, no: dn.debitNoteNo })} className="p-1.5 rounded-lg hover:bg-rose-500/15 text-primary/40 hover:text-rose-400" title="Delete" aria-label={`Delete debit note ${dn.debitNoteNo}`}><Trash2 size={13} /></button>
@@ -453,7 +541,6 @@ export default function SalesPage() {
                     <td className="px-4 py-3.5">
                       <div className="flex gap-1 items-center">
                         <button onClick={() => downloadPdf(`/api/bill-of-supply/${b.id}/pdf`, `BillOfSupply-${b.billNo}.pdf`)} className="p-1.5 rounded-lg hover:bg-blue-500/15 text-primary/40 hover:text-blue-400" title="Download"><Download size={13} /></button>
-                        {/* H-5: Update payment status */}
                         {b.status !== "paid" && (
                           <button
                             onClick={() => { setBosPayTarget({ id: b.id, total: b.total, paid: b.paid, billNo: b.billNo }); setBosPayInput(String(b.paid)); }}
@@ -473,13 +560,12 @@ export default function SalesPage() {
         )}
       </Card>
 
-      <NewSaleModal open={saleModalOpen} onClose={() => setSaleModalOpen(false)} />
+      <NewSaleModal open={saleModalOpen} onClose={() => { setSaleModalOpen(false); setEditSaleId(null); }} editSaleId={editSaleId || undefined} />
       <NewQuotationModal open={quotationModalOpen} onClose={() => setQuotationModalOpen(false)} />
       <NewCreditNoteModal open={cnModalOpen} onClose={() => setCnModalOpen(false)} />
       <NewDebitNoteModal open={dnModalOpen} onClose={() => setDnModalOpen(false)} />
       <NewBillOfSupplyModal open={bosModalOpen} onClose={() => setBosModalOpen(false)} />
 
-      {/* H-3: Delete invoice confirm */}
       <ConfirmDialog
         open={!!deleteInvoiceTarget}
         title="Delete Invoice"

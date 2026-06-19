@@ -184,6 +184,7 @@ model Sale {
   notes         String?
   businessId    String
   createdAt     DateTime     @default(now())
+  invoiceDate   DateTime?                      // user-specified invoice date (falls back to createdAt)
   placeOfSupply String?
   reverseCharge Boolean      @default(false)
   aggregateDate String?

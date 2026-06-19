@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { z } from 'zod';
 
 const notificationSchema = z.object({
@@ -14,6 +14,10 @@ export async function GET(req: NextRequest) {
     const session = await requireAuth();
     const userRole = (session.user as any).role as string;
 
+    const { searchParams } = new URL(req.url);
+    const category = searchParams.get('category');
+    const priority = searchParams.get('priority');
+
     const notifications = await prisma.notification.findMany({
       where: {
         businessId: session.user.businessId,
@@ -24,6 +28,8 @@ export async function GET(req: NextRequest) {
           { targetRole: null },
           { targetRole: userRole },
         ],
+        ...(category ? { category } : {}),
+        ...(priority ? { priority } : {}),
       },
       orderBy: { createdAt: 'desc' },
       take: 50,

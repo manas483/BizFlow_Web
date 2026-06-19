@@ -5,10 +5,10 @@
  */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { productSchema }          from '@/lib/validations';
-import { ok, deleted, notFound, validationError, internalError } from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { productSchema }          from '@/shared/lib/validations';
+import { ok, deleted, notFound, validationError, internalError } from '@/shared/lib/response';
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {

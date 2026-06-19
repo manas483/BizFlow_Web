@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { createOtpRecord } from "@/lib/otp";
-import { sendOtpEmail } from "@/lib/email";
-import { authRateLimit } from "@/lib/rate-limit";
+import { prisma } from "@/shared/lib/db";
+import { createOtpRecord } from "@/shared/lib/otp";
+import { sendOtpEmail } from "@/shared/lib/email";
+import { authRateLimit } from "@/shared/lib/rate-limit";
 
 /**
  * POST /api/auth/verify-email/send

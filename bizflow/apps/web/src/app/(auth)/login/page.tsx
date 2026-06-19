@@ -44,6 +44,12 @@ function getLoginError(error: string): { message: string; icon: typeof AlertCirc
       icon: AlertCircle,
     };
   }
+  if (error.includes("INVALID_2FA_CODE")) {
+    return {
+      message: "Invalid verification code. Please check your authenticator app or try a backup code.",
+      icon: AlertCircle,
+    };
+  }
   return {
     message: "Sign-in failed. Please check your credentials and try again.",
     icon: ShieldAlert,
@@ -61,6 +67,10 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  
+  // 2FA state
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [otpToken, setOtpToken] = useState("");
 
   // Pre-fill email and show success banner if redirected from verify-email
   useEffect(() => {
@@ -84,14 +94,25 @@ function LoginContent() {
     setLoading(true);
 
     try {
-      const res = await signIn("credentials", {
+      const signInData: any = {
         email: form.email.trim().toLowerCase(),
         password: form.password,
         redirect: false,
-      });
+      };
+
+      if (requires2FA) {
+        signInData.otpToken = otpToken;
+      }
+
+      const res: any = await signIn("credentials", signInData);
 
       if (res?.error) {
-        setError(res.error);
+        if (res.error.includes("REQUIRES_2FA")) {
+          setRequires2FA(true);
+          setError(null);
+        } else {
+          setError(res.error);
+        }
       } else {
         router.push("/");
         router.refresh();
@@ -101,6 +122,12 @@ function LoginContent() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBackToLogin = () => {
+    setRequires2FA(false);
+    setOtpToken("");
+    setError(null);
   };
 
   const errInfo = error ? getLoginError(error) : null;
@@ -190,15 +217,15 @@ function LoginContent() {
 
           <div className="mb-8">
             <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--text-white)" }}>
-              Welcome back
+              {requires2FA ? "Two-Factor Verification" : "Welcome back"}
             </h2>
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              Sign in to your BizFlow account
+              {requires2FA ? "Enter the verification code from your authenticator app" : "Sign in to your BizFlow account"}
             </p>
           </div>
 
           {/* ── Verified success banner ── */}
-          {verified && (
+          {verified && !requires2FA && (
             <div
               className="flex items-start gap-3 p-4 rounded-xl mb-5 border"
               style={{ backgroundColor: "rgba(16,185,129,0.08)", borderColor: "rgba(16,185,129,0.25)" }}
@@ -215,7 +242,7 @@ function LoginContent() {
           )}
 
           {/* ── Reset success banner ── */}
-          {resetSuccess && (
+          {resetSuccess && !requires2FA && (
             <div
               className="flex items-start gap-3 p-4 rounded-xl mb-5 border"
               style={{ backgroundColor: "rgba(16,185,129,0.08)", borderColor: "rgba(16,185,129,0.25)" }}
@@ -263,93 +290,150 @@ function LoginContent() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4" noValidate>
-            {/* Email */}
-            <div>
-              <label
-                htmlFor="login-email"
-                className="text-xs font-medium mb-1.5 block"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                Email Address
-              </label>
-              <input
-                id="login-email"
-                type="email"
-                value={form.email}
-                onChange={(e) => { setError(null); setForm({ ...form, email: e.target.value }); }}
-                className="input-themed"
-                placeholder="you@business.com"
-                required
-                autoComplete="email"
-                inputMode="email"
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
+          {requires2FA ? (
+            <form onSubmit={handleLogin} className="space-y-4" noValidate>
+              <div>
                 <label
-                  htmlFor="login-password"
-                  className="text-xs font-medium"
+                  htmlFor="login-otp"
+                  className="text-xs font-medium mb-1.5 block"
                   style={{ color: "var(--text-secondary)" }}
                 >
-                  Password
+                  Verification Code / Backup Code
                 </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
                 <input
-                  id="login-password"
-                  type={showPassword ? "text" : "password"}
-                  value={form.password}
-                  onChange={(e) => { setError(null); setForm({ ...form, password: e.target.value }); }}
-                  className="input-themed pr-10"
-                  placeholder="••••••••"
+                  id="login-otp"
+                  type="text"
+                  value={otpToken}
+                  onChange={(e) => { setError(null); setOtpToken(e.target.value.replace(/\s/g, "")); }}
+                  className="input-themed text-center text-lg font-mono tracking-[0.2em]"
+                  placeholder="000000"
                   required
-                  autoComplete="current-password"
+                  autoComplete="one-time-code"
+                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                  style={{ color: "var(--text-muted)" }}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+                <p className="text-xs mt-2" style={{ color: "var(--text-muted)", lineHeight: "1.4" }}>
+                  Enter the 6-digit code from your authenticator app, or an 8-character recovery backup code.
+                </p>
               </div>
-            </div>
 
+              <button
+                type="submit"
+                disabled={loading || !otpToken.trim()}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm
+                  bg-gradient-to-r from-violet-600 to-purple-700 text-white
+                  hover:from-violet-500 hover:to-purple-600 transition-all duration-200
+                  shadow-lg shadow-violet-500/25 disabled:opacity-60 disabled:cursor-not-allowed
+                  hover:shadow-violet-500/40 hover:-translate-y-0.5 active:translate-y-0"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    Verify & Sign In
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm
-                bg-gradient-to-r from-violet-600 to-purple-700 text-white
-                hover:from-violet-500 hover:to-purple-600 transition-all duration-200
-                shadow-lg shadow-violet-500/25 disabled:opacity-60 disabled:cursor-not-allowed
-                hover:shadow-violet-500/40 hover:-translate-y-0.5 active:translate-y-0"
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                <>
-                  Sign In
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </button>
-          </form>
+              <button
+                type="button"
+                onClick={handleBackToLogin}
+                className="w-full py-2.5 rounded-xl border border-primary/10 text-primary/60 hover:text-primary hover:bg-primary/5 transition-all text-sm font-semibold"
+              >
+                Back to Sign In
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-4" noValidate>
+              {/* Email */}
+              <div>
+                <label
+                  htmlFor="login-email"
+                  className="text-xs font-medium mb-1.5 block"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Email Address
+                </label>
+                <input
+                  id="login-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => { setError(null); setForm({ ...form, email: e.target.value }); }}
+                  className="input-themed"
+                  placeholder="you@business.com"
+                  required
+                  autoComplete="email"
+                  inputMode="email"
+                />
+              </div>
+
+              {/* Password */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label
+                    htmlFor="login-password"
+                    className="text-xs font-medium"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Password
+                  </label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <input
+                    id="login-password"
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(e) => { setError(null); setForm({ ...form, password: e.target.value }); }}
+                    className="input-themed pr-10"
+                    placeholder="••••••••"
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                    style={{ color: "var(--text-muted)" }}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm
+                  bg-gradient-to-r from-violet-600 to-purple-700 text-white
+                  hover:from-violet-500 hover:to-purple-600 transition-all duration-200
+                  shadow-lg shadow-violet-500/25 disabled:opacity-60 disabled:cursor-not-allowed
+                  hover:shadow-violet-500/40 hover:-translate-y-0.5 active:translate-y-0"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign In
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
 
           <p className="text-center text-sm mt-6" style={{ color: "var(--text-secondary)" }}>
             Don&apos;t have an account?{" "}

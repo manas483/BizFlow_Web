@@ -1,10 +1,10 @@
 "use client";
 
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { StatCard } from "@/components/ui/StatCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
 import {
   TrendingUp, ShoppingCart, Users, Receipt, Package, AlertTriangle,
   ArrowRight, Plus, FileText, BarChart2
@@ -13,15 +13,17 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import { formatCurrency, formatDate, exportToCSV } from "@/lib/utils";
+import { formatCurrency, formatDate, exportToCSV } from "@/shared/lib/utils";
 import { useEffect, useState } from "react";
-import NewSaleModal from "@/components/modals/NewSaleModal";
-import { useDashboardStats } from "@/hooks/useDashboard";
-import { useProducts } from "@/hooks/useProducts";
-import { useSales } from "@/hooks/useSales";
-import { useReports } from "@/hooks/useReports";
+import NewSaleModal from "@/shared/ui/modals/NewSaleModal";
+import { useDashboardStats } from "@/shared/hooks/useDashboard";
+import { useProducts } from "@/shared/hooks/useProducts";
+import { useSales } from "@/shared/hooks/useSales";
+import { useReports } from "@/shared/hooks/useReports";
 import { useSession } from "next-auth/react";
-import { useRecommendations, trackActivity } from "@/hooks/useRecommendations";
+import { useRecommendations, trackActivity } from "@/shared/hooks/useRecommendations";
+import { useAiInsights } from "@/shared/hooks/useAiInsights";
+import { useAiForecast } from "@/shared/hooks/useAiForecast";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -63,32 +65,35 @@ export default function DashboardPage() {
   const { data: report } = useReports({ period: "yearly" });
   const { data: session } = useSession();
   const { data: recs } = useRecommendations();
+  const { data: aiInsights } = useAiInsights();
+  const { data: aiForecast } = useAiForecast();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   const products = productsPage?.data ?? [];
   const sales    = salesPage?.data ?? [];
   const lowStock = products.filter((p: any) => p.stock <= p.minStock);
-  const recentSales = sales.slice(0, 5);
+  const recentSales = sales.slice(0, 10);
 
-  // Build chart data from reports API — M-16: use numeric month index as key
+  // Build chart data from reports API
   const salesByMonthRaw: any[] = report?.salesByMonth ?? [];
   const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const monthlyMap: Record<number, { month: string; sales: number; expenses: number; profit: number }> = {};
+  const chartData: { monthIndex: number; month: string; sales: number; expenses: number; profit: number }[] = [];
 
-  // Pre-fill last 6 months using numeric index
+  // Pre-fill last 6 months maintaining chronological order
   for (let i = 5; i >= 0; i--) {
     const d = new Date();
     d.setMonth(d.getMonth() - i);
     const idx = d.getMonth();
-    monthlyMap[idx] = { month: MONTH_LABELS[idx], sales: 0, expenses: 0, profit: 0 };
+    chartData.push({ monthIndex: idx, month: MONTH_LABELS[idx], sales: 0, expenses: 0, profit: 0 });
   }
 
   for (const s of salesByMonthRaw) {
     const d = new Date(s.createdAt);
     const idx = d.getMonth();
-    if (monthlyMap[idx]) {
-      monthlyMap[idx].sales += s._sum?.total ?? 0;
+    const item = chartData.find(c => c.monthIndex === idx);
+    if (item) {
+      item.sales += s._sum?.total ?? 0;
     }
   }
 
@@ -97,8 +102,9 @@ export default function DashboardPage() {
   for (const e of expensesByDateRaw) {
     const d = new Date(e.date);
     const idx = d.getMonth();
-    if (monthlyMap[idx]) {
-      monthlyMap[idx].expenses += e._sum?.amount ?? 0;
+    const item = chartData.find(c => c.monthIndex === idx);
+    if (item) {
+      item.expenses += e._sum?.amount ?? 0;
     }
   }
 
@@ -107,13 +113,10 @@ export default function DashboardPage() {
   const totalCogsAll = report?.summary?.cogs || 0;
   const cogsMargin = totalCogsAll / totalSalesAll;
 
-  for (const idx of Object.keys(monthlyMap).map(Number)) {
-    const monthlyCogs = monthlyMap[idx].sales * cogsMargin;
-    monthlyMap[idx].profit = Math.max(0, monthlyMap[idx].sales - monthlyCogs - monthlyMap[idx].expenses);
+  for (const item of chartData) {
+    const monthlyCogs = item.sales * cogsMargin;
+    item.profit = Math.max(0, item.sales - monthlyCogs - item.expenses);
   }
-
-  // Chart data — M-16: values include month label from the map entry itself
-  const chartData = Object.values(monthlyMap);
 
   // Category pie from real expenses categories
   const categoryColors = ["#8b5cf6", "#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#06b6d4"];
@@ -234,7 +237,7 @@ export default function DashboardPage() {
           <CardContent className="pt-2">
             {mounted ? (
               <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={chartData.length > 0 ? chartData : [{ month: "—", sales: 0, expenses: 0, profit: 0 }]}>
+                <AreaChart data={chartData.length > 0 ? chartData : [{ monthIndex: 0, month: "—", sales: 0, expenses: 0, profit: 0 }]}>
                   <defs>
                     <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
@@ -331,6 +334,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0 ml-4">
                   <Badge
+                    className="w-16 justify-center"
                     variant={
                       sale.status === "paid" ? "success" :
                       sale.status === "partial" ? "warning" : "danger"
@@ -338,7 +342,7 @@ export default function DashboardPage() {
                   >
                     {sale.status}
                   </Badge>
-                  <span className="text-primary font-semibold text-sm">{formatCurrency(sale.total)}</span>
+                  <span className="text-primary font-semibold text-sm w-20 text-right">{formatCurrency(sale.total)}</span>
                 </div>
               </div>
             ))}
@@ -432,19 +436,26 @@ export default function DashboardPage() {
       </div>
 
 
-      {/* ── ML-Powered Panels ── */}
-      {mounted && (recs?.insights?.length > 0 || recs?.reorderAlerts?.length > 0) && (
+      {/* ── ML/AI-Powered Panels ── */}
+      {mounted && (
+        (aiInsights && aiInsights.length > 0) || 
+        (recs?.insights && recs.insights.length > 0) || 
+        (recs?.reorderAlerts && recs.reorderAlerts.length > 0) || 
+        (aiForecast?.salesForecasts && aiForecast.salesForecasts.length > 0)
+      ) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mt-4">
 
-          {/* Smart Insights */}
-          {recs.insights.length > 0 && (
+          {/* Smart Insights (Gemini AI or Heuristic Fallback) */}
+          {((aiInsights && aiInsights.length > 0) || (recs?.insights && recs.insights.length > 0)) && (
             <Card>
               <CardHeader>
                 <CardTitle>🤖 Smart Insights</CardTitle>
-                <Badge variant="default">ML</Badge>
+                <Badge variant={aiInsights && aiInsights.length > 0 ? "violet" : "default"}>
+                  {aiInsights && aiInsights.length > 0 ? "Gemini AI" : "ML Heuristic"}
+                </Badge>
               </CardHeader>
-              <div className="divide-y divide-primary/10">
-                {recs.insights.map((insight: any) => {
+              <div className="divide-y divide-primary/10 max-h-[320px] overflow-y-auto custom-scrollbar">
+                {((aiInsights && aiInsights.length > 0) ? aiInsights : recs.insights).map((insight: any) => {
                   const colors: Record<string, { bg: string; border: string; dot: string }> = {
                     warning: { bg: "rgba(245,158,11,0.08)", border: "rgba(245,158,11,0.25)", dot: "#f59e0b" },
                     tip:     { bg: "rgba(139,92,246,0.08)", border: "rgba(139,92,246,0.25)", dot: "#8b5cf6" },
@@ -457,7 +468,14 @@ export default function DashboardPage() {
                       style={{ background: c.bg, borderLeft: `3px solid ${c.dot}` }}>
                       <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: c.dot }} />
                       <div className="min-w-0 flex-1">
-                        <p className="text-primary text-sm font-medium">{insight.title}</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-primary text-sm font-medium">{insight.title}</p>
+                          {insight.metric && (
+                            <span className="text-[10px] font-semibold bg-primary/10 text-primary/70 px-1.5 py-0.5 rounded-md shrink-0">
+                              {insight.metric}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-primary/40 text-xs mt-0.5">{insight.message}</p>
                         {insight.actionLabel && (
                           <a href={insight.actionHref} className="text-xs text-violet-400 font-medium mt-1 inline-block hover:text-violet-300">
@@ -472,8 +490,44 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Reorder Alerts from ML */}
-          {recs.reorderAlerts.length > 0 && (
+          {/* AI Sales Forecast Card */}
+          {aiForecast?.salesForecasts && aiForecast.salesForecasts.length > 0 && (
+            <Card className="bg-gradient-to-br from-surface to-violet-500/5 border-violet-500/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  🔮 AI Sales Forecast
+                </CardTitle>
+                <Badge variant="violet">Gemini AI</Badge>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {aiForecast.salesForecasts.map((f: any, idx: number) => (
+                    <div key={idx} className="bg-primary/5 border border-primary/10 rounded-xl p-3 hover:border-violet-500/30 transition-all duration-200">
+                      <p className="text-[10px] uppercase tracking-wider text-primary/40 mb-1">{f.period}</p>
+                      <p className="text-base font-bold text-primary">{formatCurrency(f.expectedRevenue)}</p>
+                      <div className="flex items-center justify-between mt-1 text-[10px]">
+                        <span className={f.growthPercent >= 0 ? "text-emerald-400 font-medium" : "text-rose-400 font-medium"}>
+                          {f.growthPercent >= 0 ? "↑" : "↓"} {Math.abs(f.growthPercent)}% growth
+                        </span>
+                        <span className="text-primary/40">
+                          {f.confidence}% conf.
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-2 border-t border-primary/10 flex items-center justify-between text-[10px] text-primary/40">
+                  <span>Generated: {new Date(aiForecast.generatedAt).toLocaleDateString()}</span>
+                  <a href="/reports#ai-forecast" className="text-violet-400 hover:text-violet-300 font-medium transition-colors">
+                    View Demand Predictions →
+                  </a>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Reorder Alerts from Heuristic ML */}
+          {recs?.reorderAlerts && recs.reorderAlerts.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>⚡ Reorder Predictions</CardTitle>
@@ -498,6 +552,7 @@ export default function DashboardPage() {
               </div>
             </Card>
           )}
+
         </div>
       )}
 

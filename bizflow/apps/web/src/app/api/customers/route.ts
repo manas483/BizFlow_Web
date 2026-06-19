@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { customerSchema } from '@/lib/validations';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { customerSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest) {
@@ -24,11 +24,37 @@ export async function GET(req: NextRequest) {
     };
 
     const [customers, total] = await Promise.all([
-      prisma.customer.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      prisma.customer.findMany({
+        where,
+        include: {
+          _count: { select: { sales: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
       prisma.customer.count({ where }),
     ]);
 
-    return NextResponse.json({ data: customers, total, page, limit, totalPages: Math.ceil(total / limit) });
+    // Compute exact purchase amounts from actual sales data
+    const customerIds = customers.map((c: any) => c.id);
+    const salesAggregates = customerIds.length > 0
+      ? await prisma.sale.groupBy({
+          by: ['customerId'],
+          where: { customerId: { in: customerIds } },
+          _sum: { total: true },
+        })
+      : [];
+
+    const salesMap = new Map(salesAggregates.map((a: any) => [a.customerId, a._sum.total || 0]));
+
+    const enrichedCustomers = customers.map((c: any) => ({
+      ...c,
+      purchaseCount: c._count?.sales || 0,
+      computedTotalPurchases: salesMap.get(c.id) || 0,
+    }));
+
+    return NextResponse.json({ data: enrichedCustomers, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     if (error instanceof AuthError) return error.response;
     console.error(error);
@@ -59,6 +85,15 @@ export async function POST(req: NextRequest) {
         eventType: "customer_added",
         metadata: { customerId: customer.id },
       }
+    });
+
+    const { logAudit } = await import('@/shared/lib/audit');
+    await logAudit({
+      session,
+      action: 'CREATE',
+      entityType: 'Customer',
+      entityId: customer.id,
+      entityLabel: customer.name,
     });
 
     return NextResponse.json(customer, { status: 201 });

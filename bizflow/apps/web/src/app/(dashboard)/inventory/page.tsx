@@ -2,22 +2,22 @@
 
 import { useState } from "react";
 import toast from "react-hot-toast";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { StatCard } from "@/components/ui/StatCard";
-import { CustomSelect } from "@/components/ui/CustomSelect";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { useProducts, useDeleteProduct } from "@/hooks/useProducts";
-import { useBusiness } from "@/hooks/useBusiness";
-import { getBusinessProfile } from "@/lib/business-intelligence";
-import Pagination from "@/components/ui/Pagination";
-import { formatCurrency, exportToCSV } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
+import ConfirmDialog from "@/shared/ui/ui/ConfirmDialog";
+import { useProducts, useDeleteProduct } from "@/shared/hooks/useProducts";
+import { useBusiness } from "@/shared/hooks/useBusiness";
+import { getBusinessProfile } from "@/shared/lib/business-intelligence";
+import Pagination from "@/shared/ui/ui/Pagination";
+import { formatCurrency, exportToCSV } from "@/shared/lib/utils";
 import { Package, Plus, Search, AlertTriangle, TrendingUp, Download, Pencil, Trash2, Upload } from "lucide-react";
-import AddProductModal from "@/components/modals/AddProductModal";
-import EditProductModal from "@/components/modals/EditProductModal";
-import ImportInventoryModal from "@/components/modals/ImportInventoryModal";
+import AddProductModal from "@/shared/ui/modals/AddProductModal";
+import EditProductModal from "@/shared/ui/modals/EditProductModal";
+import ImportInventoryModal from "@/shared/ui/modals/ImportInventoryModal";
 
 export default function InventoryPage() {
   const [search, setSearch] = useState("");
@@ -37,9 +37,9 @@ export default function InventoryPage() {
   const profile = business ? getBusinessProfile(business.businessType) : null;
   const categories = ["All", ...(profile ? profile.productCategories : ["Grains", "Pulses", "Edible Oil", "Spices", "Construction"]), "Other"];
   const totalProducts = paged?.total ?? 0;
-  const lowStock = products.filter((p: any) => p.stock <= p.minStock).length;
-  const totalValue = products.reduce((s: number, p: any) => s + p.stock * p.purchasePrice, 0);
-  const totalSellValue = products.reduce((s: number, p: any) => s + p.stock * p.sellingPrice, 0);
+  const lowStock = paged?.stats?.lowStock ?? products.filter((p: any) => p.stock <= p.minStock).length;
+  const totalValue = paged?.stats?.totalValue ?? products.reduce((s: number, p: any) => s + Math.max(0, p.stock) * p.purchasePrice, 0);
+  const totalSellValue = paged?.stats?.totalSellValue ?? products.reduce((s: number, p: any) => s + Math.max(0, p.stock) * p.sellingPrice, 0);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;

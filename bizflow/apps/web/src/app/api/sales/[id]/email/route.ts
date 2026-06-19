@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { renderToBuffer } from '@react-pdf/renderer';
-import { InvoiceDocument } from '@/components/pdf/InvoiceDocument';
-import { sendInvoiceEmail } from '@/lib/email';
+import { InvoiceDocument } from '@/shared/ui/pdf/InvoiceDocument';
+import { sendInvoiceEmail } from '@/shared/lib/email';
 import React from 'react';
 
 export const runtime = 'nodejs';
@@ -29,21 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             gstNumber: true,
           }
         },
-        business: {
-          select: {
-            name: true,
-            phone: true,
-            address: true,
-            gstNumber: true,
-            ownerName: true,
-            businessType: true,
-            bankName: true,
-            accountNumber: true,
-            ifscCode: true,
-            branch: true,
-            gstInclusive: true,
-          }
-        },
+        business: true,
         items: {
           include: {
             product: {

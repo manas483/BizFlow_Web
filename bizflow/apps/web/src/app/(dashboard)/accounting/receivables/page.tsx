@@ -1,17 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { StatCard } from "@/components/ui/StatCard";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useReceivables, useCreateReceivable } from "@/hooks/useAccounting";
-import { useCustomers } from "@/hooks/useCustomers";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
+import { useReceivables, useCreateReceivable } from "@/shared/hooks/useAccounting";
+import { useCustomers } from "@/shared/hooks/useCustomers";
+import { formatCurrency, formatDate } from "@/shared/lib/utils";
 import { ArrowDownRight, Clock, Plus, Users, Search } from "lucide-react";
 import toast from "react-hot-toast";
-import Modal, { FormField, ModalInput, ModalFooter, ModalSelect } from "@/components/ui/Modal";
+import Modal, { FormField, ModalInput, ModalFooter, ModalSelect } from "@/shared/ui/ui/Modal";
 
 export default function ReceivablesPage() {
   const [status, setStatus] = useState<string>("");

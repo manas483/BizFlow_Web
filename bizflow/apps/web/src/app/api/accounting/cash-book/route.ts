@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { cashBookEntrySchema } from '@/lib/validations';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { cashBookEntrySchema } from '@/shared/lib/validations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest) {

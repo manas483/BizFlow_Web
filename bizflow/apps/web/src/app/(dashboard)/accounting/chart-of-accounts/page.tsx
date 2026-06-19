@@ -1,16 +1,16 @@
 "use client";
 
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { useAccounts, useCreateAccount, useDeleteAccount } from "@/hooks/useAccounting";
-import { formatCurrency } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
+import { Button } from "@/shared/ui/ui/Button";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { useAccounts, useCreateAccount, useDeleteAccount } from "@/shared/hooks/useAccounting";
+import { formatCurrency } from "@/shared/lib/utils";
 import { Plus, Trash2, ChevronRight, FolderTree, Search } from "lucide-react";
 import { useState } from "react";
 import toast from "react-hot-toast";
-import AddAccountModal from "@/components/modals/AddAccountModal";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import AddAccountModal from "@/shared/ui/modals/AddAccountModal";
+import ConfirmDialog from "@/shared/ui/ui/ConfirmDialog";
 
 const typeColors: Record<string, string> = {
   ASSET: "bg-blue-500/10 text-blue-400",

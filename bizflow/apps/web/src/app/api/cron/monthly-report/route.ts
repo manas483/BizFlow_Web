@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { sendMonthlyReportEmail } from '@/lib/email';
+import { prisma } from '@/shared/lib/db';
+import { sendMonthlyReportEmail } from '@/shared/lib/email';
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
 
 export const runtime = 'nodejs';

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { verifyOtp } from "@/lib/otp";
-import { authRateLimit } from "@/lib/rate-limit";
+import { verifyOtp } from "@/shared/lib/otp";
+import { authRateLimit } from "@/shared/lib/rate-limit";
 
 /**
  * POST /api/auth/verify-email/confirm

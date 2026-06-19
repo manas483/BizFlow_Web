@@ -10,20 +10,20 @@
  */
 
 import { NextRequest }               from 'next/server';
-import { prisma }                    from '@/lib/db';
+import { prisma }                    from '@/shared/lib/db';
 import bcrypt                        from 'bcryptjs';
-import { authRateLimit, emailRateLimit } from '@/lib/rate-limit';
-import { ROLE_PERMISSIONS }          from '@/lib/permissions';
+import { authRateLimit, emailRateLimit } from '@/shared/lib/rate-limit';
+import { ROLE_PERMISSIONS }          from '@/shared/lib/permissions';
 import {
   signAccessToken,
   generateRefreshToken,
   refreshTokenExpiresAt,
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_DAYS,
-} from '@/lib/mobile-jwt';
+} from '@/shared/lib/mobile-jwt';
 import {
   ok, created, err, validationError, rateLimited,
-} from '@/lib/response';
+} from '@/shared/lib/response';
 import { z } from 'zod';
 
 const loginSchema = z.object({

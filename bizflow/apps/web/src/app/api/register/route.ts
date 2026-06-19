@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/db";
-import { registerSchema } from "@/lib/validations";
-import { isDisposableEmail } from "@/lib/disposable-emails";
-import { registerRateLimit } from "@/lib/rate-limit";
-import { sendOtpEmail } from "@/lib/email";
+import { prisma } from "@/shared/lib/db";
+import { registerSchema } from "@/shared/lib/validations";
+import { isDisposableEmail } from "@/shared/lib/disposable-emails";
+import { registerRateLimit } from "@/shared/lib/rate-limit";
+import { sendOtpEmail } from "@/shared/lib/email";
 import { z } from "zod";
 
 export async function POST(req: Request) {
@@ -102,7 +102,7 @@ export async function POST(req: Request) {
 
     // ── 7. Send OTP verification email ──────────────────────────────────────
     // Import lazily to avoid circular dependencies
-    const { createOtpRecord } = await import("@/lib/otp");
+    const { createOtpRecord } = await import("@/shared/lib/otp");
     const otp = await createOtpRecord(email);
     // Non-blocking: if email fails, user can use "Resend" on the verify page
     sendOtpEmail(email, name, otp).catch((err) =>

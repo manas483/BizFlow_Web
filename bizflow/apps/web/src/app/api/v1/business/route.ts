@@ -2,10 +2,10 @@
  *  PUT /api/v1/business  — update (SUPER_ADMIN) */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { businessUpdateSchema }   from '@/lib/validations';
-import { ok, notFound, validationError, internalError } from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { businessUpdateSchema }   from '@/shared/lib/validations';
+import { ok, notFound, validationError, internalError } from '@/shared/lib/response';
 
 export async function GET(req: NextRequest) {
   try {

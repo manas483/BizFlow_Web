@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { businessUpdateSchema } from '@/lib/validations';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { businessUpdateSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
 
 // GET /api/business — fetch current business info
@@ -33,10 +33,29 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const validatedData = businessUpdateSchema.parse(body);
 
+    const existing = await prisma.business.findUnique({
+      where: { id: session.user.businessId },
+    });
+
     const business = await prisma.business.update({
       where: { id: session.user.businessId },
       data: validatedData,
     });
+
+    const { logAudit, computeChanges } = await import('@/shared/lib/audit');
+    if (existing) {
+      const changes = computeChanges(existing as any, business as any);
+      if (changes) {
+        await logAudit({
+          session,
+          action: 'UPDATE',
+          entityType: 'Business',
+          entityId: business.id,
+          entityLabel: business.name,
+          changes,
+        });
+      }
+    }
 
     return NextResponse.json(business);
   } catch (error) {

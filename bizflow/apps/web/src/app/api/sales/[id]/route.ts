@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { saleSchema } from '@/lib/validations';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { saleSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -37,38 +37,142 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const existing = await prisma.sale.findFirst({
       where: { id, businessId: session.user.businessId },
+      include: { items: true }
     });
     if (!existing) {
       return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
     }
 
-    // Allow updating paid amount and status only (items are immutable after creation)
-    const validatedData = saleSchema.partial().parse(body);
-    const { paid, status, notes } = validatedData;
+    // If items are provided, this is a full edit. Otherwise, just a partial update (e.g. payment)
+    const isFullEdit = Array.isArray(body.items);
 
+    if (!isFullEdit) {
+      const validatedData = saleSchema.partial().parse(body);
+      const { paid, status, notes } = validatedData;
+      const sale = await prisma.$transaction(async (tx: any) => {
+        const updated = await tx.sale.update({
+          where: { id },
+          data: {
+            ...(paid !== undefined ? { paid } : {}),
+            ...(status ? { status } : {}),
+            ...(notes !== undefined ? { notes } : {}),
+          },
+          include: { customer: true, items: { include: { product: true } } }
+        });
+
+        // Recalculate customer dues if payment changed
+        if (paid !== undefined && existing.customerId) {
+          const oldDueContrib = existing.total - existing.paid;
+          const newDueContrib = existing.total - paid;
+          const dueDiff = newDueContrib - oldDueContrib;
+          if (dueDiff !== 0) {
+            await tx.customer.update({
+              where: { id: existing.customerId },
+              data: { dues: { increment: dueDiff } }
+            });
+          }
+        }
+        return updated;
+      });
+      return NextResponse.json(sale);
+    }
+
+    // --- FULL EDIT LOGIC ---
+    const validatedData = saleSchema.parse(body);
+    
+    // Calculate new total
+    let newSubtotal = 0;
+    let newTotalGst = 0;
+    const business = await prisma.business.findUnique({ where: { id: session.user.businessId } });
+    const gstInclusive = business?.gstInclusive ?? false;
+
+    validatedData.items.forEach(item => {
+      const grossAmt = (item.qty * item.price) - (item.discount || 0);
+      const rate = item.gstRate || 0;
+      if (gstInclusive && rate > 0) {
+        const base = grossAmt / (1 + rate / 100);
+        newSubtotal += base;
+        newTotalGst += grossAmt - base;
+      } else {
+        newSubtotal += grossAmt;
+        newTotalGst += grossAmt * (rate / 100);
+      }
+    });
+    const newTotal = newSubtotal + newTotalGst;
+    
     const sale = await prisma.$transaction(async (tx: any) => {
+      // 1. Revert stock for all OLD items
+      for (const item of existing.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.qty } }
+        });
+      }
+
+      // 2. Delete OLD items
+      await tx.saleItem.deleteMany({ where: { saleId: id } });
+
+      // 3. Deduct stock for NEW items
+      for (const item of validatedData.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.qty } }
+        });
+      }
+
+      // 4. Determine status based on payment
+      let status = 'unpaid';
+      if (validatedData.paid >= newTotal) status = 'paid';
+      else if (validatedData.paid > 0) status = 'partial';
+
+      // 5. Update Sale record
       const updated = await tx.sale.update({
         where: { id },
         data: {
-          ...(paid !== undefined ? { paid } : {}),
-          ...(status ? { status } : {}),
-          ...(notes !== undefined ? { notes } : {}),
+          customerId: validatedData.customerId,
+          total: newTotal,
+          paid: validatedData.paid,
+          status,
+          notes: validatedData.notes,
+          placeOfSupply: validatedData.placeOfSupply,
+          reverseCharge: validatedData.reverseCharge,
+          isAggregate: validatedData.isAggregate,
+          aggregateDate: validatedData.aggregateDate ? new Date(validatedData.aggregateDate) : null,
+          invoiceDate: validatedData.invoiceDate ? new Date(validatedData.invoiceDate) : null,
+          items: {
+            create: validatedData.items.map(item => ({
+              productId: item.productId,
+              qty: item.qty,
+              price: item.price,
+              discount: item.discount,
+              hsnCode: item.hsnCode,
+              gstRate: item.gstRate,
+            }))
+          }
         },
         include: { customer: true, items: { include: { product: true } } }
       });
 
-      // Recalculate customer dues if payment changed
-      if (paid !== undefined) {
-        const oldDueContrib = existing.total - existing.paid;
-        const newDueContrib = existing.total - paid;
-        const dueDiff = newDueContrib - oldDueContrib;
-        if (dueDiff !== 0) {
-          await tx.customer.update({
-            where: { id: existing.customerId },
-            data: { dues: { increment: dueDiff } }
-          });
-        }
+      // 6. Update Customer balances (revert old, apply new)
+      if (existing.customerId) {
+        // Revert old
+        await tx.customer.update({
+          where: { id: existing.customerId },
+          data: {
+            totalPurchases: { decrement: existing.total },
+            dues: { decrement: existing.total - existing.paid }
+          }
+        });
       }
+      
+      // Apply new
+      await tx.customer.update({
+        where: { id: validatedData.customerId },
+        data: {
+          totalPurchases: { increment: newTotal },
+          dues: { increment: newTotal - validatedData.paid }
+        }
+      });
 
       return updated;
     });
@@ -113,6 +217,20 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
             dues: { decrement: existing.total - existing.paid }
           }
         });
+      }
+
+      // Reverse associated journal entries (auto-journal creates with reference 'SALE:{id}')
+      const relatedJournals = await tx.journalEntry.findMany({
+        where: { businessId: session.user.businessId, reference: `SALE:${id}` },
+        select: { id: true, status: true },
+      });
+      for (const je of relatedJournals) {
+        if (je.status !== 'REVERSED') {
+          await tx.journalEntry.update({
+            where: { id: je.id },
+            data: { status: 'REVERSED' },
+          });
+        }
       }
 
       // Delete sale items first, then sale

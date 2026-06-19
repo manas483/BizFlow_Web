@@ -1,19 +1,42 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardContent } from "@/components/ui/Card";
-import { StatCard } from "@/components/ui/StatCard";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
-import { useLoans, useDeleteLoan } from "@/hooks/useLoans";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardContent } from "@/shared/ui/ui/Card";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { Button } from "@/shared/ui/ui/Button";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { useLoans, useDeleteLoan } from "@/shared/hooks/useLoans";
+import { formatCurrency, formatDate } from "@/shared/lib/utils";
 import { Landmark, Plus, Scale, ArrowUpRight, Search, Trash2, Eye, CircleDollarSign, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import AddLoanModal from "@/components/modals/AddLoanModal";
-import RecordLoanPaymentModal from "@/components/modals/RecordLoanPaymentModal";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import AddLoanModal from "@/shared/ui/modals/AddLoanModal";
+import RecordLoanPaymentModal from "@/shared/ui/modals/RecordLoanPaymentModal";
+import ConfirmDialog from "@/shared/ui/ui/ConfirmDialog";
+import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
+
+const statusOptions = [
+  { value: "", label: "All Statuses" },
+  { value: "ACTIVE", label: "Active" },
+  { value: "CLOSED", label: "Closed" },
+  { value: "OVERDUE", label: "Overdue" },
+  { value: "FORECLOSED", label: "Foreclosed" },
+  { value: "DEFAULTED", label: "Defaulted" },
+  { value: "RESTRUCTURED", label: "Restructured" },
+];
+
+const loanTypeOptions = [
+  { value: "", label: "All Loan Types" },
+  { value: "TERM_LOAN", label: "Term Loan" },
+  { value: "PERSONAL_LOAN", label: "Personal Loan" },
+  { value: "BUSINESS_LOAN", label: "Business Loan" },
+  { value: "HOME_LOAN", label: "Home Loan" },
+  { value: "VEHICLE_LOAN", label: "Vehicle Loan" },
+  { value: "GOLD_LOAN", label: "Gold Loan" },
+  { value: "WORKING_CAPITAL", label: "Working Capital" },
+  { value: "OTHER", label: "Other" },
+];
 
 export default function LoansPage() {
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -83,10 +106,10 @@ export default function LoansPage() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/30" />
           <input
             type="text"
-            placeholder="Search borrower or loan #..."
+            placeholder="Search borrower or loan number..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 rounded-xl bg-surface border border-primary/10 text-sm text-primary placeholder:text-primary/30 focus:outline-none focus:border-violet-500/50"
+            className="w-full pl-9 pr-3 h-10 rounded-xl bg-surface border border-primary/10 text-sm text-primary placeholder:text-primary/30 focus:outline-none focus:border-violet-500/50"
           />
         </div>
         <div className="relative min-w-[150px]">
@@ -96,41 +119,21 @@ export default function LoansPage() {
             placeholder="Filter by lender..."
             value={lenderFilter}
             onChange={(e) => setLenderFilter(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.8 rounded-xl bg-surface border border-primary/10 text-xs text-primary placeholder:text-primary/30 focus:outline-none focus:border-violet-500/50"
+            className="w-full pl-9 pr-3 h-10 rounded-xl bg-surface border border-primary/10 text-sm text-primary placeholder:text-primary/30 focus:outline-none focus:border-violet-500/50"
           />
         </div>
-        <div>
-          <select
-            value={status}
-            onChange={e => setStatus(e.target.value)}
-            className="rounded-xl px-3 py-1.8 text-xs bg-surface border border-primary/10 text-primary focus:outline-none focus:border-violet-500/50 cursor-pointer"
-          >
-            <option value="">All Statuses</option>
-            <option value="ACTIVE">Active</option>
-            <option value="CLOSED">Closed</option>
-            <option value="OVERDUE">Overdue</option>
-            <option value="FORECLOSED">Foreclosed</option>
-            <option value="DEFAULTED">Defaulted</option>
-            <option value="RESTRUCTURED">Restructured</option>
-          </select>
-        </div>
-        <div>
-          <select
-            value={loanType}
-            onChange={e => setLoanType(e.target.value)}
-            className="rounded-xl px-3 py-1.8 text-xs bg-surface border border-primary/10 text-primary focus:outline-none focus:border-violet-500/50 cursor-pointer"
-          >
-            <option value="">All Loan Types</option>
-            <option value="TERM_LOAN">Term Loan</option>
-            <option value="PERSONAL_LOAN">Personal Loan</option>
-            <option value="BUSINESS_LOAN">Business Loan</option>
-            <option value="HOME_LOAN">Home Loan</option>
-            <option value="VEHICLE_LOAN">Vehicle Loan</option>
-            <option value="GOLD_LOAN">Gold Loan</option>
-            <option value="WORKING_CAPITAL">Working Capital</option>
-            <option value="OTHER">Other</option>
-          </select>
-        </div>
+        <CustomSelect
+          value={status}
+          onChange={setStatus}
+          options={statusOptions}
+          className="w-44"
+        />
+        <CustomSelect
+          value={loanType}
+          onChange={setLoanType}
+          options={loanTypeOptions}
+          className="w-48"
+        />
       </div>
 
       <Card>

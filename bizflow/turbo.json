@@ -5,6 +5,7 @@
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**"]
     },
+    "typecheck": {},
     "dev": {
       "cache": false,
       "persistent": true
@@ -14,6 +15,21 @@
     },
     "start": {
       "dependsOn": ["build"]
+    },
+    "test:unit": {
+      "dependsOn": [],
+      "outputs": ["coverage/**"],
+      "cache": false
+    },
+    "test:api": {
+      "dependsOn": ["build"],
+      "outputs": ["playwright-report/**"],
+      "cache": false
+    },
+    "test:e2e": {
+      "dependsOn": ["build"],
+      "outputs": ["playwright-report/**"],
+      "cache": false
     }
   }
 }

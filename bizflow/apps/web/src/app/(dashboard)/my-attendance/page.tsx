@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import {
   CalendarDays, Clock, CheckCircle2, XCircle, AlertCircle,
   Plus, Loader2, ChevronLeft, ChevronRight, Trash2, X, Flag,

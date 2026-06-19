@@ -6,9 +6,9 @@
  */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { ok, internalError }      from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { ok, internalError }      from '@/shared/lib/response';
 
 function pctChange(cur: number, prev: number) {
   if (prev === 0) return cur > 0 ? 100 : 0;

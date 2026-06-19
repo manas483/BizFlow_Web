@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import { requireAuth, AuthError } from "@/lib/api-guard";
-import { prisma } from "@/lib/db";
+import { requireAuth, AuthError } from "@/shared/lib/api-guard";
+import { prisma } from "@/shared/lib/db";
 import {
   getImportTemplate,
   validateImportData,
   mapColumns,
-} from "@/lib/inventory-import";
-import { recalculateTransportCosts } from "@/lib/expense-calculations";
-import { findProductIntelligence } from "@/lib/business-intelligence";
+} from "@/shared/lib/inventory-import";
+import { recalculateTransportCosts } from "@/shared/lib/expense-calculations";
+import { findProductIntelligence } from "@/shared/lib/business-intelligence";
 
 /* ─── Known Invoice Data (maps invoice numbers → product line items) ──────── */
 const INVOICES_DATA: Record<string, {

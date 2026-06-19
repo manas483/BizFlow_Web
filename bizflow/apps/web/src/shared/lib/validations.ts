@@ -61,6 +61,7 @@ export const saleSchema = z.object({
   reverseCharge: z.boolean().default(false),
   isAggregate: z.boolean().default(false),
   aggregateDate: z.string().optional().nullable(),
+  invoiceDate: z.string().optional().nullable(),
 });
 
 export const businessUpdateSchema = z.object({

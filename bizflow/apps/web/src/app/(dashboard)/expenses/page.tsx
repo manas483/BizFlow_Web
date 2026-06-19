@@ -1,19 +1,19 @@
 "use client";
 import toast from "react-hot-toast";
 
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { StatCard } from "@/components/ui/StatCard";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { useExpenses, useDeleteExpense } from "@/hooks/useExpenses";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import ConfirmDialog from "@/shared/ui/ui/ConfirmDialog";
+import { useExpenses, useDeleteExpense } from "@/shared/hooks/useExpenses";
+import { formatCurrency, formatDate } from "@/shared/lib/utils";
 import { Receipt, Plus, TrendingDown, Repeat, Tag, Trash2, Pencil } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useState } from "react";
-import AddExpenseModal from "@/components/modals/AddExpenseModal";
-import EditExpenseModal from "@/components/modals/EditExpenseModal";
+import AddExpenseModal from "@/shared/ui/modals/AddExpenseModal";
+import EditExpenseModal from "@/shared/ui/modals/EditExpenseModal";
 
 // L-10: generates a stable, distinct color for ANY category name
 const KNOWN_COLORS: Record<string, string> = {

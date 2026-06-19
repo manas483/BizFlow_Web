@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { payableSchema } from '@/lib/validations';
-import { calculateAging } from '@/lib/accounting-utils';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { payableSchema } from '@/shared/lib/validations';
+import { calculateAging } from '@/shared/lib/accounting-utils';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest) {
@@ -45,6 +45,16 @@ export async function POST(req: NextRequest) {
         dueDate: new Date(data.dueDate),
         businessId: session.user.businessId,
       },
+    });
+
+    // Auto-post journal entry (Dr Expense / Cr Trade Payables)
+    const { postPayableJournal } = await import('@/shared/lib/auto-journal');
+    await postPayableJournal({
+      payableId: payable.id,
+      supplierName: data.supplierName,
+      amount: data.amount,
+      category: data.category || undefined,
+      businessId: session.user.businessId,
     });
 
     return NextResponse.json(payable, { status: 201 });

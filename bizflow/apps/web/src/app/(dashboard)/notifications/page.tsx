@@ -1,14 +1,14 @@
 "use client";
 
 import React from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useNotifications, useMarkAllNotificationsRead } from "@/hooks/useNotifications";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
+import { useNotifications, useMarkAllNotificationsRead } from "@/shared/hooks/useNotifications";
 import { Bell, AlertTriangle, ShoppingCart, CreditCard, Info, CheckCheck } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/utils";
+import { cn } from "@/shared/lib/utils";
+import { formatDate } from "@/shared/lib/utils";
 
 const iconMap: Record<string, React.ReactNode> = {
   alert: <AlertTriangle size={16} className="text-rose-400" />,

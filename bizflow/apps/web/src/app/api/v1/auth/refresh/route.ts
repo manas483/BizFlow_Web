@@ -7,16 +7,16 @@
  */
 
 import { NextRequest }         from 'next/server';
-import { prisma }              from '@/lib/db';
-import { ROLE_PERMISSIONS }    from '@/lib/permissions';
+import { prisma }              from '@/shared/lib/db';
+import { ROLE_PERMISSIONS }    from '@/shared/lib/permissions';
 import {
   signAccessToken,
   generateRefreshToken,
   refreshTokenExpiresAt,
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_DAYS,
-} from '@/lib/mobile-jwt';
-import { created, err } from '@/lib/response';
+} from '@/shared/lib/mobile-jwt';
+import { created, err } from '@/shared/lib/response';
 import { z }            from 'zod';
 
 const schema = z.object({ refresh_token: z.string().min(1) });

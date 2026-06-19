@@ -8,8 +8,8 @@
  */
 
 import { NextRequest } from 'next/server';
-import { prisma }      from '@/lib/db';
-import { ok, err }     from '@/lib/response';
+import { prisma }      from '@/shared/lib/db';
+import { ok, err }     from '@/shared/lib/response';
 import { z }           from 'zod';
 
 const schema = z.object({ refresh_token: z.string().min(1) });

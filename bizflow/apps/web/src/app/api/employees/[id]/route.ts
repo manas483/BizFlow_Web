@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { employeeSchema } from '@/lib/validations';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { employeeSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -78,6 +78,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return emp;
     });
 
+    const { logAudit, computeChanges } = await import('@/shared/lib/audit');
+    const changes = computeChanges(existing as any, employee as any);
+    if (changes) {
+      await logAudit({
+        session,
+        action: 'UPDATE',
+        entityType: 'Employee',
+        entityId: employee.id,
+        entityLabel: employee.name,
+        changes,
+      });
+    }
+
     return NextResponse.json(employee);
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
@@ -100,6 +113,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     await prisma.employee.delete({ where: { id } });
+
+    const { logAudit } = await import('@/shared/lib/audit');
+    await logAudit({
+      session,
+      action: 'DELETE',
+      entityType: 'Employee',
+      entityId: id,
+      entityLabel: existing.name,
+    });
+
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof AuthError) return error.response;

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { loanMasterSchema } from '@/lib/validations';
-import { generateNextNumber, generateEMISchedule } from '@/lib/accounting-utils';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { loanMasterSchema } from '@/shared/lib/validations';
+import { generateNextNumber, generateEMISchedule } from '@/shared/lib/accounting-utils';
 import { z } from 'zod';export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth();

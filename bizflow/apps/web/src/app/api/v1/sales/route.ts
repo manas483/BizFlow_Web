@@ -4,10 +4,12 @@
  */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { saleSchema }             from '@/lib/validations';
-import { ok, created, validationError, businessRule, internalError, parsePagination, buildPagination } from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { saleSchema }             from '@/shared/lib/validations';
+import { ok, created, validationError, businessRule, internalError, parsePagination, buildPagination } from '@/shared/lib/response';
+import { extractStateCodeFromGST } from '@/shared/lib/gst-engine';
+import { calculateInvoiceTotal } from '@/shared/lib/invoice-engine';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest) {
@@ -67,25 +69,47 @@ export async function POST(req: NextRequest) {
     const { customerId, items, paid, placeOfSupply, reverseCharge, notes } = parsed.data;
 
     const result = await prisma.$transaction(async (tx: any) => {
-      const business     = await tx.business.findUnique({ where: { id: biz }, select: { gstInclusive: true } });
-      const gstInclusive = business?.gstInclusive ?? false;
+      const customer = await tx.customer.findFirst({
+        where: { id: customerId, businessId: biz },
+        select: { id: true }
+      });
+      if (!customer) throw Object.assign(new Error('Customer not found or access denied'), { code: 'BUSINESS_RULE' });
 
-      let total = 0;
-      const enriched = [];
+      const business     = await tx.business.findUnique({ where: { id: biz }, select: { gstInclusive: true, gstNumber: true, stateCode: true } });
+      const gstInclusive = business?.gstInclusive ?? false;
+      const businessStateCode = business?.stateCode || extractStateCodeFromGST(business?.gstNumber) || null;
+
+      // Resolve place of supply state code
+      let placeOfSupplyCode: string | null = null;
+      if (placeOfSupply) {
+        placeOfSupplyCode = placeOfSupply.length === 2 && /^\d{2}$/.test(placeOfSupply)
+          ? placeOfSupply
+          : businessStateCode;
+      }
+
+      const productMap: Record<string, any> = {};
+      const invoiceLines = [];
 
       for (const item of items) {
         const product = await tx.product.findFirst({ where: { id: item.productId, businessId: biz } });
         if (!product) throw new Error(`Product ${item.productId} not found`);
         if (product.stock < item.qty) throw Object.assign(new Error(`Insufficient stock for "${product.name}"`), { code: 'BUSINESS_RULE' });
-
-        const gross = item.qty * item.price - (item.discount || 0);
-        const rate  = item.gstRate || product.gstRate || 0;
-        const tax   = gstInclusive && rate > 0 ? gross - gross / (1 + rate / 100) : gross * (rate / 100);
-        total += gstInclusive ? gross : gross + tax;
-
-        await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
-        enriched.push({ ...item, purchasePrice: product.purchasePrice });
+        productMap[item.productId] = product;
+        invoiceLines.push({
+          qty: item.qty,
+          price: item.price,
+          discount: item.discount || 0,
+          gstRate: item.gstRate || product.gstRate || 0,
+        });
       }
+
+      const invoiceResult = calculateInvoiceTotal(
+        invoiceLines,
+        businessStateCode,
+        placeOfSupplyCode,
+        gstInclusive,
+      );
+      const total = invoiceResult.grandTotal;
 
       const year   = new Date().getFullYear();
       const prefix = `INV-${year}-`;
@@ -95,6 +119,13 @@ export async function POST(req: NextRequest) {
 
       const paidAmt  = typeof paid === 'number' ? paid : parseFloat(String(paid)) || 0;
       const saleStatus = paidAmt >= total ? 'PAID' : paidAmt > 0 ? 'PARTIAL' : 'UNPAID';
+
+      const enriched = items.map((item: any) => ({ ...item, purchasePrice: productMap[item.productId]?.purchasePrice || 0 }));
+
+      // Deduct stock for each item
+      for (const item of items) {
+        await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
+      }
 
       const sale = await tx.sale.create({
         data: {

@@ -7,7 +7,7 @@ import {
   Store, Package, CheckCircle2, ArrowRight, Sparkles,
   ChevronRight, Loader2, Zap, LayoutDashboard, Star,
 } from "lucide-react";
-import { getBusinessProfile } from "@/lib/business-intelligence";
+import { getBusinessProfile } from "@/shared/lib/business-intelligence";
 
 type Step = "welcome" | "seeding" | "categories" | "done";
 

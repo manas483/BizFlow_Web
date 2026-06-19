@@ -2,24 +2,24 @@
 
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { StatCard } from "@/components/ui/StatCard";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card } from "@/shared/ui/ui/Card";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import ConfirmDialog from "@/shared/ui/ui/ConfirmDialog";
 import {
   useEmployees, useDeleteEmployee, useResendInvitation, useSuspendEmployee,
-} from "@/hooks/useEmployees";
-import { formatCurrency, formatDate, getInitials } from "@/lib/utils";
+} from "@/shared/hooks/useEmployees";
+import { formatCurrency, formatDate, getInitials } from "@/shared/lib/utils";
 import {
   UserCheck, Plus, Search, IndianRupee, Users, Star, Pencil, Trash2,
   CalendarCheck, Ban, RefreshCw, ShieldAlert, Clock, CheckCircle2, Mail,
   CalendarDays, ThumbsUp, ThumbsDown, Loader2, AlertCircle,
 } from "lucide-react";
-import AddEmployeeModal from "@/components/modals/AddEmployeeModal";
-import EditEmployeeModal from "@/components/modals/EditEmployeeModal";
-import AttendanceModal from "@/components/modals/AttendanceModal";
+import AddEmployeeModal from "@/shared/ui/modals/AddEmployeeModal";
+import EditEmployeeModal from "@/shared/ui/modals/EditEmployeeModal";
+import AttendanceModal from "@/shared/ui/modals/AttendanceModal";
 
 const roleColors: Record<string, "violet" | "info" | "success" | "warning" | "default"> = {
   SUPER_ADMIN: "violet",

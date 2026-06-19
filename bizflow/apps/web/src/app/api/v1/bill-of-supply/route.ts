@@ -4,10 +4,10 @@
  */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { billOfSupplySchema }     from '@/lib/validations';
-import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { billOfSupplySchema }     from '@/shared/lib/validations';
+import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/shared/lib/response';
 
 export async function GET(req: NextRequest) {
   try {
@@ -53,6 +53,12 @@ export async function POST(req: NextRequest) {
     const parsed  = billOfSupplySchema.safeParse(await req.json());
     if (!parsed.success) return validationError(parsed.error.issues);
     const { customerId, items, paid, supplyType, notes } = parsed.data;
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, businessId: session.user.businessId },
+      select: { id: true }
+    });
+    if (!customer) throw new Error('Customer not found or access denied');
 
     // Collision-safe numbering
     const year   = new Date().getFullYear();

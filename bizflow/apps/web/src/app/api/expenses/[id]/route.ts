@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { expenseSchema } from '@/lib/validations';
-import { recalculateTransportCosts } from '@/lib/expense-calculations';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { expenseSchema } from '@/shared/lib/validations';
+import { recalculateTransportCosts } from '@/shared/lib/expense-calculations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -51,6 +51,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     await recalculateTransportCosts(session.user.businessId);
 
+    const { logAudit, computeChanges } = await import('@/shared/lib/audit');
+    const changes = computeChanges(existing as any, expense as any);
+    if (changes) {
+      await logAudit({
+        session,
+        action: 'UPDATE',
+        entityType: 'Expense',
+        entityId: expense.id,
+        entityLabel: `${expense.category}: ₹${expense.amount}`,
+        changes,
+      });
+    }
+
     return NextResponse.json(expense);
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
@@ -75,6 +88,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await prisma.expense.delete({ where: { id } });
 
     await recalculateTransportCosts(session.user.businessId);
+
+    const { logAudit } = await import('@/shared/lib/audit');
+    await logAudit({
+      session,
+      action: 'DELETE',
+      entityType: 'Expense',
+      entityId: id,
+      entityLabel: `${existing.category}: ₹${existing.amount}`,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

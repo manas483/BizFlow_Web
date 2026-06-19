@@ -1,19 +1,19 @@
 "use client";
 
 import { useState, use } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { StatCard } from "@/components/ui/StatCard";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useLoan, useUpdateLoan } from "@/hooks/useLoans";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { Badge } from "@/shared/ui/ui/Badge";
+import { Button } from "@/shared/ui/ui/Button";
+import { useLoan, useUpdateLoan } from "@/shared/hooks/useLoans";
+import { formatCurrency, formatDate } from "@/shared/lib/utils";
 import { Landmark, ArrowLeft, CircleDollarSign, ShieldAlert, CheckCircle2, ListOrdered, Receipt, Scale, FileText } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import RecordLoanPaymentModal from "@/components/modals/RecordLoanPaymentModal";
-import ForeclosureModal from "@/components/modals/ForeclosureModal";
-import LoanDocumentsTab from "@/components/loans/LoanDocumentsTab";
+import RecordLoanPaymentModal from "@/shared/ui/modals/RecordLoanPaymentModal";
+import ForeclosureModal from "@/shared/ui/modals/ForeclosureModal";
+import LoanDocumentsTab from "@/shared/ui/loans/LoanDocumentsTab";
 
 export default function LoanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

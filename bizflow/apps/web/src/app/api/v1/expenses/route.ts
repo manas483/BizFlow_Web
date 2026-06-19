@@ -4,10 +4,10 @@
  */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { expenseSchema }          from '@/lib/validations';
-import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { expenseSchema }          from '@/shared/lib/validations';
+import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/shared/lib/response';
 
 export async function GET(req: NextRequest) {
   try {

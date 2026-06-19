@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { employeeSchema } from '@/lib/validations';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { employeeSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
 import { randomBytes } from 'crypto';
-import { sendEmployeeInvitationEmail } from '@/lib/email';
+import { sendEmployeeInvitationEmail } from '@/shared/lib/email';
 
 export async function GET(req: NextRequest) {
   try {
@@ -27,7 +27,20 @@ export async function GET(req: NextRequest) {
       prisma.employee.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        include: { user: true },
+        include: { 
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              emailVerified: true,
+              role: true,
+              createdAt: true,
+              twoFactorEnabled: true,
+              password: true,
+            }
+          }
+        },
         skip,
         take: limit,
       }),
@@ -75,6 +88,9 @@ export async function GET(req: NextRequest) {
 
     // Inject computed attendance% (fall back to stored value if no records)
     const enriched = employees.map(e => {
+      if (e.user) {
+        delete (e.user as any).password;
+      }
       const rec = attMap[e.id];
       const pct = rec && rec.total > 0
         ? Math.round(((rec.present + rec.half * 0.5) / rec.total) * 100)
@@ -231,6 +247,15 @@ export async function POST(req: NextRequest) {
       inviteLink,
       businessName
     );
+
+    const { logAudit } = await import('@/shared/lib/audit');
+    await logAudit({
+      session,
+      action: 'CREATE',
+      entityType: 'Employee',
+      entityId: employee.id,
+      entityLabel: employee.name,
+    });
 
     return NextResponse.json(employee, { status: 201 });
   } catch (error) {

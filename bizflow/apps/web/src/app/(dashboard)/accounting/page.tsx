@@ -1,11 +1,11 @@
 "use client";
 
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { StatCard } from "@/components/ui/StatCard";
-import { Button } from "@/components/ui/Button";
-import { useAccounts, useJournalEntries, useReceivables, usePayables } from "@/hooks/useAccounting";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/ui/Card";
+import { StatCard } from "@/shared/ui/ui/StatCard";
+import { Button } from "@/shared/ui/ui/Button";
+import { useAccounts, useJournalEntries, useReceivables, usePayables } from "@/shared/hooks/useAccounting";
+import { formatCurrency, formatDate } from "@/shared/lib/utils";
 import Link from "next/link";
 import {
   BookOpen, FileText, ArrowDownRight, ArrowUpRight,
@@ -26,17 +26,77 @@ const modules = [
   { href: "/accounting/reports", icon: FileBarChart, label: "Financial Reports", description: "P&L, Balance Sheet, Cash Flow", color: "purple" },
 ];
 
-const colorMap: Record<string, string> = {
-  violet: "from-violet-500/20 to-violet-600/5 text-violet-400 border-violet-500/20",
-  blue: "from-blue-500/20 to-blue-600/5 text-blue-400 border-blue-500/20",
-  emerald: "from-emerald-500/20 to-emerald-600/5 text-emerald-400 border-emerald-500/20",
-  green: "from-green-500/20 to-green-600/5 text-green-400 border-green-500/20",
-  orange: "from-orange-500/20 to-orange-600/5 text-orange-400 border-orange-500/20",
-  cyan: "from-cyan-500/20 to-cyan-600/5 text-cyan-400 border-cyan-500/20",
-  indigo: "from-indigo-500/20 to-indigo-600/5 text-indigo-400 border-indigo-500/20",
-  amber: "from-amber-500/20 to-amber-600/5 text-amber-400 border-amber-500/20",
-  rose: "from-rose-500/20 to-rose-600/5 text-rose-400 border-rose-500/20",
-  purple: "from-purple-500/20 to-purple-600/5 text-purple-400 border-purple-500/20",
+const colorMap: Record<string, { border: string; hoverBorder: string; hoverGlow: string; icon: string; text: string }> = {
+  violet: {
+    border: "border-violet-500/10",
+    hoverBorder: "hover:border-violet-500/30",
+    hoverGlow: "hover:shadow-violet-500/5",
+    icon: "bg-violet-500/10 text-violet-400",
+    text: "text-violet-400",
+  },
+  blue: {
+    border: "border-blue-500/10",
+    hoverBorder: "hover:border-blue-500/30",
+    hoverGlow: "hover:shadow-blue-500/5",
+    icon: "bg-blue-500/10 text-blue-400",
+    text: "text-blue-400",
+  },
+  emerald: {
+    border: "border-emerald-500/10",
+    hoverBorder: "hover:border-emerald-500/30",
+    hoverGlow: "hover:shadow-emerald-500/5",
+    icon: "bg-emerald-500/10 text-emerald-400",
+    text: "text-emerald-400",
+  },
+  green: {
+    border: "border-green-500/10",
+    hoverBorder: "hover:border-green-500/30",
+    hoverGlow: "hover:shadow-green-500/5",
+    icon: "bg-green-500/10 text-green-400",
+    text: "text-green-400",
+  },
+  orange: {
+    border: "border-orange-500/10",
+    hoverBorder: "hover:border-orange-500/30",
+    hoverGlow: "hover:shadow-orange-500/5",
+    icon: "bg-orange-500/10 text-orange-400",
+    text: "text-orange-400",
+  },
+  cyan: {
+    border: "border-cyan-500/10",
+    hoverBorder: "hover:border-cyan-500/30",
+    hoverGlow: "hover:shadow-cyan-500/5",
+    icon: "bg-cyan-500/10 text-cyan-400",
+    text: "text-cyan-400",
+  },
+  indigo: {
+    border: "border-indigo-500/10",
+    hoverBorder: "hover:border-indigo-500/30",
+    hoverGlow: "hover:shadow-indigo-500/5",
+    icon: "bg-indigo-500/10 text-indigo-400",
+    text: "text-indigo-400",
+  },
+  amber: {
+    border: "border-amber-500/10",
+    hoverBorder: "hover:border-amber-500/30",
+    hoverGlow: "hover:shadow-amber-500/5",
+    icon: "bg-amber-500/10 text-amber-400",
+    text: "text-amber-400",
+  },
+  rose: {
+    border: "border-rose-500/10",
+    hoverBorder: "hover:border-rose-500/30",
+    hoverGlow: "hover:shadow-rose-500/5",
+    icon: "bg-rose-500/10 text-rose-400",
+    text: "text-rose-400",
+  },
+  purple: {
+    border: "border-purple-500/10",
+    hoverBorder: "hover:border-purple-500/30",
+    hoverGlow: "hover:shadow-purple-500/5",
+    icon: "bg-purple-500/10 text-purple-400",
+    text: "text-purple-400",
+  },
 };
 
 export default function AccountingPage() {
@@ -64,22 +124,22 @@ export default function AccountingPage() {
 
       {/* Quick Stats — all dynamic from API data */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-        <StatCard label="Total Accounts" value={totalAccounts} icon={<BookOpen size={18} />} color="violet" />
-        <StatCard label="Posted Entries" value={postedEntries} icon={<FileText size={18} />} color="blue" />
-        <StatCard label="AR Outstanding" value={formatCurrency(arOutstanding)} icon={<ArrowDownRight size={18} />} color="emerald" />
-        <StatCard label="AP Outstanding" value={formatCurrency(apOutstanding)} icon={<ArrowUpRight size={18} />} color="amber" />
+        <StatCard label="Total Accounts" value={totalAccounts} icon={<BookOpen size={18} />} color="violet" className="rounded-3xl" />
+        <StatCard label="Posted Entries" value={postedEntries} icon={<FileText size={18} />} color="blue" className="rounded-3xl" />
+        <StatCard label="AR Outstanding" value={formatCurrency(arOutstanding)} icon={<ArrowDownRight size={18} />} color="emerald" className="rounded-3xl" />
+        <StatCard label="AP Outstanding" value={formatCurrency(apOutstanding)} icon={<ArrowUpRight size={18} />} color="amber" className="rounded-3xl" />
       </div>
 
       {/* Module Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
         {modules.map(({ href, icon: Icon, label, description, color }) => (
           <Link key={href} href={href}>
-            <div className={`group relative p-4 rounded-2xl border bg-gradient-to-br ${colorMap[color]} hover:scale-[1.02] transition-all duration-200 cursor-pointer`}>
+            <div className={`group relative p-4 rounded-xl border bg-surface ${colorMap[color].border} ${colorMap[color].hoverBorder} hover:shadow-lg ${colorMap[color].hoverGlow} hover:scale-[1.02] transition-all duration-200 cursor-pointer`}>
               <div className="flex items-start justify-between mb-3">
-                <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center">
+                <div className={`w-10 h-10 rounded-xl ${colorMap[color].icon} flex items-center justify-center`}>
                   <Icon size={20} />
                 </div>
-                <ChevronRight size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                <ChevronRight size={16} className={`opacity-0 group-hover:opacity-100 transition-opacity ${colorMap[color].text}`} />
               </div>
               <h3 className="font-semibold text-sm text-primary">{label}</h3>
               <p className="text-xs text-primary/40 mt-1">{description}</p>

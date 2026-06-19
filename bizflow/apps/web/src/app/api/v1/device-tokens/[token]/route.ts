@@ -6,9 +6,9 @@
  */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { ok, notFound, forbidden, internalError } from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { ok, notFound, forbidden, internalError } from '@/shared/lib/response';
 
 export async function DELETE(
   _: NextRequest,

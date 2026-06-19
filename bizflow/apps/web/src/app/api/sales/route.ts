@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { saleSchema } from '@/lib/validations';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { saleSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
+import { extractStateCodeFromGST } from '@/shared/lib/gst-engine';
+import { calculateInvoiceTotal } from '@/shared/lib/invoice-engine';
+import { adjustStock } from '@/shared/lib/stock-engine';
+import { postSaleJournal } from '@/shared/lib/auto-journal';
 
 export async function GET(req: NextRequest) {
   try {
@@ -46,38 +50,78 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(req: NextRequest) {
+  // A-3 FIX: Retry loop for invoice number collision.
+  // If two concurrent transactions generate the same invoice number,
+  // the @@unique([businessId, invoiceNo]) constraint will throw a P2002 error.
+  // We catch it and retry with the next number (max 3 attempts).
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
   try {
     const session = await requireAuth();
     const body = await req.json();
     const validatedData = saleSchema.parse(body);
-    const { customerId, items, paid, status, notes, placeOfSupply, reverseCharge, isAggregate, aggregateDate } = validatedData;
+    const { customerId, items, paid, status, notes, placeOfSupply, reverseCharge, isAggregate, aggregateDate, invoiceDate } = validatedData;
 
     const result = await prisma.$transaction(async (tx: any) => {
+      const customer = await tx.customer.findFirst({
+        where: { id: customerId, businessId: session.user.businessId },
+        select: { id: true }
+      });
+      if (!customer) {
+        throw Object.assign(new Error('Customer not found or access denied'), { code: 'BUSINESS_RULE' });
+      }
+
       // 0. Get business settings
       const business = await tx.business.findUnique({
         where: { id: session.user.businessId },
-        select: { gstInclusive: true }
+        select: { gstInclusive: true, gstNumber: true, stateCode: true, state: true }
       });
       const gstInclusive = business?.gstInclusive ?? false;
+      const businessStateCode = business?.stateCode || extractStateCodeFromGST(business?.gstNumber) || null;
 
-      // 1. Calculate total
-      let total = 0;
+      // Resolve place of supply state code
+      let placeOfSupplyCode: string | null = null;
+      if (placeOfSupply) {
+        // placeOfSupply could be a state code ("27") or state name
+        placeOfSupplyCode = placeOfSupply.length === 2 && /^\d{2}$/.test(placeOfSupply)
+          ? placeOfSupply
+          : businessStateCode; // default to same state if not a code
+      }
+
+      // 1. Calculate total with Invoice Engine
       const productMap: Record<string, any> = {};
+      const invoiceLines = [];
+
       for (const item of items) {
         const product = await tx.product.findFirst({ where: { id: item.productId, businessId: session.user.businessId } });
         if (!product) throw new Error(`Product ${item.productId} not found`);
         productMap[item.productId] = product;
         if (product.stock < item.qty) throw new Error(`Insufficient stock for ${product.name}`);
-        const amount = (product.sellingPrice * item.qty) - (item.discount || 0);
-        const rate = item.gstRate || product.gstRate || 0;
-        
-        if (gstInclusive && rate > 0) {
-          total += amount;
-        } else {
-          const itemGst = amount * (rate / 100);
-          total += amount + itemGst;
-        }
+        invoiceLines.push({
+          qty: item.qty,
+          price: product.sellingPrice,
+          discount: item.discount || 0,
+          gstRate: item.gstRate || product.gstRate || 0,
+        });
       }
+
+      const invoiceResult = calculateInvoiceTotal(
+        invoiceLines,
+        businessStateCode,
+        placeOfSupplyCode,
+        gstInclusive,
+      );
+      const total = invoiceResult.grandTotal;
+      // Build gstBreakdown for backward-compatible journal posting
+      const gstBreakdown = {
+        totalTaxableValue: invoiceResult.totalTaxable,
+        totalCgst: invoiceResult.totalCgst,
+        totalSgst: invoiceResult.totalSgst,
+        totalIgst: invoiceResult.totalIgst,
+        totalTax: invoiceResult.totalTax,
+        grandTotal: invoiceResult.grandTotal,
+        isInterState: invoiceResult.isInterState,
+      };
 
       // 2. Auto-generate invoice number (collision-proof)
       const year = new Date().getFullYear();
@@ -108,6 +152,7 @@ export async function POST(req: NextRequest) {
           reverseCharge: reverseCharge === true,
           isAggregate: isAggregate === true,
           aggregateDate: aggregateDate || null,
+          invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
           businessId: session.user.businessId,
           items: {
               create: items.map((item: any) => ({
@@ -123,46 +168,15 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      // 4. Stock auto-deduction and low stock check
+      // 4. Stock auto-deduction via Stock Engine
       for (const item of items) {
-        const updatedProduct = await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.qty } }
+        await adjustStock({
+          productId: item.productId,
+          qty: item.qty,
+          type: 'sale',
+          businessId: session.user.businessId,
+          tx,
         });
-
-        if (updatedProduct.stock <= updatedProduct.minStock) {
-          // Check if a recent low stock notification already exists for this product to avoid spam
-          const recentNotif = await tx.notification.findFirst({
-            where: {
-              businessId: session.user.businessId,
-              type: 'alert',
-              message: { contains: updatedProduct.name },
-              read: false,
-            }
-          });
-
-          if (!recentNotif) {
-            await tx.notification.create({
-              data: {
-                type: 'alert',
-                title: 'Low Stock Alert',
-                message: `Product "${updatedProduct.name}" is running low on stock (${updatedProduct.stock} left).`,
-                businessId: session.user.businessId,
-              }
-            });
-
-            // Send Email Alert
-            // Get business owner or super admin email
-            const admin = await tx.user.findFirst({
-              where: { businessId: session.user.businessId, role: { in: ['SUPER_ADMIN', 'MANAGER'] } },
-              orderBy: { role: 'asc' } // SUPER_ADMIN first
-            });
-            if (admin) {
-              const { sendLowStockAlert } = await import('@/lib/email');
-              await sendLowStockAlert(admin.email, updatedProduct.name, updatedProduct.stock);
-            }
-          }
-        }
       }
 
       // 5. Update customer dues and totalPurchases
@@ -184,15 +198,68 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      return sale;
+      // 7. Auto-create Cash Book entry for cash received
+      if ((paid || 0) > 0) {
+        const { postCashBookEntry } = await import('@/shared/lib/auto-journal');
+        await postCashBookEntry({
+          amount: paid || 0,
+          type: 'RECEIPT',
+          narration: `Cash received for Invoice ${invoiceNo}`,
+          reference: invoiceNo,
+          businessId: session.user.businessId,
+          date: invoiceDate ? new Date(invoiceDate) : new Date(),
+          tx,
+        });
+      }
+
+      return { sale, gstBreakdown };
     });
 
-    return NextResponse.json(result, { status: 201 });
+    // A-4 FIX: Use dynamic import() instead of require() for proper tree-shaking
+    const { logAudit } = await import('@/shared/lib/audit');
+    await logAudit({
+      session,
+      action: 'CREATE',
+      entityType: 'Sale',
+      entityId: result.sale.id,
+      entityLabel: result.sale.invoiceNo,
+    });
+
+    // 8. Auto-post journal entry (fire-and-forget, never blocks)
+    const customer = await prisma.customer.findUnique({ where: { id: validatedData.customerId }, select: { name: true } });
+    postSaleJournal({
+      saleId: result.sale.id,
+      invoiceNo: result.sale.invoiceNo,
+      customerId: validatedData.customerId,
+      customerName: customer?.name ?? 'Customer',
+      total: result.sale.total,
+      taxableValue: result.gstBreakdown.totalTaxableValue,
+      cgst: result.gstBreakdown.totalCgst,
+      sgst: result.gstBreakdown.totalSgst,
+      igst: result.gstBreakdown.totalIgst,
+      businessId: session.user.businessId,
+    }).catch(err => console.error('[AutoJournal] Sale journal failed:', err));
+
+    return NextResponse.json(result.sale, { status: 201 });
   } catch (error: any) {
+    // A-3 FIX: Retry on unique constraint violation (invoice number collision)
+    if (error?.code === 'P2002' && attempt < MAX_RETRIES - 1) {
+      console.warn(`[Sales] Invoice collision on attempt ${attempt + 1}, retrying...`);
+      continue;
+    }
     if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
     if (error instanceof AuthError) return error.response;
     console.error("Sale Creation Error:", error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 400 });
+    // C-5 FIX: Only expose known business-rule errors to the client.
+    // Internal errors (DB, Prisma, network) must never leak to the response.
+    const KNOWN_PREFIXES = ['Insufficient stock', 'Product ', 'Customer '];
+    const isBusinessError = KNOWN_PREFIXES.some(p => error.message?.startsWith(p));
+    return NextResponse.json(
+      { error: isBusinessError ? error.message : 'Internal Server Error' },
+      { status: isBusinessError ? 400 : 500 }
+    );
   }
+  } // end retry loop
+  return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
 }
 

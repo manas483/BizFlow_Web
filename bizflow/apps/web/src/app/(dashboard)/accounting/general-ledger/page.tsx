@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { useAccounts, useGeneralLedger } from "@/hooks/useAccounting";
-import { formatCurrency } from "@/lib/utils";
+import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
+import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
+import { useAccounts, useGeneralLedger } from "@/shared/hooks/useAccounting";
+import { formatCurrency } from "@/shared/lib/utils";
 import { Search, Calculator, Calendar } from "lucide-react";
 
 export default function GeneralLedgerPage() {

@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/monthly-report",
       "schedule": "0 8 1 * *"
+    },
+    {
+      "path": "/api/cron/daily-alerts",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/ai-refresh",
+      "schedule": "30 0 * * *"
     }
   ]
 }

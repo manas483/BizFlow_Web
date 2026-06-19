@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { computeBalanceSheet, computeProfitLoss, type LedgerEntry } from '@/lib/accounting-utils';
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { computeBalanceSheet, computeProfitLoss, type LedgerEntry } from '@/shared/lib/accounting-utils';
 
 export async function GET(req: NextRequest) {
   try {

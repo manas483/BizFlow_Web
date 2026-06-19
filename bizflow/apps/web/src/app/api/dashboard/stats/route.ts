@@ -1,86 +1,93 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-
-function pctChange(current: number, previous: number): number {
-  if (previous === 0) return current > 0 ? 100 : 0;
-  return parseFloat((((current - previous) / previous) * 100).toFixed(1));
-}
+import { prisma } from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth();
-    const biz = session.user.businessId;
+    const businessId = session.user.businessId;
 
     const now = new Date();
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    
+    // Current month bounds
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Previous month bounds
+    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
     const [
-      // All-time totals
-      revenueAll,
-      salesCountAll,
-      customerCountAll,
-      expensesAll,
-      // This month
-      revenueThis,
-      salesCountThis,
-      expensesThis,
-      customerCountThis,
-      // Last month
-      revenueLast,
-      salesCountLast,
-      expensesLast,
-      customerCountLast,
+      currentSales,
+      prevSales,
+      currentExpenses,
+      prevExpenses,
+      currentCustomers,
+      prevCustomers
     ] = await Promise.all([
-      // All-time
-      prisma.sale.aggregate({ where: { businessId: biz }, _sum: { total: true } }),
-      prisma.sale.count({ where: { businessId: biz } }),
-      prisma.customer.count({ where: { businessId: biz } }),
-      prisma.expense.aggregate({ where: { businessId: biz }, _sum: { amount: true } }),
-
-      // This month
-      prisma.sale.aggregate({ where: { businessId: biz, createdAt: { gte: thisMonthStart } }, _sum: { total: true } }),
-      prisma.sale.count({ where: { businessId: biz, createdAt: { gte: thisMonthStart } } }),
-      prisma.expense.aggregate({ where: { businessId: biz, date: { gte: thisMonthStart } }, _sum: { amount: true } }),
-      prisma.customer.count({ where: { businessId: biz, createdAt: { gte: thisMonthStart } } }),
-
-      // Last month
-      prisma.sale.aggregate({ where: { businessId: biz, createdAt: { gte: lastMonthStart, lte: lastMonthEnd } }, _sum: { total: true } }),
-      prisma.sale.count({ where: { businessId: biz, createdAt: { gte: lastMonthStart, lte: lastMonthEnd } } }),
-      prisma.expense.aggregate({ where: { businessId: biz, date: { gte: lastMonthStart, lte: lastMonthEnd } }, _sum: { amount: true } }),
-      prisma.customer.count({ where: { businessId: biz, createdAt: { gte: lastMonthStart, lte: lastMonthEnd } } }),
+      prisma.sale.aggregate({
+        where: { businessId, createdAt: { gte: startOfMonth, lte: endOfMonth }, status: { not: 'CANCELLED' } },
+        _sum: { total: true },
+        _count: true,
+      }),
+      prisma.sale.aggregate({
+        where: { businessId, createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth }, status: { not: 'CANCELLED' } },
+        _sum: { total: true },
+        _count: true,
+      }),
+      prisma.expense.aggregate({
+        where: { businessId, date: { gte: startOfMonth, lte: endOfMonth } },
+        _sum: { amount: true },
+      }),
+      prisma.expense.aggregate({
+        where: { businessId, date: { gte: startOfPrevMonth, lte: endOfPrevMonth } },
+        _sum: { amount: true },
+      }),
+      prisma.customer.aggregate({
+        where: { businessId, createdAt: { gte: startOfMonth, lte: endOfMonth } },
+        _count: true,
+      }),
+      prisma.customer.aggregate({
+        where: { businessId, createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth } },
+        _count: true,
+      }),
     ]);
 
-    const cur = {
-      revenue: revenueThis._sum.total ?? 0,
-      sales: salesCountThis,
-      expenses: expensesThis._sum.amount ?? 0,
-      customers: customerCountThis,
-    };
-    const prev = {
-      revenue: revenueLast._sum.total ?? 0,
-      sales: salesCountLast,
-      expenses: expensesLast._sum.amount ?? 0,
-      customers: customerCountLast,
+    // Also get total customers (not just this month)
+    const totalCustomersCount = await prisma.customer.count({
+      where: { businessId }
+    });
+
+    const revenue = currentSales._sum.total ?? 0;
+    const prevRevenue = prevSales._sum.total ?? 0;
+    
+    const salesCount = currentSales._count ?? 0;
+    const prevSalesCount = prevSales._count ?? 0;
+    
+    const expenses = currentExpenses._sum.amount ?? 0;
+    const prevExpensesSum = prevExpenses._sum.amount ?? 0;
+    
+    const newCustomers = currentCustomers._count ?? 0;
+    const prevNewCustomers = prevCustomers._count ?? 0;
+
+    const calcChange = (current: number, prev: number) => {
+      if (prev === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - prev) / prev) * 100);
     };
 
     return NextResponse.json({
-      // All-time totals shown in cards
-      revenue: revenueAll._sum.total ?? 0,
-      salesCount: salesCountAll,
-      customerCount: customerCountAll,
-      expenses: expensesAll._sum.amount ?? 0,
-
-      // Month-over-month % changes
+      revenue,
+      salesCount,
+      customerCount: totalCustomersCount,
+      expenses,
       changes: {
-        revenue:   pctChange(cur.revenue,   prev.revenue),
-        sales:     pctChange(cur.sales,     prev.sales),
-        expenses:  pctChange(cur.expenses,  prev.expenses),
-        customers: pctChange(cur.customers, prev.customers),
-      },
+        revenue: calcChange(revenue, prevRevenue),
+        sales: calcChange(salesCount, prevSalesCount),
+        customers: calcChange(newCustomers, prevNewCustomers),
+        expenses: calcChange(expenses, prevExpensesSum),
+      }
     });
+
   } catch (error) {
     if (error instanceof AuthError) return error.response;
     console.error(error);

@@ -4,10 +4,10 @@
  */
 
 import { NextRequest }            from 'next/server';
-import { prisma }                 from '@/lib/db';
-import { requireAuth, AuthError } from '@/lib/api-guard';
-import { debitCreditNoteSchema }  from '@/lib/validations';
-import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/lib/response';
+import { prisma }                 from '@/shared/lib/db';
+import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { debitCreditNoteSchema }  from '@/shared/lib/validations';
+import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/shared/lib/response';
 
 export async function GET(req: NextRequest) {
   try {
@@ -51,6 +51,20 @@ export async function POST(req: NextRequest) {
     const parsed  = debitCreditNoteSchema.safeParse(await req.json());
     if (!parsed.success) return validationError(parsed.error.issues);
     const { saleId, customerId, reason, amount, taxAmount, notes } = parsed.data;
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, businessId: session.user.businessId },
+      select: { id: true }
+    });
+    if (!customer) throw new Error('Customer not found or access denied');
+
+    if (saleId) {
+      const sale = await prisma.sale.findFirst({
+        where: { id: saleId, businessId: session.user.businessId },
+        select: { id: true }
+      });
+      if (!sale) throw new Error('Sale not found or access denied');
+    }
 
     const year   = new Date().getFullYear();
     const prefix = `DN-${year}-`;
