@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/shared/ui/ui/Card";
+import { Button } from "@/shared/ui/ui/Button";
 import { useAccounts, useGeneralLedger } from "@/shared/hooks/useAccounting";
 import { formatCurrency } from "@/shared/lib/utils";
 import { Search, Calculator, Calendar, ArrowLeft } from "lucide-react";
