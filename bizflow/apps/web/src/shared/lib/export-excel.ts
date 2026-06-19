@@ -1,10 +1,10 @@
 import * as XLSX from 'xlsx';
 import { format } from 'date-fns';
 
-export function exportRegister(type: 'sale' | 'stock', category: string, data: any, period: { from: string; to: string }) {
+export function exportRegister(type: 'sale' | 'stock' | 'combined', category: string, data: any, period: { from: string; to: string }) {
   const wb = XLSX.utils.book_new();
 
-  if (type === 'stock') {
+  if (type === 'stock' || type === 'combined') {
     const wsData = generateStockRegisterData(data);
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
@@ -30,7 +30,9 @@ export function exportRegister(type: 'sale' | 'stock', category: string, data: a
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, `${category} Stock Register`);
-  } else {
+  }
+  
+  if (type === 'sale' || type === 'combined') {
     const wsData = generateSaleRegisterData(data);
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
@@ -58,7 +60,9 @@ export function exportRegister(type: 'sale' | 'stock', category: string, data: a
     XLSX.utils.book_append_sheet(wb, ws, `${category} Sale Register`);
   }
 
-  const fileName = `${category}_${type}_Register_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+  const fileName = type === 'combined' 
+    ? `${category}_Register_${format(new Date(), 'yyyy-MM-dd')}.xlsx`
+    : `${category}_${type}_Register_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
   XLSX.writeFile(wb, fileName);
 }
 

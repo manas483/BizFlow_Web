@@ -17,7 +17,7 @@ export function useExportRegister() {
       .catch(console.error);
   }, []);
 
-  const handleExportRegister = async (type: 'sale' | 'stock', category: string, period: string, startDate?: string, endDate?: string) => {
+  const handleExportRegister = async (type: 'sale' | 'stock' | 'combined', category: string, period: string, startDate?: string, endDate?: string) => {
     setIsExporting(true);
     try {
       let url = `/api/reports/register?category=${encodeURIComponent(category)}&period=${period}`;

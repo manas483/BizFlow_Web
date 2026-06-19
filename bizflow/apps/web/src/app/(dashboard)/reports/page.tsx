@@ -211,20 +211,11 @@ export default function ReportsPage() {
                           <button 
                             className="w-full text-left px-3 py-1.5 text-xs text-primary/60 hover:bg-primary/5 hover:text-primary transition-colors flex items-center gap-2 rounded-md"
                             onClick={() => {
-                              handleExportRegister('sale', cat, period, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
+                              handleExportRegister('combined', cat, period, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
                               setIsExportMenuOpen(false);
                             }}
                           >
-                            <FileText size={12} className="text-blue-400" /> {cat} Sale Register
-                          </button>
-                          <button 
-                            className="w-full text-left px-3 py-1.5 text-xs text-primary/60 hover:bg-primary/5 hover:text-primary transition-colors flex items-center gap-2 rounded-md"
-                            onClick={() => {
-                              handleExportRegister('stock', cat, period, period === 'custom' ? startDate : undefined, period === 'custom' ? endDate : undefined);
-                              setIsExportMenuOpen(false);
-                            }}
-                          >
-                            <Package size={12} className="text-emerald-400" /> {cat} Stock Register
+                            <Package size={12} className="text-violet-400" /> {cat} Register
                           </button>
                         </div>
                       ))}
