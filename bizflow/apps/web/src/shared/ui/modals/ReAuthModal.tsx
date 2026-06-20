@@ -1,11 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/shared/ui/components/ui/dialog";
-import { Button } from "@/shared/ui/components/ui/button";
-import { Input } from "@/shared/ui/components/ui/input";
-import { Label } from "@/shared/ui/components/ui/label";
-import { Loader2, ShieldAlert } from "lucide-react";
+import Modal, { FormField, ModalInput, ModalFooter } from "@/shared/ui/ui/Modal";
+import { ShieldAlert } from "lucide-react";
 
 interface ReAuthModalProps {
   isOpen: boolean;
@@ -56,63 +53,47 @@ export function ReAuthModal({ isOpen, onClose, onSuccess, actionName = "this act
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-amber-500" />
-            Security Verification
-          </DialogTitle>
-          <DialogDescription>
-            Please re-authenticate to confirm {actionName}.
-          </DialogDescription>
-        </DialogHeader>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title="Security Verification"
+      subtitle={`Please re-authenticate to confirm ${actionName}.`}
+      icon={<ShieldAlert size={18} />}
+      iconColor="bg-amber-500/20 text-amber-500"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {!requires2FA ? (
+          <FormField label="Confirm your password" required>
+            <ModalInput
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              required
+            />
+          </FormField>
+        ) : (
+          <FormField label="Two-Factor Authentication Code" required hint="Enter the code from your authenticator app.">
+            <ModalInput
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={otpToken}
+              onChange={(e) => setOtpToken(e.target.value)}
+              placeholder="6-digit code or backup code"
+              required
+            />
+          </FormField>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          {!requires2FA ? (
-            <div className="space-y-2">
-              <Label htmlFor="password">Confirm your password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                required
-              />
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="otpToken">Two-Factor Authentication Code</Label>
-              <Input
-                id="otpToken"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={otpToken}
-                onChange={(e) => setOtpToken(e.target.value)}
-                placeholder="6-digit code or backup code"
-                required
-              />
-              <p className="text-sm text-muted-foreground">
-                Enter the code from your authenticator app.
-              </p>
-            </div>
-          )}
+        {error && <p className="text-sm font-medium text-rose-500">{error}</p>}
 
-          {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Verify
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <ModalFooter
+          onClose={onClose}
+          loading={loading}
+          submitLabel="Verify"
+        />
+      </form>
+    </Modal>
   );
 }
