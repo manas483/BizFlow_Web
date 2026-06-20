@@ -82,7 +82,7 @@ export default function TwoFactorSetupModal({ open, onClose, onSuccess }: TwoFac
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md mx-4 rounded-2xl border border-primary/10 p-6 max-h-[85vh] overflow-y-auto"
+      <div className="w-full max-w-md mx-4 rounded-2xl border border-primary/10 p-6 max-h-[calc(100vh-2rem)] overflow-y-auto"
         style={{ background: "var(--bg-surface)" }}>
 
         {/* Header */}

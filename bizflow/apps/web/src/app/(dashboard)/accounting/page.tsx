@@ -139,7 +139,7 @@ export default function AccountingPage() {
                 <div className={`w-10 h-10 rounded-xl ${colorMap[color].icon} flex items-center justify-center`}>
                   <Icon size={20} />
                 </div>
-                <ChevronRight size={16} className={`opacity-0 group-hover:opacity-100 transition-opacity ${colorMap[color].text}`} />
+                <ChevronRight size={16} className={`opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity ${colorMap[color].text}`} />
               </div>
               <h3 className="font-semibold text-sm text-primary">{label}</h3>
               <p className="text-xs text-primary/40 mt-1">{description}</p>

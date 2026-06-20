@@ -10,10 +10,11 @@ export const authConfig = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
-    updateAge: 24 * 60 * 60,
+    maxAge: 7 * 24 * 60 * 60, // 7 days (Remember Me limit)
+    updateAge: 15 * 60, // 15 minutes
   },
   jwt: {
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 7 * 24 * 60 * 60, // 7 days
   },
+  useSecureCookies: process.env.NODE_ENV === "production",
 } satisfies NextAuthConfig;

@@ -168,27 +168,27 @@ export default function EditExpenseModal({ expense, onClose }: EditExpenseModalP
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div
-        className="w-full max-w-md rounded-2xl shadow-2xl"
+        className="w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[calc(100vh-2rem)] animate-in fade-in zoom-in-95 duration-200"
         style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between px-6 py-4 border-b"
+          className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0"
           style={{ borderColor: "var(--border)" }}
         >
           <h2 className="font-semibold text-primary">Edit Expense</h2>
           <button
             onClick={onClose}
             aria-label="Close edit expense modal"
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-primary/40 hover:text-primary transition-colors"
+            className="p-1.5 rounded-lg hover:bg-primary/10 text-primary/40 hover:text-primary transition-colors flex-shrink-0"
           >
             <X size={16} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
           {/* Error banner */}
           {error && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">

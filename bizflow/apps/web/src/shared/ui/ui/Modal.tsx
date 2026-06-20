@@ -47,15 +47,15 @@ export default function Modal({ open, onClose, title, subtitle, children, size =
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-4"
       style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div
         className={cn(
-          // Mobile: full width, rounded top corners (bottom-sheet style)
-          "w-full rounded-t-2xl sm:rounded-2xl shadow-2xl",
-          "animate-in fade-in slide-in-from-bottom-4 duration-200",
+          // Mobile & Desktop: perfectly centered
+          "w-full rounded-2xl shadow-2xl",
+          "animate-in fade-in zoom-in-95 duration-200",
           // Desktop: max-width constraint
           "sm:max-w-sm sm:w-auto",
           size === "sm" && "sm:max-w-sm",
@@ -69,7 +69,7 @@ export default function Modal({ open, onClose, title, subtitle, children, size =
           // Always full width on mobile, constrained on sm+
           "sm:w-full",
           // Max height with scrollable body
-          "flex flex-col max-h-[90vh]"
+          "flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[90vh]"
         )}
         style={{
           backgroundColor: "var(--bg-surface)",
@@ -102,7 +102,7 @@ export default function Modal({ open, onClose, title, subtitle, children, size =
         </div>
 
         {/* Body — scrollable */}
-        <div className="px-4 py-4 sm:p-5 overflow-y-auto flex-1">{children}</div>
+        <div className="px-4 pt-4 pb-8 sm:p-5 overflow-y-auto flex-1 min-h-0">{children}</div>
       </div>
     </div>
   );

@@ -129,6 +129,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async jwt({ token, user, trigger, session: updateSession }) {
+      const now = Date.now();
+
       // On initial sign-in — store everything from authorize()
       if (user) {
         token.role = user.role;
@@ -136,7 +138,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.businessType = (user as any).businessType;
         token.permissions = (user as any).permissions ?? [];
+        token.sessionStart = now;
+        token.lastActive = now;
       }
+
+      const sessionStart = (token.sessionStart as number) || now;
+      const lastActive = (token.lastActive as number) || now;
+
+      // ── 1. Absolute Session Lifetime (12 hours) ─────────────────────────
+      const ABSOLUTE_LIMIT = 12 * 60 * 60 * 1000;
+      if (now - sessionStart > ABSOLUTE_LIMIT) {
+        throw new Error("SessionExpired");
+      }
+
+      // ── 2. Tiered Idle Timeout ──────────────────────────────────────────
+      const role = token.role as string;
+      const isAdminOrFinance = ["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"].includes(role);
+      const idleLimit = isAdminOrFinance ? 15 * 60 * 1000 : 60 * 60 * 1000;
+
+      if (!user && (now - lastActive > idleLimit)) {
+        throw new Error("SessionExpired");
+      }
+
+      token.lastActive = now; // Update last activity timestamp
 
       // On manual session update (e.g. after admin edits permissions)
       if (trigger === "update" && updateSession?.permissions) {
@@ -144,14 +168,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.permissionsRefreshedAt = 0; // Force refresh on next request
       }
 
-      // ── Throttled live permissions refresh ───────────────────────────────
-      // Refresh permissions from DB at most once every 5 minutes.
-      // Previously this ran on EVERY request, causing a DB round-trip
-      // on every page load / API call — catastrophic with serverless DB
-      // cold starts (200-500ms each). Now we cache in the JWT itself.
+      // ── 3. Throttled live DB sync & Revocability check ──────────────────
       const REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
       const lastRefresh = (token.permissionsRefreshedAt as number) || 0;
-      const now = Date.now();
 
       if (token.id && (now - lastRefresh > REFRESH_INTERVAL_MS)) {
         try {
@@ -159,7 +178,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             where: { id: token.id as string },
             include: { employee: { select: { permissions: true } } },
           });
+
           if (dbUser) {
+            // Check if the session has been globally revoked
+            if (dbUser.sessionValidSince && dbUser.sessionValidSince.getTime() > sessionStart) {
+              throw new Error("SessionRevoked");
+            }
+
             const roleDefaults: string[] =
               (ROLE_PERMISSIONS as any)[dbUser.role] ?? [];
             const empPerms = dbUser.employee?.permissions;
@@ -169,10 +194,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 : roleDefaults;
             token.role = dbUser.role;
             token.name = dbUser.name;
+          } else {
+            throw new Error("UserNotFound");
           }
           token.permissionsRefreshedAt = now;
-        } catch {
-          // Non-fatal — keep cached permissions if DB temporarily unavailable
+        } catch (error: any) {
+          // If we intentionally threw a revocation error, bubble it up to kill the session
+          if (["SessionRevoked", "UserNotFound"].includes(error.message)) {
+            throw error;
+          }
+          // Otherwise, it's a network/DB glitch, keep using cached JWT permissions
         }
       }
 

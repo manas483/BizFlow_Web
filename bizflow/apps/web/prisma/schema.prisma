@@ -83,6 +83,8 @@ model User {
   twoFactorSecret     String?        // encrypted TOTP secret
   backupCodes         String[]       @default([])  // hashed backup codes
   twoFactorVerifiedAt DateTime?      // when 2FA was first verified
+  // ── Session Management ──
+  sessionValidSince   DateTime       @default(now()) // used to revoke stateless JWTs
   business            Business       @relation(fields: [businessId], references: [id])
   employee            Employee?
   refreshTokens       RefreshToken[]

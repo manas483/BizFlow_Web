@@ -56,12 +56,12 @@ export default function ConfirmDialog({
       onClick={(e) => { if (e.target === overlayRef.current) onCancel(); }}
     >
       <div
-        className="w-full max-w-sm rounded-2xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
+        className="w-full max-w-sm rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[calc(100vh-2rem)]"
         style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}
       >
         {/* Icon + Title */}
-        <div className="p-6 flex flex-col items-center text-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-rose-500/15 flex items-center justify-center">
+        <div className="p-6 flex flex-col items-center text-center gap-4 overflow-y-auto flex-1 min-h-0">
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/15 flex items-center justify-center flex-shrink-0">
             <AlertTriangle size={26} className="text-rose-400" />
           </div>
           <div>
@@ -75,7 +75,7 @@ export default function ConfirmDialog({
         </div>
 
         {/* Buttons */}
-        <div className="flex gap-3 px-6 pb-6">
+        <div className="flex gap-3 px-6 pb-6 pt-2 shrink-0">
           <button
             type="button"
             onClick={onCancel}

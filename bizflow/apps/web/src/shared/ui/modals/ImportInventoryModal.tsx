@@ -465,7 +465,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                       </td>
                       <td className="px-2 py-1.5 text-center">
                         <button onClick={() => removeInvoiceProduct(idx)}
-                          className="opacity-0 group-hover:opacity-100 text-rose-400/60 hover:text-rose-400 transition-all" title="Remove">
+                          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-rose-400/60 hover:text-rose-400 transition-all" title="Remove">
                           <Trash2 size={12} />
                         </button>
                       </td>
