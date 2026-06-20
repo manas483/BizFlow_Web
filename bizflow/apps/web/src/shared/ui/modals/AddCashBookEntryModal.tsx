@@ -65,7 +65,7 @@ export default function AddCashBookEntryModal({ open, onClose }: { open: boolean
       title="Add Cash Book Entry" subtitle="Record physical cash receipts or payments"
       icon={<DollarSign size={18} />} iconColor="bg-violet-500/20 text-violet-400">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Entry Date" required>
             <ModalInput type="date" required value={form.date} onChange={set("date")} />
           </FormField>
@@ -77,7 +77,7 @@ export default function AddCashBookEntryModal({ open, onClose }: { open: boolean
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Ledger Account" required hint="Account this transaction affects">
             <ModalSelect value={form.accountId} onChange={set("accountId")} required>
               <option value="">-- Select Account --</option>

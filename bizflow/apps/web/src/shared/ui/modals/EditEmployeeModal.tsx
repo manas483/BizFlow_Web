@@ -73,7 +73,7 @@ export default function EditEmployeeModal({ employee, onClose }: { employee: any
       title="Edit Employee" subtitle="Update employee details"
       icon={<UserCheck size={18} />} iconColor="bg-emerald-500/20 text-emerald-400" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Full Name" required>
             <ModalInput required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </FormField>
@@ -84,7 +84,7 @@ export default function EditEmployeeModal({ employee, onClose }: { employee: any
         <FormField label="Email" required>
           <ModalInput type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Role (Access Level)">
             <CustomSelect value={form.role} onChange={(v) => setForm({ ...form, role: v })} options={ROLES} />
           </FormField>
@@ -136,7 +136,7 @@ export default function EditEmployeeModal({ employee, onClose }: { employee: any
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <FormField label="Monthly Salary (₹)">
             <ModalInput type="number" min="0" value={form.salary} onChange={(e) => setForm({ ...form, salary: e.target.value })} />
           </FormField>

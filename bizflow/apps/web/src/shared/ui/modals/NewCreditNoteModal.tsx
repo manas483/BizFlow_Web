@@ -65,7 +65,7 @@ export default function NewCreditNoteModal({ open, onClose }: { open: boolean; o
         <FormField label="Reason for Issuance" required>
           <CustomSelect value={reason} onChange={setReason} options={reasonOptions} placeholder="Select reason..." />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Taxable Value Adjustment (₹)" required>
             <ModalInput type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
           </FormField>

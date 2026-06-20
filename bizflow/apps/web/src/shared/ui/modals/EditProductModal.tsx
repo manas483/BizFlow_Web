@@ -119,7 +119,7 @@ export default function EditProductModal({ product, onClose }: { product: any; o
       title="Edit Product" subtitle="Update product details"
       icon={<Package size={18} />} iconColor="bg-violet-500/20 text-violet-400" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Item Name" required>
             <ModalInput required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </FormField>
@@ -128,7 +128,7 @@ export default function EditProductModal({ product, onClose }: { product: any; o
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Category">
             {/* Dynamic — driven by business type (e.g. Pharmacy shows medicines, not grains) */}
             <CustomSelect value={form.category} onChange={(v) => setForm({ ...form, category: v })} options={categoriesList} />
@@ -143,7 +143,7 @@ export default function EditProductModal({ product, onClose }: { product: any; o
           </FormField>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <FormField label="Opening Stock">
             <ModalInput type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
           </FormField>
@@ -155,7 +155,7 @@ export default function EditProductModal({ product, onClose }: { product: any; o
           </FormField>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <FormField label="Supplier / Vendor">
             <ModalInput value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
           </FormField>
@@ -169,7 +169,7 @@ export default function EditProductModal({ product, onClose }: { product: any; o
           </FormField>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <FormField label="Purchase Cost (₹/Unit)">
             <ModalInput type="number" min="0" step="any" value={form.basePurchasePrice}
               onChange={(e) => setForm({ ...form, basePurchasePrice: e.target.value })} />
@@ -192,7 +192,7 @@ export default function EditProductModal({ product, onClose }: { product: any; o
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="HSN/SAC Code">
             <ModalInput value={form.hsnCode} onChange={(e) => setForm({ ...form, hsnCode: e.target.value })} />
           </FormField>

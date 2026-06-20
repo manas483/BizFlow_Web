@@ -64,7 +64,7 @@ export default function AddAccountModal({ open, onClose, accounts = [] }: { open
       title="Add New Account" subtitle="Create an account code for the General Ledger"
       icon={<FolderTree size={18} />} iconColor="bg-violet-500/20 text-violet-400">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Account Code" required hint="e.g. 1100, 2200, 4001">
             <ModalInput required placeholder="Code" value={form.code} onChange={set("code")} />
           </FormField>
@@ -82,7 +82,7 @@ export default function AddAccountModal({ open, onClose, accounts = [] }: { open
           </ModalSelect>
         </FormField>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Account Type" required>
             <ModalSelect value={form.accountType} onChange={set("accountType")} disabled={!!form.parentId}>
               <option value="ASSET">ASSET</option>

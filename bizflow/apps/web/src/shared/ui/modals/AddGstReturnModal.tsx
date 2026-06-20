@@ -199,7 +199,7 @@ export default function AddGstReturnModal({ open, onClose }: { open: boolean; on
       <form onSubmit={handleSubmit} className="space-y-5">
 
         {/* ── Row 1: Filing Period (month picker) + Return Type ── */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
           {/* Month-Year Picker */}
           <FormField label="Filing Period" required>
@@ -246,7 +246,7 @@ export default function AddGstReturnModal({ open, onClose }: { open: boolean; on
         </div>
 
         {/* ── Row 2: Status + Filing Date (conditional) ── */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Filing Status" required>
             <ModalSelect value={form.status} onChange={setField("status")}>
               <option value="PENDING">Pending</option>
@@ -425,7 +425,7 @@ export default function AddGstReturnModal({ open, onClose }: { open: boolean; on
         {isFiledOrRevised && (
           <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4 space-y-3">
             <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 mb-1">Acknowledgement Details</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField label="ARN Number" hint="Acknowledgement Reference Number">
                 <ModalInput
                   id="gst-arn"

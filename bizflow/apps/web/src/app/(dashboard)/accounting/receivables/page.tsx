@@ -207,7 +207,7 @@ export default function ReceivablesPage() {
               ))}
             </ModalSelect>
           </FormField>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Invoice Reference" required>
               <ModalInput required placeholder="e.g. INV-1002" value={form.invoiceRef} onChange={e => setForm(prev => ({ ...prev, invoiceRef: e.target.value }))} />
             </FormField>

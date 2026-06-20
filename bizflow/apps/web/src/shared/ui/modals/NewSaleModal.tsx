@@ -78,8 +78,8 @@ function ProductPicker({
           style={{
             position: "fixed",
             top: rect.bottom + 4,
-            left: rect.left,
-            width: Math.max(rect.width, 220),
+            left: Math.min(rect.left, typeof window !== 'undefined' ? window.innerWidth - Math.max(rect.width, 220) - 16 : rect.left),
+            width: Math.min(Math.max(rect.width, 220), typeof window !== 'undefined' ? window.innerWidth - 32 : 9999),
             zIndex: 9999,
             backgroundColor: "var(--bg-surface-2)",
             border: "1px solid var(--border)",
@@ -184,8 +184,8 @@ function CustomerPicker({
           style={{
             position: "fixed",
             top: rect.bottom + 4,
-            left: rect.left,
-            width: Math.max(rect.width, 280),
+            left: Math.min(rect.left, typeof window !== 'undefined' ? window.innerWidth - Math.max(rect.width, 280) - 16 : rect.left),
+            width: Math.min(Math.max(rect.width, 280), typeof window !== 'undefined' ? window.innerWidth - 32 : 9999),
             zIndex: 9999,
             backgroundColor: "var(--bg-surface-2)",
             border: "1px solid var(--border)",
@@ -418,7 +418,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
       <form onSubmit={handleSubmit} className="space-y-5">
 
         {/* ── Customer + Date ── */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Select Customer" required>
             <CustomerPicker
               value={customer}
@@ -433,7 +433,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
         </div>
 
         {/* ── GST Details ── */}
-        <div className="grid grid-cols-3 gap-4 p-3 rounded-xl border border-violet-500/20 bg-violet-500/5">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3 rounded-xl border border-violet-500/20 bg-violet-500/5">
           <FormField label="Place of Supply" hint="State where delivered">
             <CustomSelect
               value={placeOfSupply}
@@ -508,8 +508,8 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
             </button>
           </div>
 
-          <div className="bg-primary/5 border border-primary/10 rounded-xl overflow-hidden">
-            <table className="w-full text-left text-sm">
+          <div className="bg-primary/5 border border-primary/10 rounded-xl overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+            <table className="w-full text-left text-sm min-w-[640px]">
               <thead className="bg-primary/5 border-b border-primary/10 text-primary/40 text-xs">
                 <tr>
                   <th className="p-3 font-medium text-left">Product</th>
@@ -593,7 +593,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
         </div>
 
         {/* ── Totals + Payment ── */}
-        <div className="grid grid-cols-2 gap-6 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
           <div className="space-y-4">
             <FormField label="Amount Paid (₹)" hint="Leave blank if unpaid">
               <ModalInput type="number" min="0" max={total} placeholder="0.00"

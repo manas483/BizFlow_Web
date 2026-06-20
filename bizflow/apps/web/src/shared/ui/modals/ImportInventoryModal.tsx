@@ -379,7 +379,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
               <FileText size={16} className="text-violet-400" />
               <p className="text-sm font-semibold text-primary">Invoice Detected</p>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <p className="text-[10px] text-primary/40 uppercase tracking-wider">Invoice No.</p>
                 <p className="text-xs font-medium text-primary mt-0.5">{invoiceInfo.invoiceNumber}</p>
@@ -508,7 +508,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
       {step === "review" && !isInvoicePdf && validationSummary && (
         <div className="space-y-4">
           {/* Summary cards */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
               { label: "Total Rows", value: validationSummary.total, color: "text-primary" },
               { label: "Valid", value: validationSummary.valid, color: "text-emerald-400" },

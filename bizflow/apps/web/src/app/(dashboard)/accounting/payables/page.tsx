@@ -200,7 +200,7 @@ export default function PayablesPage() {
           <FormField label="Supplier / Vendor Name" required>
             <ModalInput required placeholder="e.g. Supplier Pvt Ltd" value={form.supplierName} onChange={e => setForm(prev => ({ ...prev, supplierName: e.target.value }))} />
           </FormField>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Invoice Reference" required>
               <ModalInput required placeholder="e.g. SUP-1002" value={form.invoiceRef} onChange={e => setForm(prev => ({ ...prev, invoiceRef: e.target.value }))} />
             </FormField>
@@ -208,7 +208,7 @@ export default function PayablesPage() {
               <ModalInput type="number" step="0.01" min="0.01" required placeholder="0.00" value={form.amount} onChange={e => setForm(prev => ({ ...prev, amount: e.target.value }))} />
             </FormField>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField label="Due Date" required>
               <ModalInput type="date" required value={form.dueDate} onChange={e => setForm(prev => ({ ...prev, dueDate: e.target.value }))} />
             </FormField>

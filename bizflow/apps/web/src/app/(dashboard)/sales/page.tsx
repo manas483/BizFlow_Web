@@ -328,7 +328,7 @@ export default function SalesPage() {
                               <DropdownMenu.Portal>
                                 <DropdownMenu.Content
                                   align="end"
-                                  className="z-[9999] min-w-[160px] bg-surface-2 border border-primary/10 rounded-xl p-1 shadow-xl text-sm"
+                                  className="z-[9999] min-w-[160px] max-w-[calc(100vw-2rem)] bg-surface-2 border border-primary/10 rounded-xl p-1 shadow-xl text-sm"
                                   style={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border)' }}
                                 >
                                   <DropdownMenu.Item
@@ -613,7 +613,7 @@ export default function SalesPage() {
       {/* H-5: BoS payment update dialog */}
       {bosPayTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="rounded-2xl p-6 w-80 space-y-4" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+          <div className="rounded-2xl p-5 sm:p-6 w-[calc(100vw-2rem)] sm:w-80 max-w-sm space-y-4" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
             <p className="text-primary font-semibold">Update BoS Payment — {bosPayTarget.billNo}</p>
             <p className="text-primary/40 text-xs">Total: ₹{bosPayTarget.total.toLocaleString()}</p>
             <div>
@@ -636,7 +636,7 @@ export default function SalesPage() {
       {/* Invoice payment update dialog */}
       {salePayTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="rounded-2xl p-6 w-80 space-y-4" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
+          <div className="rounded-2xl p-5 sm:p-6 w-[calc(100vw-2rem)] sm:w-80 max-w-sm space-y-4" style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}>
             <p className="text-primary font-semibold">Record Payment — {salePayTarget.invoiceNo}</p>
             <p className="text-primary/40 text-xs">Invoice Total: ₹{salePayTarget.total.toLocaleString()}</p>
             <div>

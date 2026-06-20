@@ -15,7 +15,7 @@ export default function Pagination({ page, totalPages, total, limit, onPage }: P
   const end   = Math.min(page * limit, total);
 
   return (
-    <div className="flex items-center justify-between px-5 py-3 border-t border-primary/10">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 sm:px-5 py-3 border-t border-primary/10">
       <p className="text-xs text-primary/40">
         Showing <span className="font-medium text-primary/60">{start}–{end}</span> of{" "}
         <span className="font-medium text-primary/60">{total}</span>

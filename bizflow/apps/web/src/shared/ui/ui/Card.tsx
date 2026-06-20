@@ -32,7 +32,7 @@ export function Card({ className, children, onClick, hover, style }: CardProps) 
 export function CardHeader({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
     <div
-      className={cn("flex items-center justify-between p-5", className)}
+      className={cn("flex items-center justify-between flex-wrap gap-3 p-3 sm:p-5", className)}
       style={{ borderBottom: "1px solid var(--border)" }}
     >
       {children}

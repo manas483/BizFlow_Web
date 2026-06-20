@@ -81,7 +81,7 @@ export default function TwoFactorSetupModal({ open, onClose, onSuccess }: TwoFac
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-md mx-4 rounded-2xl border border-primary/10 p-6 max-h-[85vh] overflow-y-auto"
         style={{ background: "var(--bg-surface)" }}>
 
@@ -99,7 +99,7 @@ export default function TwoFactorSetupModal({ open, onClose, onSuccess }: TwoFac
             </h3>
           </div>
           {step !== "backup" && step !== "done" && (
-            <button onClick={onClose} className="p-1 rounded-lg hover:bg-primary/10 text-primary/40">
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-primary/10 text-primary/40">
               <X size={18} />
             </button>
           )}

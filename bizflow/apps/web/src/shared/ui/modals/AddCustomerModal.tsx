@@ -86,7 +86,7 @@ export default function AddCustomerModal({ open, onClose }: { open: boolean; onC
           <ModalInput required placeholder={sampleName} value={form.name} onChange={set("name")} />
         </FormField>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Phone Number" required>
             <ModalInput required type="tel" placeholder={samplePhone} value={form.phone} onChange={set("phone")} />
           </FormField>
@@ -99,7 +99,7 @@ export default function AddCustomerModal({ open, onClose }: { open: boolean; onC
           <ModalTextarea placeholder="Shop no, Street, Landmark..." value={form.address} onChange={set("address")} />
         </FormField>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="City / Town">
             <ModalInput placeholder="e.g. Mumbai" value={form.city} onChange={set("city")} />
           </FormField>
@@ -113,7 +113,7 @@ export default function AddCustomerModal({ open, onClose }: { open: boolean; onC
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="State Code" hint="Auto-filled from state">
             <ModalInput placeholder="e.g. 27" value={form.stateCode} onChange={set("stateCode")} />
           </FormField>

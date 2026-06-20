@@ -251,8 +251,8 @@ export default function EditExpenseModal({ expense, onClose }: EditExpenseModalP
                       : "Enter an amount to see the cost allocation breakdown."}
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
-                    <table className="w-full text-left text-[11px]">
+                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1 overflow-x-auto">
+                    <table className="w-full text-left text-[11px] min-w-[500px]">
                       <thead>
                         <tr className="text-primary/40 border-b border-primary/5 pb-1">
                           <th className="w-8 font-medium pb-1.5 text-center"></th>

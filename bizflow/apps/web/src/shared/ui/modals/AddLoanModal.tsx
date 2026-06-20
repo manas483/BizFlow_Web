@@ -89,7 +89,7 @@ export default function AddLoanModal({ open, onClose }: { open: boolean; onClose
       title="Create Loan Master Profile" subtitle="Setup a borrower profile and generate an EMI schedule"
       icon={<Landmark size={18} />} iconColor="bg-violet-500/20 text-violet-400">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Borrower Name" required>
             <ModalInput required placeholder="Name of Borrower" value={form.borrowerName} onChange={set("borrowerName")} />
           </FormField>
@@ -107,7 +107,7 @@ export default function AddLoanModal({ open, onClose }: { open: boolean; onClose
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Lender / Financial Institution">
             <ModalInput placeholder="e.g. SBI, HDFC, ICICI, NBFC" value={form.lender} onChange={set("lender")} />
           </FormField>
@@ -123,7 +123,7 @@ export default function AddLoanModal({ open, onClose }: { open: boolean; onClose
           </FormField>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <FormField label="Principal Amount (₹)" required>
             <ModalInput type="number" step="0.01" min="1" required placeholder="Principal Amount" value={form.amount} onChange={set("amount")} />
           </FormField>
@@ -143,7 +143,7 @@ export default function AddLoanModal({ open, onClose }: { open: boolean; onClose
         {amt > 0 && rate >= 0 && tenureMonths > 0 && (
           <div className="bg-primary/5 p-4 rounded-xl border border-primary/5 space-y-2 text-xs">
             <h4 className="font-semibold uppercase tracking-wider text-primary/40">EMI Preview (Reducing Balance)</h4>
-            <div className="grid grid-cols-3 gap-4 font-mono text-primary/80">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-primary/80">
               <div>
                 <span className="text-[10px] text-primary/40 block">Monthly EMI:</span>
                 <span className="font-bold text-sm text-violet-400">{formatCurrency(preview.emiAmount)}</span>

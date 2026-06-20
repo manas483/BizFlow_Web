@@ -49,7 +49,7 @@ export default function EditCustomerModal({ customer, onClose }: { customer: any
         <FormField label="Customer Name" required>
           <ModalInput required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </FormField>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Phone" required>
             <ModalInput required type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </FormField>
@@ -57,7 +57,7 @@ export default function EditCustomerModal({ customer, onClose }: { customer: any
             <ModalInput type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </FormField>
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="City">
             <ModalInput value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           </FormField>

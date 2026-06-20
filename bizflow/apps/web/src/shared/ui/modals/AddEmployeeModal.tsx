@@ -136,7 +136,7 @@ export default function AddEmployeeModal({ open, onClose }: { open: boolean; onC
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Full Name" required>
             <ModalInput required placeholder="e.g. Ramesh Kumar" value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -152,7 +152,7 @@ export default function AddEmployeeModal({ open, onClose }: { open: boolean; onC
             onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </FormField>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Role (Access Level)" required>
             <CustomSelect
               value={form.role}
@@ -232,7 +232,7 @@ export default function AddEmployeeModal({ open, onClose }: { open: boolean; onC
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <FormField label="Monthly Salary (₹)" required>
             <ModalInput type="number" required min="0" placeholder="e.g. 18000" value={form.salary}
               onChange={(e) => setForm({ ...form, salary: e.target.value })} />

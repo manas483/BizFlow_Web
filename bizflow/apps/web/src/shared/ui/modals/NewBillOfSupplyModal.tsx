@@ -88,7 +88,7 @@ export default function NewBillOfSupplyModal({ open, onClose }: { open: boolean;
   return (
     <Modal open={open} onClose={onClose} title="Create Bill of Supply" subtitle="Issue a non-GST document for exempt supplies or composition dealers" icon={<FileMinus size={18} />} iconColor="bg-blue-500/20 text-blue-400" size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Customer" required>
             <CustomSelect value={customer} onChange={setCustomer} options={customerOptions} placeholder="Select customer..." />
           </FormField>
@@ -110,7 +110,7 @@ export default function NewBillOfSupplyModal({ open, onClose }: { open: boolean;
           <button type="button" onClick={() => setItems([...items, { productId: "", qty: 1, price: 0 }])} className="text-xs text-blue-400 flex items-center gap-1 mt-2"><Plus size={14} /> Add Item</button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-primary/10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-primary/10">
           <FormField label="Amount Paid (₹)">
             <ModalInput type="number" min="0" max={total} value={paid} onChange={(e) => setPaid(e.target.value)} placeholder="0.00" />
           </FormField>

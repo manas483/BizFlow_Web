@@ -154,7 +154,7 @@ export default function AddExpenseModal({ open, onClose }: { open: boolean; onCl
       icon={<Receipt size={18} />} iconColor="bg-rose-500/20 text-rose-400"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Amount (₹)" required>
             <ModalInput required type="number" min="0" placeholder="0.00" value={form.amount}
               onChange={(e) => setForm({ ...form, amount: e.target.value })} />

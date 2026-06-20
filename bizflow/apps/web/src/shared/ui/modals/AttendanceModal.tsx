@@ -60,7 +60,7 @@ export default function AttendanceModal({ employee, onClose }: AttendanceModalPr
       size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Date" required>
             <ModalInput
               type="date"

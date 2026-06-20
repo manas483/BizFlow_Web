@@ -74,7 +74,7 @@ export default function AddBankBookEntryModal({ open, onClose }: { open: boolean
       title="Add Bank Transaction" subtitle="Record bank deposits, withdrawals, transfers, and fees"
       icon={<Landmark size={18} />} iconColor="bg-violet-500/20 text-violet-400">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Transaction Date" required>
             <ModalInput type="date" required value={form.date} onChange={set("date")} />
           </FormField>
@@ -86,7 +86,7 @@ export default function AddBankBookEntryModal({ open, onClose }: { open: boolean
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Select Bank Account" required>
             <ModalSelect value={form.bankAccountId} onChange={set("bankAccountId")} required>
               <option value="">-- Select Bank Account --</option>
@@ -105,7 +105,7 @@ export default function AddBankBookEntryModal({ open, onClose }: { open: boolean
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Amount (₹)" required>
             <ModalInput type="number" step="0.01" min="0.01" required placeholder="0.00" value={form.amount} onChange={set("amount")} />
           </FormField>

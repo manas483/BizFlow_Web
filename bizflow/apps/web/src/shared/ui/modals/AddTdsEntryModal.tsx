@@ -111,7 +111,7 @@ export default function AddTdsEntryModal({ open, onClose }: { open: boolean; onC
       icon={<Percent size={18} />} iconColor="bg-violet-500/20 text-violet-400">
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Section + Deductee */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="TDS Section" required>
             <ModalSelect value={form.section} onChange={e => handleSectionChange(e.target.value)}>
               {Object.entries(SECTION_DEFAULTS).map(([code, info]) => (
@@ -125,7 +125,7 @@ export default function AddTdsEntryModal({ open, onClose }: { open: boolean; onC
         </div>
 
         {/* PAN + Date */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Deductee PAN" hint="10-character PAN">
             <ModalInput
               placeholder="e.g. ABCDE1234F"
@@ -140,7 +140,7 @@ export default function AddTdsEntryModal({ open, onClose }: { open: boolean; onC
         </div>
 
         {/* Payment Amount + TDS Rate → auto-calculates */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Gross Payment Amount (₹)" required>
             <ModalInput
               type="number" step="0.01" min="0.01" required
@@ -186,7 +186,7 @@ export default function AddTdsEntryModal({ open, onClose }: { open: boolean; onC
         )}
 
         {/* Status + Challan */}
-        <div className="grid grid-cols-2 gap-4 border-t border-primary/5 pt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-primary/5 pt-4">
           <FormField label="TDS Status" required>
             <ModalSelect value={form.status} onChange={set("status")}>
               <option value="DEDUCTED">Deducted (To Be Deposited)</option>

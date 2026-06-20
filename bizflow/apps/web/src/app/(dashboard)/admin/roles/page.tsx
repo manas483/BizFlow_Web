@@ -216,7 +216,7 @@ export default function RolesPage() {
               <h3 className="text-lg font-bold text-primary">
                 {editingId ? "Edit Custom Role" : "Create Custom Role"}
               </h3>
-              <button onClick={resetForm} className="p-1 rounded-lg hover:bg-primary/10 text-primary/40">
+              <button onClick={resetForm} className="p-2 rounded-lg hover:bg-primary/10 text-primary/40">
                 <X size={18} />
               </button>
             </div>
@@ -279,7 +279,7 @@ export default function RolesPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-wrap gap-3 pt-2">
                 <Button onClick={editingId ? handleUpdate : handleCreate}
                   disabled={createRole.isPending || updateRole.isPending || !formName.trim()}
                   icon={editingId ? <Check size={14} /> : <Plus size={14} />}>

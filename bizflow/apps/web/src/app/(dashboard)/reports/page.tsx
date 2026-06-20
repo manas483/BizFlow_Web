@@ -200,7 +200,7 @@ export default function ReportsPage() {
               {isExportMenuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setIsExportMenuOpen(false)} />
-                  <div className="absolute right-0 mt-2 w-64 bg-surface border border-primary/10 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col">
+                  <div className="absolute right-0 sm:right-auto mt-2 w-64 max-w-[calc(100vw-2rem)] bg-surface border border-primary/10 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col">
                     <div className="p-2 border-b border-primary/5 bg-primary/5">
                       <p className="text-[10px] font-bold text-primary/60 uppercase tracking-wider px-2">Registers</p>
                     </div>

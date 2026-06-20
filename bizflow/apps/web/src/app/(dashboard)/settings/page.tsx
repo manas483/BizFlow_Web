@@ -102,7 +102,7 @@ function EmployeeSettingsView() {
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Shield size={18} /> Role & Department</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-           <div className="grid grid-cols-2 gap-4">
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-primary/40 text-xs mb-1 block">Role</p>
                 <p className="text-sm font-medium text-primary">{(profile?.role || "").replace("_", " ")}</p>
@@ -881,7 +881,7 @@ export default function SettingsPage() {
       />
 
       {show2FADisable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-md mx-4 rounded-2xl border border-primary/10 p-6 max-h-[85vh] overflow-y-auto"
             style={{ background: "var(--bg-surface)" }}>
             <div className="flex items-center justify-between mb-4">
@@ -889,7 +889,7 @@ export default function SettingsPage() {
                 <Shield size={18} className="text-rose-400" />
                 Disable Two-Factor Auth
               </h3>
-              <button onClick={() => setShow2FADisable(false)} className="p-1 rounded-lg hover:bg-primary/10 text-primary/40">
+              <button onClick={() => setShow2FADisable(false)} className="p-2 rounded-lg hover:bg-primary/10 text-primary/40">
                 <X size={18} />
               </button>
             </div>

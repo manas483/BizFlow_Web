@@ -66,7 +66,7 @@ export default function AddBankAccountModal({ open, onClose }: { open: boolean; 
           <ModalInput required placeholder="Display Name" value={form.accountName} onChange={set("accountName")} />
         </FormField>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Bank Name" required>
             <ModalInput required placeholder="e.g. HDFC Bank" value={form.bankName} onChange={set("bankName")} />
           </FormField>
@@ -75,7 +75,7 @@ export default function AddBankAccountModal({ open, onClose }: { open: boolean; 
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="IFSC Code" hint="e.g. HDFC0000123">
             <ModalInput placeholder="IFSC Code" value={form.ifscCode} onChange={set("ifscCode")} style={{ textTransform: "uppercase" }} />
           </FormField>

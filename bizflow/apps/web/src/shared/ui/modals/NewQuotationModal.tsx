@@ -236,7 +236,7 @@ export default function NewQuotationModal({ open, onClose }: { open: boolean; on
       icon={<FileText size={18} />} iconColor="bg-violet-500/20 text-violet-400" size="3xl">
       <form onSubmit={handleSubmit} className="space-y-5">
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Select Customer" required>
             <CustomSelect
               value={customer}
@@ -250,7 +250,7 @@ export default function NewQuotationModal({ open, onClose }: { open: boolean; on
           </FormField>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 p-3 rounded-xl border border-violet-500/20 bg-violet-500/5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 rounded-xl border border-violet-500/20 bg-violet-500/5">
           <FormField label="Place of Supply" hint="State where delivered">
             <CustomSelect
               value={placeOfSupply}
@@ -295,8 +295,8 @@ export default function NewQuotationModal({ open, onClose }: { open: boolean; on
             </button>
           </div>
 
-          <div className="bg-primary/5 border border-primary/10 rounded-xl overflow-hidden">
-            <table className="w-full text-left text-sm">
+          <div className="bg-primary/5 border border-primary/10 rounded-xl overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+            <table className="w-full text-left text-sm min-w-[640px]">
               <thead className="bg-primary/5 border-b border-primary/10 text-primary/40 text-xs">
                 <tr>
                   <th className="p-3 font-medium text-left">Product</th>
@@ -379,7 +379,7 @@ export default function NewQuotationModal({ open, onClose }: { open: boolean; on
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
           <div className="space-y-4">
             <FormField label="Notes / Terms">
               <textarea
