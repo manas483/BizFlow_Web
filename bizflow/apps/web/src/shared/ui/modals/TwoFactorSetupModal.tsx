@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { Button } from "@/shared/ui/ui/Button";
 import { useSetup2FA, useVerify2FA } from "@/shared/hooks/useTwoFactor";
@@ -17,6 +18,9 @@ type Step = "setup" | "verify" | "backup" | "done";
 export default function TwoFactorSetupModal({ open, onClose, onSuccess }: TwoFactorSetupModalProps) {
   const setup2FA   = useSetup2FA();
   const verify2FA  = useVerify2FA();
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const [step, setStep] = useState<Step>("setup");
   const [qrCode, setQrCode] = useState("");
@@ -78,10 +82,10 @@ export default function TwoFactorSetupModal({ open, onClose, onSuccess }: TwoFac
     onClose();
   };
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+  const content = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-md mx-4 rounded-2xl border border-primary/10 p-6 max-h-[calc(100vh-2rem)] overflow-y-auto"
         style={{ background: "var(--bg-surface)" }}>
 
@@ -225,4 +229,6 @@ export default function TwoFactorSetupModal({ open, onClose, onSuccess }: TwoFac
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 }

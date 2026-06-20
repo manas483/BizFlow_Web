@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
@@ -29,6 +30,12 @@ const sizeClasses = {
 export default function Modal({ open, onClose, title, subtitle, children, size = "md", icon, iconColor = "bg-violet-500/20 text-violet-400" }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -42,12 +49,12 @@ export default function Modal({ open, onClose, title, subtitle, children, size =
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  const content = (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-4"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-4"
       style={{ backgroundColor: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
@@ -106,6 +113,8 @@ export default function Modal({ open, onClose, title, subtitle, children, size =
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 }
 
 /* ── Reusable form field ── */

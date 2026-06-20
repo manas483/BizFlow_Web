@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, Save, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/shared/ui/ui/Button";
 import { useUpdateExpense } from "@/shared/hooks/useExpenses";
@@ -16,9 +17,12 @@ interface EditExpenseModalProps {
 
 export default function EditExpenseModal({ expense, onClose }: EditExpenseModalProps) {
   const updateExpense = useUpdateExpense();
+  const [mounted, setMounted] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [invoices, setInvoices] = useState<string[]>([]);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const [form, setForm] = useState({
     category: "",
@@ -167,8 +171,10 @@ export default function EditExpenseModal({ expense, onClose }: EditExpenseModalP
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+  if (!mounted) return null;
+
+  const content = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div
         className="w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[calc(100vh-2rem)] animate-in fade-in zoom-in-95 duration-200"
         style={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border)" }}
@@ -398,4 +404,6 @@ export default function EditExpenseModal({ expense, onClose }: EditExpenseModalP
       </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 }
