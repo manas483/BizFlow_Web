@@ -172,26 +172,38 @@ export async function POST(req: NextRequest) {
       // 4. Stock auto-deduction via Layer-Aware Stock Engine
       let totalSaleCOGS = 0;
       for (const item of items) {
-        const layerResult = await adjustStockWithLayers({
-          productId: item.productId,
-          qty: item.qty,
-          type: 'sale',
-          businessId: session.user.businessId,
-          transactionId: sale.id,
-          transactionType: 'sale',
-          tx,
-        });
-
-        // Update SaleItem with actual COGS from consumed layers
-        if (layerResult && layerResult.totalCOGS > 0) {
-          const actualUnitCost = layerResult.totalCOGS / item.qty;
-          await tx.saleItem.updateMany({
-            where: { saleId: sale.id, productId: item.productId },
-            data: { purchasePrice: Math.round(actualUnitCost * 10000) / 10000 },
+        try {
+          const layerResult = await adjustStockWithLayers({
+            productId: item.productId,
+            qty: item.qty,
+            type: 'sale',
+            businessId: session.user.businessId,
+            transactionId: sale.id,
+            transactionType: 'sale',
+            tx,
           });
-          totalSaleCOGS += layerResult.totalCOGS;
-        } else {
-          // Fallback to product-level purchasePrice if no layers exist
+
+          // Update SaleItem with actual COGS from consumed layers
+          if (layerResult && layerResult.totalCOGS > 0) {
+            const actualUnitCost = layerResult.totalCOGS / item.qty;
+            await tx.saleItem.updateMany({
+              where: { saleId: sale.id, productId: item.productId },
+              data: { purchasePrice: Math.round(actualUnitCost * 10000) / 10000 },
+            });
+            totalSaleCOGS += layerResult.totalCOGS;
+          } else {
+            // Fallback to product-level purchasePrice if no layers exist
+            const fallbackCost = (productMap[item.productId]?.purchasePrice || 0) * item.qty;
+            await tx.saleItem.updateMany({
+              where: { saleId: sale.id, productId: item.productId },
+              data: { purchasePrice: productMap[item.productId]?.purchasePrice || 0 },
+            });
+            totalSaleCOGS += fallbackCost;
+          }
+        } catch (layerErr) {
+          // Layer engine failed (e.g. tables not migrated yet) — fall back to simple stock deduction
+          console.warn('[Sales] Layer engine failed, falling back to simple stock deduction:', (layerErr as any)?.message);
+          await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
           const fallbackCost = (productMap[item.productId]?.purchasePrice || 0) * item.qty;
           await tx.saleItem.updateMany({
             where: { saleId: sale.id, productId: item.productId },
