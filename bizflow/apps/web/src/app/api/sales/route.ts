@@ -63,6 +63,16 @@ export async function POST(req: NextRequest) {
     const validatedData = saleSchema.parse(body);
     const { customerId, items, paid, status, notes, placeOfSupply, reverseCharge, isAggregate, aggregateDate, invoiceDate } = validatedData;
 
+    // Check if layer engine tables are migrated (outside transaction to avoid aborting it)
+    let layerEngineEnabled = true;
+    try {
+      // @ts-ignore: Check if InventoryLayer exists
+      await prisma.inventoryLayer.findFirst();
+    } catch (e) {
+      layerEngineEnabled = false;
+      console.warn('[Sales] Layer engine tables not migrated. Falling back to simple stock deduction.');
+    }
+
     const result = await prisma.$transaction(async (tx: any) => {
       const customer = await tx.customer.findFirst({
         where: { id: customerId, businessId: session.user.businessId },
@@ -172,7 +182,7 @@ export async function POST(req: NextRequest) {
       // 4. Stock auto-deduction via Layer-Aware Stock Engine
       let totalSaleCOGS = 0;
       for (const item of items) {
-        try {
+        if (layerEngineEnabled) {
           const layerResult = await adjustStockWithLayers({
             productId: item.productId,
             qty: item.qty,
@@ -200,9 +210,8 @@ export async function POST(req: NextRequest) {
             });
             totalSaleCOGS += fallbackCost;
           }
-        } catch (layerErr) {
-          // Layer engine failed (e.g. tables not migrated yet) — fall back to simple stock deduction
-          console.warn('[Sales] Layer engine failed, falling back to simple stock deduction:', (layerErr as any)?.message);
+        } else {
+          // Layer engine disabled (tables not migrated) — fall back to simple stock deduction
           await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
           const fallbackCost = (productMap[item.productId]?.purchasePrice || 0) * item.qty;
           await tx.saleItem.updateMany({
