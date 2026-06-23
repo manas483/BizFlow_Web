@@ -66,6 +66,11 @@ ${text}`
               console.warn("Hermes is rate limited, trying Llama 3.3 70B...");
               response = await makeOpenRouterRequest("meta-llama/llama-3.3-70b-instruct:free");
             }
+            
+            if (!response.ok && response.status === 429) {
+              console.warn("Llama 3.3 70B is rate limited, trying auto-free...");
+              response = await makeOpenRouterRequest("openrouter/free");
+            }
 
             if (response.ok) {
               const data = await response.json();
