@@ -1,4 +1,5 @@
 import { Role } from "@prisma/client";
+export type { Role };
 
 export type Permission =
   | "view_dashboard"

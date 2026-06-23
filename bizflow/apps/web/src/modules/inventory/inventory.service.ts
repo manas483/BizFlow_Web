@@ -1,5 +1,6 @@
 import { prisma } from '@/shared/lib/db';
 import { recalculateTransportCosts } from '@/shared/lib/expense-calculations';
+import { createLayer } from '@/shared/lib/layer-engine';
 
 export class InventoryService {
   static async getProducts(businessId: string, search?: string | null, category?: string | null, page = 1, limit = 25) {
@@ -50,6 +51,25 @@ export class InventoryService {
           createdAt: product.purchaseDate || undefined,
           businessId: session.user.businessId,
         }
+      });
+
+      // ── Create initial inventory layer ──
+      const baseCost = (product.basePurchasePrice || product.purchasePrice) * product.stock;
+      const transportTotal = (product.transportCost || 0) * product.stock;
+      const expenses = transportTotal > 0
+        ? [{ expenseType: 'transport', amount: transportTotal }]
+        : [];
+
+      await createLayer({
+        itemId: product.id,
+        receiptNo: product.purchaseInvoiceNo || undefined,
+        receiptDate: product.purchaseDate || undefined,
+        quantity: product.stock,
+        purchaseCost: baseCost,
+        expenses,
+        supplierId: product.supplier || product.purchaseFrom || undefined,
+        sourceTransactionType: 'purchase',
+        businessId: session.user.businessId,
       });
 
       // Auto-create Accounts Payable for the purchase cost
@@ -134,6 +154,28 @@ export class InventoryService {
             businessId: session.user.businessId,
           }
         });
+
+        // ── Create new inventory layer for restocking ──
+        if (stockDiff > 0) {
+          const baseCost = (updated.basePurchasePrice || updated.purchasePrice) * stockDiff;
+          const transportTotal = (updated.transportCost || 0) * stockDiff;
+          const expenses = transportTotal > 0
+            ? [{ expenseType: 'transport', amount: transportTotal }]
+            : [];
+
+          await createLayer({
+            itemId: updated.id,
+            receiptNo: updated.purchaseInvoiceNo || undefined,
+            receiptDate: purchaseDate ? new Date(purchaseDate) : undefined,
+            quantity: stockDiff,
+            purchaseCost: baseCost,
+            expenses,
+            supplierId: updated.supplier || updated.purchaseFrom || undefined,
+            sourceTransactionType: 'purchase',
+            businessId: session.user.businessId,
+            tx,
+          });
+        }
       }
       return updated;
     });

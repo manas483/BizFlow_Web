@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requirePermission, withAuth } from '@/shared/lib/api-guard';
 import { prisma } from '@/shared/lib/db';
@@ -56,3 +57,4 @@ export const DELETE = withAuth(async (req: Request) => {
 
   return NextResponse.json({ success: true });
 });
+

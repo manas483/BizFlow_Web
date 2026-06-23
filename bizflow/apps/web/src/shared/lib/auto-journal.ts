@@ -528,3 +528,415 @@ export async function postCashBookEntry(params: {
     console.error('[AutoJournal] Failed to create cash book entry:', err);
   }
 }
+
+// ── COGS Journal (Inventory Layer Costing) ───────────────────────────────────
+
+/**
+ * Post journal entry for Cost of Goods Sold on a sale:
+ *   Dr Cost of Goods Sold (5300)
+ *   Cr Inventory Asset (1200)
+ *
+ * Amount is the actual landed cost from consumed inventory layers.
+ */
+export async function postCOGSJournal(params: {
+  saleId: string;
+  invoiceNo: string;
+  cogsAmount: number;
+  businessId: string;
+  tx?: any;
+}): Promise<void> {
+  try {
+    const { saleId, invoiceNo, cogsAmount, businessId, tx } = params;
+
+    if (!await isAutoJournalEnabled(businessId)) return;
+    if (cogsAmount <= 0) return;
+
+    const lines: JournalLineInput[] = [
+      {
+        accountCode: '5300',
+        accountName: 'Cost of Goods Sold',
+        accountType: 'EXPENSE',
+        debit: cogsAmount,
+        credit: 0,
+        narration: `COGS for ${invoiceNo}`,
+      },
+      {
+        accountCode: '1200',
+        accountName: 'Inventory Asset',
+        accountType: 'ASSET',
+        debit: 0,
+        credit: cogsAmount,
+        narration: `Inventory consumed for ${invoiceNo}`,
+      },
+    ];
+
+    await createJournal({
+      businessId,
+      narration: `Auto: COGS for Sale ${invoiceNo}`,
+      reference: `COGS:${saleId}`,
+      lines,
+      tx,
+    });
+  } catch (err) {
+    console.error('[AutoJournal] Failed to post COGS journal:', err);
+  }
+}
+
+/**
+ * Post journal entry for COGS adjustment (late landed cost on consumed layers):
+ *
+ * For the consumed portion (already sold):
+ *   Dr COGS Adjustment (5310)
+ *   Cr Accrued Expenses (2400)
+ *
+ * For the remaining portion (still in inventory):
+ *   Dr Inventory Asset (1200)
+ *   Cr Accrued Expenses (2400)
+ */
+export async function postCOGSAdjustmentJournal(params: {
+  costAdjustmentId: string;
+  layerId: string;
+  allocatedToConsumed: number;
+  allocatedToRemaining: number;
+  expenseType: string;
+  businessId: string;
+  tx?: any;
+}): Promise<void> {
+  try {
+    const {
+      costAdjustmentId,
+      layerId,
+      allocatedToConsumed,
+      allocatedToRemaining,
+      expenseType,
+      businessId,
+      tx,
+    } = params;
+
+    if (!await isAutoJournalEnabled(businessId)) return;
+
+    const totalAmount = allocatedToConsumed + allocatedToRemaining;
+    if (totalAmount <= 0) return;
+
+    const lines: JournalLineInput[] = [];
+
+    // Consumed portion → COGS adjustment
+    if (allocatedToConsumed > 0) {
+      lines.push({
+        accountCode: '5310',
+        accountName: 'COGS Adjustment',
+        accountType: 'EXPENSE',
+        debit: allocatedToConsumed,
+        credit: 0,
+        narration: `Late ${expenseType} — consumed portion`,
+      });
+    }
+
+    // Remaining portion → Inventory revalue
+    if (allocatedToRemaining > 0) {
+      lines.push({
+        accountCode: '1200',
+        accountName: 'Inventory Asset',
+        accountType: 'ASSET',
+        debit: allocatedToRemaining,
+        credit: 0,
+        narration: `Late ${expenseType} — remaining inventory`,
+      });
+    }
+
+    // Credit total to Accrued Expenses
+    lines.push({
+      accountCode: '2400',
+      accountName: 'Accrued Expenses',
+      accountType: 'LIABILITY',
+      debit: 0,
+      credit: totalAmount,
+      narration: `Late ${expenseType} accrual for layer ${layerId.slice(0, 8)}`,
+    });
+
+    await createJournal({
+      businessId,
+      narration: `Auto: Late landed cost adjustment (${expenseType})`,
+      reference: `COST_ADJ:${costAdjustmentId}`,
+      lines,
+      tx,
+    });
+  } catch (err) {
+    console.error('[AutoJournal] Failed to post COGS adjustment journal:', err);
+  }
+}
+
+// ── Revaluation Journal (Inventory Layer Costing — Phase 2) ──────────────────
+
+/**
+ * Post journal entry for inventory revaluation:
+ *
+ * If loss (newCost < oldCost):
+ *   Dr Inventory Write-Down (5320)
+ *     Cr Inventory Asset (1200)
+ *
+ * If gain (newCost > oldCost):
+ *   Dr Inventory Asset (1200)
+ *     Cr Inventory Gain (4100)
+ */
+export async function postRevaluationJournal(params: {
+  revaluationId: string;
+  layerId: string;
+  impactAmount: number;         // Positive = gain, Negative = loss
+  reason: string;
+  businessId: string;
+  tx?: any;
+}): Promise<void> {
+  try {
+    const { revaluationId, layerId, impactAmount, reason, businessId, tx } = params;
+
+    if (!await isAutoJournalEnabled(businessId)) return;
+    if (impactAmount === 0) return;
+
+    const lines: JournalLineInput[] = [];
+    const absAmount = Math.abs(impactAmount);
+
+    if (impactAmount < 0) {
+      // Loss — Write-down
+      lines.push(
+        {
+          accountCode: '5320',
+          accountName: 'Inventory Write-Down',
+          accountType: 'EXPENSE',
+          debit: absAmount,
+          credit: 0,
+          narration: `Revaluation loss: ${reason} (layer ${layerId.slice(0, 8)})`,
+        },
+        {
+          accountCode: '1200',
+          accountName: 'Inventory Asset',
+          accountType: 'ASSET',
+          debit: 0,
+          credit: absAmount,
+          narration: `Inventory write-down: ${reason}`,
+        },
+      );
+    } else {
+      // Gain — Revaluation gain
+      lines.push(
+        {
+          accountCode: '1200',
+          accountName: 'Inventory Asset',
+          accountType: 'ASSET',
+          debit: absAmount,
+          credit: 0,
+          narration: `Revaluation gain: ${reason} (layer ${layerId.slice(0, 8)})`,
+        },
+        {
+          accountCode: '4100',
+          accountName: 'Inventory Gain',
+          accountType: 'REVENUE',
+          debit: 0,
+          credit: absAmount,
+          narration: `Inventory gain: ${reason}`,
+        },
+      );
+    }
+
+    await createJournal({
+      businessId,
+      narration: `Auto: Inventory Revaluation — ${reason}`,
+      reference: `REVAL:${revaluationId}`,
+      lines,
+      tx,
+    });
+  } catch (err) {
+    console.error('[AutoJournal] Failed to post revaluation journal:', err);
+  }
+}
+
+// ── Stock Count Adjustment Journal ───────────────────────────────────────────
+
+/**
+ * Post journal entry for stock count adjustments:
+ *
+ * Shortage (inventory loss):
+ *   Dr Inventory Loss (5330)
+ *     Cr Inventory Asset (1200)
+ *
+ * Surplus (inventory gain):
+ *   Dr Inventory Asset (1200)
+ *     Cr Inventory Gain (4100)
+ */
+export async function postStockCountJournal(params: {
+  stockCountNo: string;
+  totalValueImpact: number;      // Positive = surplus, Negative = shortage
+  businessId: string;
+  tx?: any;
+}): Promise<void> {
+  try {
+    const { stockCountNo, totalValueImpact, businessId, tx } = params;
+
+    if (!await isAutoJournalEnabled(businessId)) return;
+    if (totalValueImpact === 0) return;
+
+    const lines: JournalLineInput[] = [];
+    const absAmount = Math.abs(totalValueImpact);
+
+    if (totalValueImpact < 0) {
+      // Shortage — inventory loss
+      lines.push(
+        {
+          accountCode: '5330',
+          accountName: 'Inventory Loss (Stock Count)',
+          accountType: 'EXPENSE',
+          debit: absAmount,
+          credit: 0,
+          narration: `Stock count shortage: ${stockCountNo}`,
+        },
+        {
+          accountCode: '1200',
+          accountName: 'Inventory Asset',
+          accountType: 'ASSET',
+          debit: 0,
+          credit: absAmount,
+          narration: `Stock count adjustment: ${stockCountNo}`,
+        },
+      );
+    } else {
+      // Surplus — inventory gain
+      lines.push(
+        {
+          accountCode: '1200',
+          accountName: 'Inventory Asset',
+          accountType: 'ASSET',
+          debit: absAmount,
+          credit: 0,
+          narration: `Stock count surplus: ${stockCountNo}`,
+        },
+        {
+          accountCode: '4100',
+          accountName: 'Inventory Gain',
+          accountType: 'REVENUE',
+          debit: 0,
+          credit: absAmount,
+          narration: `Stock count adjustment: ${stockCountNo}`,
+        },
+      );
+    }
+
+    await createJournal({
+      businessId,
+      narration: `Auto: Stock Count Adjustment — ${stockCountNo}`,
+      reference: `SC_ADJ:${stockCountNo}`,
+      lines,
+      tx,
+    });
+  } catch (err) {
+    console.error('[AutoJournal] Failed to post stock count journal:', err);
+  }
+}
+
+// ── Production Journal ───────────────────────────────────────────────────────
+
+/**
+ * Post journal entry for a production run:
+ *
+ *   Dr Finished Goods Inventory (1200)          [total production cost]
+ *   Cr Raw Material Inventory (1210)             [material cost]
+ *   Cr Labor Payable (2500)                      [labor cost]     (if > 0)
+ *   Cr Manufacturing Overhead Applied (5400)     [overhead cost]  (if > 0)
+ */
+export async function postProductionJournal(params: {
+  productionId: string;
+  finishedProductName: string;
+  totalCost: number;
+  materialCost: number;
+  laborCost: number;
+  overheadCost: number;
+  additionalCost: number;
+  businessId: string;
+  tx?: any;
+}): Promise<void> {
+  try {
+    const {
+      productionId,
+      finishedProductName,
+      totalCost,
+      materialCost,
+      laborCost,
+      overheadCost,
+      additionalCost,
+      businessId,
+      tx,
+    } = params;
+
+    if (!await isAutoJournalEnabled(businessId)) return;
+    if (totalCost <= 0) return;
+
+    const lines: JournalLineInput[] = [
+      // Dr Finished Goods Inventory
+      {
+        accountCode: '1200',
+        accountName: 'Inventory Asset',
+        accountType: 'ASSET',
+        debit: totalCost,
+        credit: 0,
+        narration: `Production: ${finishedProductName}`,
+      },
+    ];
+
+    // Cr Raw Material Inventory
+    if (materialCost > 0) {
+      lines.push({
+        accountCode: '1210',
+        accountName: 'Raw Material Inventory',
+        accountType: 'ASSET',
+        debit: 0,
+        credit: materialCost,
+        narration: `Raw materials consumed: ${finishedProductName}`,
+      });
+    }
+
+    // Cr Labor Payable
+    if (laborCost > 0) {
+      lines.push({
+        accountCode: '2500',
+        accountName: 'Labor Payable',
+        accountType: 'LIABILITY',
+        debit: 0,
+        credit: laborCost,
+        narration: `Production labor: ${finishedProductName}`,
+      });
+    }
+
+    // Cr Manufacturing Overhead Applied
+    if (overheadCost > 0) {
+      lines.push({
+        accountCode: '5400',
+        accountName: 'Manufacturing Overhead Applied',
+        accountType: 'EXPENSE',
+        debit: 0,
+        credit: overheadCost,
+        narration: `Production overhead: ${finishedProductName}`,
+      });
+    }
+
+    // Cr Additional Costs (catch-all)
+    if (additionalCost > 0) {
+      lines.push({
+        accountCode: '2400',
+        accountName: 'Accrued Expenses',
+        accountType: 'LIABILITY',
+        debit: 0,
+        credit: additionalCost,
+        narration: `Additional production costs: ${finishedProductName}`,
+      });
+    }
+
+    await createJournal({
+      businessId,
+      narration: `Auto: Production — ${finishedProductName}`,
+      reference: `PRODUCTION:${productionId}`,
+      lines,
+      tx,
+    });
+  } catch (err) {
+    console.error('[AutoJournal] Failed to post production journal:', err);
+  }
+}

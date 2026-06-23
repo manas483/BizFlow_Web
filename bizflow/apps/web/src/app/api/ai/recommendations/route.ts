@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { requireAuth, withAuth, AuthError } from "@/shared/lib/api-guard";
 import { generateRecommendations } from "@/shared/lib/ml-engine";
@@ -13,3 +14,4 @@ export const GET = withAuth(async () => {
     return NextResponse.json({ productRecommendations: [], quickActions: [], insights: [], reorderAlerts: [] });
   }
 });
+

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { requireAuth, AuthError } from "@/shared/lib/api-guard";
@@ -10,66 +11,7 @@ import {
 import { recalculateTransportCosts } from "@/shared/lib/expense-calculations";
 import { findProductIntelligence } from "@/shared/lib/business-intelligence";
 
-/* ─── Known Invoice Data (maps invoice numbers → product line items) ──────── */
-const INVOICES_DATA: Record<string, {
-  invoiceNumber: string;
-  supplier: string;
-  category: string;
-  purchaseDate: string;
-  products: Array<{
-    name: string; sku: string; category: string; hsnCode: string;
-    stock: number; unitsPerBag: number;
-    basePurchasePrice: number; purchasePrice: number;
-    sellingPrice: number; unit: string; gstRate: number;
-  }>;
-}> = {
-  "AGCMBPDF0274": {
-    invoiceNumber: "AGCMBPDF0274", supplier: "AGROCHEM", category: "Fertilizers", purchaseDate: "2026-06-08",
-    products: [
-      { name: "Matix Urea 45 Kg", sku: "MTX-UR-45", category: "Fertilizers", hsnCode: "31021000", stock: 20, unitsPerBag: 1, basePurchasePrice: 260, purchasePrice: 260, sellingPrice: 0, unit: "bag", gstRate: 5 },
-      { name: "GR 28:28:0 50 Kg", sku: "GR-2828-50", category: "Fertilizers", hsnCode: "31055100", stock: 15, unitsPerBag: 1, basePurchasePrice: 1890, purchasePrice: 1890, sellingPrice: 0, unit: "bag", gstRate: 5 },
-      { name: "IPL DAP 50 Kg", sku: "IPL-DP-50", category: "Fertilizers", hsnCode: "31053000", stock: 10, unitsPerBag: 1, basePurchasePrice: 1345, purchasePrice: 1345, sellingPrice: 0, unit: "bag", gstRate: 5 },
-      { name: "NR DAP 50 Kg", sku: "NR-DP-50", category: "Fertilizers", hsnCode: "31053000", stock: 10, unitsPerBag: 1, basePurchasePrice: 1345, purchasePrice: 1345, sellingPrice: 0, unit: "bag", gstRate: 5 },
-      { name: "GR 20:20:0:13 50 Kg", sku: "GR-2020-50", category: "Fertilizers", hsnCode: "31055100", stock: 20, unitsPerBag: 1, basePurchasePrice: 1790, purchasePrice: 1790, sellingPrice: 0, unit: "bag", gstRate: 5 },
-      { name: "NR 20:20:0:13 50 Kg", sku: "NR-2020-50", category: "Fertilizers", hsnCode: "31055900", stock: 20, unitsPerBag: 1, basePurchasePrice: 1790, purchasePrice: 1790, sellingPrice: 0, unit: "bag", gstRate: 5 },
-      { name: "IPL MOP 50 Kg", sku: "IPL-MP-50", category: "Fertilizers", hsnCode: "31042000", stock: 25, unitsPerBag: 1, basePurchasePrice: 1845, purchasePrice: 1845, sellingPrice: 0, unit: "bag", gstRate: 5 },
-      { name: "NR TSP 46% 50 Kg", sku: "NR-TS-50", category: "Fertilizers", hsnCode: "31031100", stock: 10, unitsPerBag: 1, basePurchasePrice: 1295, purchasePrice: 1295, sellingPrice: 0, unit: "bag", gstRate: 5 },
-    ],
-  },
-  "ASDBPDS0278": {
-    invoiceNumber: "ASDBPDS0278", supplier: "ASHIRWAD SEEDS", category: "Seeds", purchaseDate: "2026-06-08",
-    products: [
-      { name: "Trump-162LS", sku: "TRM-162", category: "Seeds", hsnCode: "12099990", stock: 10, unitsPerBag: 5, basePurchasePrice: 1000, purchasePrice: 1000, sellingPrice: 0, unit: "pack", gstRate: 0 },
-      { name: "Yashraj", sku: "YSH-RJ", category: "Seeds", hsnCode: "12099990", stock: 6, unitsPerBag: 6, basePurchasePrice: 510, purchasePrice: 510, sellingPrice: 0, unit: "pack", gstRate: 0 },
-      { name: "Pan 804 (Jamuna)", sku: "PAN-804", category: "Seeds", hsnCode: "100610", stock: 12, unitsPerBag: 6, basePurchasePrice: 730, purchasePrice: 730, sellingPrice: 0, unit: "pack", gstRate: 0 },
-      { name: "NP-7075", sku: "NP-7075", category: "Seeds", hsnCode: "120999", stock: 12, unitsPerBag: 6, basePurchasePrice: 672, purchasePrice: 672, sellingPrice: 0, unit: "pack", gstRate: 0 },
-      { name: "Vishal Gaurav", sku: "VSH-GR", category: "Seeds", hsnCode: "12099990", stock: 12, unitsPerBag: 6, basePurchasePrice: 600, purchasePrice: 600, sellingPrice: 0, unit: "pack", gstRate: 0 },
-      { name: "Sindhu", sku: "SND-HU", category: "Seeds", hsnCode: "12099990", stock: 8, unitsPerBag: 4, basePurchasePrice: 970, purchasePrice: 970, sellingPrice: 0, unit: "pack", gstRate: 0 },
-    ],
-  },
-  "ASDBPDS0277": {
-    invoiceNumber: "ASDBPDS0277", supplier: "ASHIRWAD SEEDS", category: "Seeds", purchaseDate: "2026-06-08",
-    products: [
-      { name: "Kalachampa Gold", sku: "KLC-GD", category: "Seeds", hsnCode: "12099990", stock: 8, unitsPerBag: 4, basePurchasePrice: 760, purchasePrice: 760, sellingPrice: 0, unit: "pack", gstRate: 0 },
-    ],
-  },
-  "AGCMBPDSND0126": {
-    invoiceNumber: "AGCMBPDSND0126", supplier: "AGROCHEM", category: "Soil Conditioners", purchaseDate: "2026-06-08",
-    products: [
-      { name: "Chemfree Vamax 4 KG", sku: "CF-VMX-4", category: "Soil Conditioners", hsnCode: "31010099", stock: 18, unitsPerBag: 1, basePurchasePrice: 550, purchasePrice: 550, sellingPrice: 0, unit: "pcs", gstRate: 5 },
-      { name: "Shaktiman Oorja (FCO) 1 KG", sku: "SM-ORJ-1", category: "Soil Conditioners", hsnCode: "31010099", stock: 25, unitsPerBag: 1, basePurchasePrice: 90, purchasePrice: 90, sellingPrice: 0, unit: "pcs", gstRate: 5 },
-      { name: "Matix Zinc Sulphate (33%) 1 KG", sku: "MTX-ZN-1", category: "Soil Conditioners", hsnCode: "28332990", stock: 20, unitsPerBag: 1, basePurchasePrice: 190, purchasePrice: 190, sellingPrice: 0, unit: "pcs", gstRate: 5 },
-      { name: "PROM (Prabhat) 50 KG", sku: "PRM-PB-50", category: "Soil Conditioners", hsnCode: "31010099", stock: 5, unitsPerBag: 1, basePurchasePrice: 1250, purchasePrice: 1250, sellingPrice: 0, unit: "pcs", gstRate: 5 },
-    ],
-  },
-  "AGCMBPDC0253": {
-    invoiceNumber: "AGCMBPDC0253", supplier: "AGROCHEM", category: "Pesticides", purchaseDate: "2026-06-08",
-    products: [
-      { name: "Nashak 500 ml", sku: "NSK-500", category: "Pesticides", hsnCode: "38089390", stock: 20, unitsPerBag: 1, basePurchasePrice: 275, purchasePrice: 275, sellingPrice: 0, unit: "pcs", gstRate: 18 },
-      { name: "Nashak 250 ml", sku: "NSK-250", category: "Pesticides", hsnCode: "38089390", stock: 40, unitsPerBag: 1, basePurchasePrice: 150, purchasePrice: 150, sellingPrice: 0, unit: "pcs", gstRate: 18 },
-    ],
-  },
-};
+import { parseInvoicePdf } from "@/shared/lib/gemini";
 
 export async function POST(req: NextRequest) {
   try {
@@ -196,68 +138,71 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
     }
 
-    /* ── 2a. PDF Invoice Parsing ── */
+    /* ── 2a. PDF Invoice Parsing (AI Extraction) ── */
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-      const fileName = file.name.toUpperCase();
-      let detectedInvoice: (typeof INVOICES_DATA)[string] | null = null;
+      try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const base64Pdf = buffer.toString("base64");
 
-      for (const [key, data] of Object.entries(INVOICES_DATA)) {
-        if (fileName.includes(key)) {
-          detectedInvoice = data;
-          break;
+        const detectedInvoice = await parseInvoicePdf(base64Pdf);
+
+        if (detectedInvoice.error || !detectedInvoice.products || !Array.isArray(detectedInvoice.products)) {
+          return NextResponse.json({
+            error: detectedInvoice.error || "Could not recognise this invoice PDF or failed to extract products.",
+          }, { status: 400 });
         }
-      }
 
-      if (!detectedInvoice) {
+        const processedRows = detectedInvoice.products.map((p: any, idx: number) => {
+          // Find intelligence properties
+          const intel = findProductIntelligence(businessType, p.name, p.sku);
+          return {
+            rowIndex: idx + 1,
+            action: "create" as const,
+            errors: [] as { row: number; column: string; message: string; severity: "error" }[],
+            warnings: [] as { row: number; column: string; message: string; severity: "warning" }[],
+            data: {
+              name: p.name || `Extracted Item ${idx + 1}`,
+              sku: p.sku || "",
+              category: p.category || intel?.category || "Other",
+              stock: Number(p.stock) || 0,
+              unitsPerBag: Number(p.unitsPerBag) || intel?.unitsPerBag || 1,
+              basePurchasePrice: Number(p.basePurchasePrice) || 0,
+              transportCost: 0,
+              purchasePrice: Number(p.purchasePrice) || 0,
+              sellingPrice: Number(p.sellingPrice) || 0,
+              unit: p.unit || intel?.unit || "pcs",
+              supplier: detectedInvoice.supplier || "Unknown Supplier",
+              purchaseInvoiceNo: detectedInvoice.invoiceNumber || "UNKNOWN",
+              purchaseDate: detectedInvoice.purchaseDate || new Date().toISOString(),
+              gstRate: Number(p.gstRate) || intel?.gstRate || 0,
+              hsnCode: p.hsnCode || intel?.hsnCode || null,
+            },
+          };
+        });
+
         return NextResponse.json({
-          error: "Could not recognise this invoice PDF. Please ensure the filename contains the invoice number.",
+          mode: "validate",
+          isInvoicePdf: true,
+          invoiceInfo: {
+            invoiceNumber: detectedInvoice.invoiceNumber || "Unknown",
+            supplier: detectedInvoice.supplier || "Unknown Supplier",
+            purchaseDate: detectedInvoice.purchaseDate || new Date().toISOString(),
+          },
+          validation: {
+            valid: true,
+            summary: { total: processedRows.length, valid: processedRows.length, errors: 0, warnings: 0, duplicates: 0 },
+            processedRows,
+            errors: [],
+            warnings: [],
+          },
+        });
+      } catch (err: any) {
+        console.error("PDF Parsing Error:", err);
+        return NextResponse.json({
+          error: "Failed: " + err.message,
+          details: err.message
         }, { status: 400 });
       }
-
-      const processedRows = detectedInvoice.products.map((p, idx) => {
-        // Find intelligence properties
-        const intel = findProductIntelligence(businessType, p.name, p.sku);
-        return {
-          rowIndex: idx + 1,
-          action: "create" as const,
-          errors: [] as { row: number; column: string; message: string; severity: "error" }[],
-          warnings: [] as { row: number; column: string; message: string; severity: "warning" }[],
-          data: {
-            name: p.name,
-            sku: p.sku,
-            category: p.category || intel?.category || "Other",
-            stock: p.stock,
-            unitsPerBag: p.unitsPerBag || intel?.unitsPerBag || 1,
-            basePurchasePrice: p.basePurchasePrice,
-            transportCost: 0,
-            purchasePrice: p.purchasePrice,
-            sellingPrice: p.sellingPrice || 0,
-            unit: p.unit || intel?.unit || "pcs",
-            supplier: detectedInvoice!.supplier,
-            purchaseInvoiceNo: detectedInvoice!.invoiceNumber,
-            purchaseDate: detectedInvoice!.purchaseDate,
-            gstRate: p.gstRate || intel?.gstRate || 0,
-            hsnCode: p.hsnCode || intel?.hsnCode || null,
-          },
-        };
-      });
-
-      return NextResponse.json({
-        mode: "validate",
-        isInvoicePdf: true,
-        invoiceInfo: {
-          invoiceNumber: detectedInvoice.invoiceNumber,
-          supplier: detectedInvoice.supplier,
-          purchaseDate: detectedInvoice.purchaseDate,
-        },
-        validation: {
-          valid: true,
-          summary: { total: processedRows.length, valid: processedRows.length, errors: 0, warnings: 0, duplicates: 0 },
-          processedRows,
-          errors: [],
-          warnings: [],
-        },
-      });
     }
 
     /* ── 2b. Excel / CSV Parsing ── */
@@ -447,3 +392,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
+

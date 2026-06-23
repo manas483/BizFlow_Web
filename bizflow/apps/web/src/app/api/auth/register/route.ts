@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * Legacy route: /api/auth/register
  * The canonical registration endpoint is /api/register.
@@ -21,3 +22,4 @@ export async function POST(req: Request) {
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
 }
+

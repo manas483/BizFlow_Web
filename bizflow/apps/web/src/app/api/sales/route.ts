@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/shared/lib/db';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
@@ -5,7 +6,7 @@ import { saleSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
 import { extractStateCodeFromGST } from '@/shared/lib/gst-engine';
 import { calculateInvoiceTotal } from '@/shared/lib/invoice-engine';
-import { adjustStock } from '@/shared/lib/stock-engine';
+import { adjustStockWithLayers } from '@/shared/lib/stock-engine';
 import { postSaleJournal } from '@/shared/lib/auto-journal';
 
 export async function GET(req: NextRequest) {
@@ -159,7 +160,7 @@ export async function POST(req: NextRequest) {
                 productId: item.productId,
                 qty: item.qty,
                 price: item.price,
-                purchasePrice: productMap[item.productId]?.purchasePrice || 0,
+                purchasePrice: 0, // Will be updated after layer consumption
                 discount: parseFloat(item.discount) || 0,
               hsnCode: item.hsnCode,
               gstRate: parseFloat(item.gstRate) || 0
@@ -168,15 +169,36 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      // 4. Stock auto-deduction via Stock Engine
+      // 4. Stock auto-deduction via Layer-Aware Stock Engine
+      let totalSaleCOGS = 0;
       for (const item of items) {
-        await adjustStock({
+        const layerResult = await adjustStockWithLayers({
           productId: item.productId,
           qty: item.qty,
           type: 'sale',
           businessId: session.user.businessId,
+          transactionId: sale.id,
+          transactionType: 'sale',
           tx,
         });
+
+        // Update SaleItem with actual COGS from consumed layers
+        if (layerResult && layerResult.totalCOGS > 0) {
+          const actualUnitCost = layerResult.totalCOGS / item.qty;
+          await tx.saleItem.updateMany({
+            where: { saleId: sale.id, productId: item.productId },
+            data: { purchasePrice: Math.round(actualUnitCost * 10000) / 10000 },
+          });
+          totalSaleCOGS += layerResult.totalCOGS;
+        } else {
+          // Fallback to product-level purchasePrice if no layers exist
+          const fallbackCost = (productMap[item.productId]?.purchasePrice || 0) * item.qty;
+          await tx.saleItem.updateMany({
+            where: { saleId: sale.id, productId: item.productId },
+            data: { purchasePrice: productMap[item.productId]?.purchasePrice || 0 },
+          });
+          totalSaleCOGS += fallbackCost;
+        }
       }
 
       // 5. Update customer dues and totalPurchases
@@ -212,7 +234,7 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return { sale, gstBreakdown };
+      return { sale, gstBreakdown, totalSaleCOGS };
     });
 
     // A-4 FIX: Use dynamic import() instead of require() for proper tree-shaking
@@ -240,6 +262,17 @@ export async function POST(req: NextRequest) {
       businessId: session.user.businessId,
     }).catch(err => console.error('[AutoJournal] Sale journal failed:', err));
 
+    // 9. Auto-post COGS journal entry (fire-and-forget)
+    if (result.totalSaleCOGS > 0) {
+      const { postCOGSJournal } = await import('@/shared/lib/auto-journal');
+      postCOGSJournal({
+        saleId: result.sale.id,
+        invoiceNo: result.sale.invoiceNo,
+        cogsAmount: result.totalSaleCOGS,
+        businessId: session.user.businessId,
+      }).catch(err => console.error('[AutoJournal] COGS journal failed:', err));
+    }
+
     return NextResponse.json(result.sale, { status: 201 });
   } catch (error: any) {
     // A-3 FIX: Retry on unique constraint violation (invoice number collision)
@@ -252,8 +285,10 @@ export async function POST(req: NextRequest) {
     console.error("Sale Creation Error:", error);
     // C-5 FIX: Only expose known business-rule errors to the client.
     // Internal errors (DB, Prisma, network) must never leak to the response.
-    const KNOWN_PREFIXES = ['Insufficient stock', 'Product ', 'Customer '];
-    const isBusinessError = KNOWN_PREFIXES.some(p => error.message?.startsWith(p));
+    const KNOWN_PREFIXES = ['Insufficient stock', 'Insufficient layer stock', 'Product ', 'Customer '];
+    const isBusinessError = KNOWN_PREFIXES.some(p => error.message?.startsWith(p))
+      || error?.code === 'BUSINESS_RULE'
+      || error?.code === 'INSUFFICIENT_LAYER_STOCK';
     return NextResponse.json(
       { error: isBusinessError ? error.message : 'Internal Server Error' },
       { status: isBusinessError ? 400 : 500 }
@@ -262,4 +297,3 @@ export async function POST(req: NextRequest) {
   } // end retry loop
   return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
 }
-

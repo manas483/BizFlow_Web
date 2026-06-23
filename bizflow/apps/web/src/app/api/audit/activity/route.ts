@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { requireAuth, withAuth, AuthError } from "@/shared/lib/api-guard";
 import { prisma } from "@/shared/lib/db";
@@ -78,3 +79,4 @@ export const GET = withAuth(async (req: Request) => {
     });
   }
 });
+

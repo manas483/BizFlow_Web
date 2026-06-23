@@ -67,6 +67,12 @@ model Business {
   warehouses          Warehouse[]
   aiForecasts         AiForecast[]
   stockMovements      StockMovement[]
+  // ── Inventory Layer Costing relations ──
+  inventoryLayers       InventoryLayer[]
+  layerConsumptions     InventoryLayerConsumption[]
+  periodClosings        InventoryPeriodClosing[]
+  stockCounts           StockCount[]
+  billsOfMaterial       BillOfMaterial[]
 }
 
 model User {
@@ -146,6 +152,7 @@ model Product {
   quotationItems    QuotationItem[]
   saleItems         SaleItem[]
   stockMovements    StockMovement[]
+  inventoryLayers   InventoryLayer[]
 
   @@index([businessId])
 }
@@ -918,31 +925,35 @@ model BackupRecord {
 
 /// Automation Settings — per-business feature toggles for automation modules.
 model AutomationSettings {
-  id                 String  @id @default(cuid())
-  businessId         String  @unique
-  autoGst            Boolean @default(true)
-  autoJournal        Boolean @default(true)
-  autoStockUpdate    Boolean @default(true)
-  autoReorderAlert   Boolean @default(true)
-  aiForecast         Boolean @default(false)
-  aiInsights         Boolean @default(false)
-  emailNotifications Boolean @default(true)
-  whatsappButton     Boolean @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  business           Business @relation(fields: [businessId], references: [id])
+  id                    String  @id @default(cuid())
+  businessId            String  @unique
+  autoGst               Boolean @default(true)
+  autoJournal           Boolean @default(true)
+  autoStockUpdate       Boolean @default(true)
+  autoReorderAlert      Boolean @default(true)
+  aiForecast            Boolean @default(false)
+  aiInsights            Boolean @default(false)
+  emailNotifications    Boolean @default(true)
+  whatsappButton        Boolean @default(true)
+  // ── Inventory Costing ──
+  costingMethod         String  @default("FIFO")          // FIFO | LIFO | WAC | SPECIFIC | STANDARD
+  landedCostAllocation  String  @default("BY_QUANTITY")   // BY_QUANTITY | BY_WEIGHT | BY_VOLUME | BY_VALUE | MANUAL
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  business              Business @relation(fields: [businessId], references: [id])
 }
 
 /// Warehouse — physical storage locations for inventory tracking.
 model Warehouse {
-  id         String   @id @default(cuid())
-  name       String
-  location   String?
-  isDefault  Boolean  @default(false)
-  businessId String
-  createdAt  DateTime @default(now())
-  business   Business @relation(fields: [businessId], references: [id])
-  stockMovements StockMovement[]
+  id              String   @id @default(cuid())
+  name            String
+  location        String?
+  isDefault       Boolean  @default(false)
+  businessId      String
+  createdAt       DateTime @default(now())
+  business        Business @relation(fields: [businessId], references: [id])
+  stockMovements  StockMovement[]
+  inventoryLayers InventoryLayer[]
 
   @@unique([businessId, name])
 }
@@ -988,4 +999,268 @@ model StockMovement {
 
   @@index([businessId, productId])
   @@index([businessId, createdAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Inventory Layer Costing
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Inventory Layer — each stock receipt creates a separate cost layer for FIFO/LIFO consumption.
+model InventoryLayer {
+  id                     String   @id @default(cuid())
+  itemId                 String                              // FK → Product
+  warehouseId            String?                             // FK → Warehouse
+
+  receiptNo              String?                             // Purchase invoice / GRN number
+  receiptDate            DateTime @default(now())
+
+  originalQty            Float                               // Quantity received
+  remainingQty           Float                               // Current remaining
+
+  purchaseCost           Float                               // Base purchase cost (total)
+  landedCost             Float                               // Total landed cost (purchase + all expenses)
+  unitCost               Float                               // landedCost / originalQty
+
+  status                 String   @default("ACTIVE")         // ACTIVE | EXHAUSTED | RETURNED
+
+  // ── Batch / Lot Tracking ──
+  batchNo                String?
+  lotNo                  String?
+  mfgDate                DateTime?
+  expiryDate             DateTime?
+
+  // ── Supplier Reference ──
+  supplierId             String?                             // Supplier name or future FK
+  purchaseInvoiceId      String?                             // Link to purchase receipt
+
+  // ── Multi-Currency ──
+  currencyCode           String   @default("INR")            // ISO 4217
+  exchangeRate           Float    @default(1)                // Exchange rate to base currency
+  foreignAmount          Float?                              // Amount in foreign currency
+
+  // ── Transfer Tracking ──
+  transferredFromLayerId String?                             // Source layer if created by transfer
+  sourceTransactionId    String?                             // Source transaction that created this layer
+  sourceTransactionType  String?                             // "purchase" | "transfer" | "production" | "return" | "adjustment"
+
+  // ── Flags ──
+  isAdjustment           Boolean  @default(false)            // True if created by stock count adjustment
+  costingMethodSnapshot  String?                             // Costing method at time of creation
+
+  businessId             String
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @default(now()) @updatedAt
+
+  product                Product                @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  warehouse              Warehouse?             @relation(fields: [warehouseId], references: [id])
+  business               Business               @relation(fields: [businessId], references: [id])
+  costs                  InventoryLayerCost[]
+  consumptions           InventoryLayerConsumption[]
+  serials                InventorySerial[]
+  costAdjustments        InventoryCostAdjustment[]
+  revaluations           InventoryRevaluation[]
+
+  @@index([businessId, itemId])
+  @@index([businessId, itemId, warehouseId])
+  @@index([businessId, status])
+  @@index([batchNo])
+  @@index([expiryDate])
+}
+
+/// Inventory Layer Cost — breakdown of each expense component in a layer.
+model InventoryLayerCost {
+  id          String   @id @default(cuid())
+  layerId     String
+  expenseType String                                 // "purchase_cost" | "transport" | "loading" | "unloading" | "insurance" | "customs" | "freight" | "other"
+  amount      Float
+  remarks     String?
+  createdAt   DateTime @default(now())
+
+  layer       InventoryLayer @relation(fields: [layerId], references: [id], onDelete: Cascade)
+
+  @@index([layerId])
+}
+
+/// Inventory Layer Consumption — tracks which layer was consumed by each transaction.
+model InventoryLayerConsumption {
+  id              String   @id @default(cuid())
+  transactionId   String                               // Sale ID, BOS ID, transfer ID, etc.
+  transactionType String                               // "sale" | "bill_of_supply" | "purchase_return" | "transfer" | "production" | "adjustment" | "manual"
+  layerId         String
+  quantity        Float
+  unitCost        Float                                // Unit cost at time of consumption
+  amount          Float                                // quantity × unitCost
+  businessId      String
+  createdAt       DateTime @default(now())
+
+  layer           InventoryLayer @relation(fields: [layerId], references: [id], onDelete: Cascade)
+  business        Business       @relation(fields: [businessId], references: [id])
+
+  @@index([transactionId])
+  @@index([layerId])
+  @@index([businessId, createdAt])
+}
+
+/// Inventory Serial — per-unit serial/IMEI tracking linked to layers (Phase 2).
+model InventorySerial {
+  id           String   @id @default(cuid())
+  layerId      String
+  serialNumber String
+  imei         String?
+  status       String   @default("IN_STOCK")          // IN_STOCK | SOLD | RETURNED | DAMAGED
+  soldToId     String?                                // Customer ID if sold
+  saleItemId   String?                                // Link to SaleItem
+  businessId   String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  layer        InventoryLayer @relation(fields: [layerId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, serialNumber])
+  @@index([layerId])
+  @@index([businessId, status])
+}
+
+/// Inventory Revaluation — manual or system-triggered cost revaluation (Phase 2).
+model InventoryRevaluation {
+  id               String   @id @default(cuid())
+  layerId          String
+  reason           String                                 // "damage" | "market_adjustment" | "obsolescence" | "quality_issue" | "manual"
+  oldUnitCost      Float
+  newUnitCost      Float
+  oldLandedCost    Float
+  newLandedCost    Float
+  quantityAffected Float                                  // remainingQty at time of revaluation
+  impactAmount     Float                                  // (newUnitCost - oldUnitCost) × quantityAffected
+  journalEntryId   String?                                // Link to the GL entry posted
+  notes            String?
+  performedBy      String?                                // userId
+  businessId       String
+  createdAt        DateTime @default(now())
+
+  layer            InventoryLayer @relation(fields: [layerId], references: [id], onDelete: Cascade)
+
+  @@index([layerId])
+  @@index([businessId, createdAt])
+}
+
+/// Inventory Cost Adjustment — handles late landed cost invoices after partial consumption.
+model InventoryCostAdjustment {
+  id                   String   @id @default(cuid())
+  layerId              String
+  expenseType          String                             // Same expense types as InventoryLayerCost
+  totalAmount          Float                              // Total expense amount
+  allocatedToRemaining Float                              // Portion allocated to remaining inventory
+  allocatedToConsumed  Float                              // Portion allocated to already-sold COGS
+  oldUnitCost          Float
+  newUnitCost          Float
+  journalEntryId       String?                            // COGS adjustment journal entry
+  remarks              String?
+  businessId           String
+  createdAt            DateTime @default(now())
+
+  layer                InventoryLayer @relation(fields: [layerId], references: [id], onDelete: Cascade)
+
+  @@index([layerId])
+  @@index([businessId, createdAt])
+}
+
+/// Inventory Period Closing — month-end / period-end inventory snapshots (Phase 2).
+model InventoryPeriodClosing {
+  id             String   @id @default(cuid())
+  period         String                                // "2026-03", "2026-Q1", etc.
+  closingDate    DateTime
+  status         String   @default("OPEN")             // OPEN | CLOSED | LOCKED
+  totalItems     Int
+  totalQuantity  Float
+  totalValue     Float                                 // Sum of all layer values at close
+  snapshotData   Json                                  // Full layer snapshot
+  closedBy       String?                               // userId
+  businessId     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+
+  business       Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, period])
+  @@index([businessId, closingDate])
+}
+
+/// Stock Count — physical stock verification records (Phase 2).
+model StockCount {
+  id               String   @id @default(cuid())
+  countNo          String                               // Auto: SC-2026-001
+  countDate        DateTime
+  warehouseId      String?
+  status           String   @default("DRAFT")           // DRAFT | IN_PROGRESS | COMPLETED | APPROVED
+  totalVariance    Float    @default(0)                 // Net quantity variance
+  totalValueImpact Float    @default(0)                 // Net value impact of adjustments
+  journalEntryId   String?                              // Adjustment journal
+  approvedBy       String?
+  notes            String?
+  businessId       String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+
+  items            StockCountItem[]
+  business         Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, countNo])
+  @@index([businessId, status])
+}
+
+/// Stock Count Item — individual product lines within a stock count (Phase 2).
+model StockCountItem {
+  id             String   @id @default(cuid())
+  stockCountId   String
+  productId      String
+  warehouseId    String?
+  systemQty      Float                                 // What ERP says we should have
+  physicalQty    Float                                 // What was physically counted
+  variance       Float                                 // physicalQty - systemQty
+  unitCost       Float                                 // WAC or layer cost for valuation
+  valueImpact    Float                                 // variance × unitCost
+  adjustmentType String?                               // "surplus" | "shortage" | "match"
+  notes          String?
+
+  stockCount     StockCount @relation(fields: [stockCountId], references: [id], onDelete: Cascade)
+
+  @@index([stockCountId])
+}
+
+/// Bill of Material — manufacturing recipe / formula (Phase 2).
+model BillOfMaterial {
+  id              String   @id @default(cuid())
+  finishedItemId  String                               // FK → Product (finished good)
+  bomNo           String                               // Auto: BOM-001
+  name            String
+  outputQty       Float    @default(1)                 // How many finished units one BOM produces
+  laborCost       Float    @default(0)
+  overheadCost    Float    @default(0)
+  overheadType    String   @default("fixed")           // "fixed" | "percentage"
+  status          String   @default("ACTIVE")          // ACTIVE | DRAFT | ARCHIVED
+  notes           String?
+  businessId      String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  components      BillOfMaterialItem[]
+  business        Business @relation(fields: [businessId], references: [id])
+
+  @@unique([businessId, bomNo])
+  @@index([businessId, finishedItemId])
+}
+
+/// Bill of Material Item — raw material components for a BOM (Phase 2).
+model BillOfMaterialItem {
+  id          String   @id @default(cuid())
+  bomId       String
+  productId   String                                   // FK → Product (raw material)
+  quantity    Float                                    // Required qty per BOM output
+  unit        String?
+  notes       String?
+
+  bom         BillOfMaterial @relation(fields: [bomId], references: [id], onDelete: Cascade)
+
+  @@index([bomId])
 }

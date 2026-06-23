@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { prisma } from "@/shared/lib/db";
 
@@ -21,3 +22,4 @@ export async function GET() {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
+

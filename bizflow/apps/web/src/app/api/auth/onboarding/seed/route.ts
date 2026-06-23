@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { requireAuth, withAuth, AuthError } from "@/shared/lib/api-guard";
 import { prisma } from "@/shared/lib/db";
@@ -66,3 +67,4 @@ export const POST = withAuth(async () => {
     return NextResponse.json({ message: "Internal server error" }, { status: 500 });
   }
 });
+

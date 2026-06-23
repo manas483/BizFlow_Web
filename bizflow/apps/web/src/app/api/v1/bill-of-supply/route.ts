@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/bill-of-supply   — paginated bill of supply list
  * POST /api/v1/bill-of-supply   — create bill of supply
@@ -101,3 +102,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

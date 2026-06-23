@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/quotations   — paginated quotation list
  * POST /api/v1/quotations   — create quotation
@@ -117,3 +118,4 @@ export async function POST(req: NextRequest) {
     return internalError(e.message);
   }
 }
+

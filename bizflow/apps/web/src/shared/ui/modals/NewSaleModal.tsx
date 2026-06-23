@@ -397,9 +397,10 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
         toast.success("Invoice created successfully!");
       }
       handleClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      toast.error(`Failed to ${editSaleId ? "update" : "create"} invoice. Check stock availability.`);
+      const msg = error?.message || `Failed to ${editSaleId ? "update" : "create"} invoice.`;
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

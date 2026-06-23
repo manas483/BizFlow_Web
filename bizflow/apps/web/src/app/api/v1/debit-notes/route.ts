@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/debit-notes   — paginated debit note list
  * POST /api/v1/debit-notes   — create debit note (race-condition-safe numbering)
@@ -87,3 +88,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

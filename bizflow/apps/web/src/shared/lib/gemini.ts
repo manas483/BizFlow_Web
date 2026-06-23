@@ -263,6 +263,83 @@ Make insights specific and data-driven. Use ₹ for currency. Be concise.`;
   }
 }
 
+/**
+ * Parse an uploaded PDF invoice using Gemini Vision.
+ */
+export async function parseInvoicePdf(base64Pdf: string): Promise<any> {
+  const prompt = `You are a data extraction assistant for an inventory management system.
+Extract invoice details from this PDF document.
+If the document is not an invoice, or is completely unreadable, return {"error": "Not a valid invoice"}.
+
+Respond ONLY with valid JSON in this exact format (no markdown, no backticks):
+{
+  "invoiceNumber": "INV-12345",
+  "supplier": "Supplier Name Ltd.",
+  "purchaseDate": "2024-01-25",
+  "products": [
+    {
+      "name": "Exact Product Name",
+      "sku": "SKU if available, otherwise empty string",
+      "category": "Inferred Category",
+      "stock": 10,
+      "unitsPerBag": 1,
+      "basePurchasePrice": 100.50,
+      "purchasePrice": 118.59,
+      "sellingPrice": 150.00,
+      "unit": "pcs",
+      "gstRate": 18,
+      "hsnCode": "1234"
+    }
+  ]
+}
+
+Instructions for extraction:
+- 'stock' is the quantity purchased.
+- 'purchasePrice' should ideally be the final landed cost per unit including taxes. 'basePurchasePrice' is cost before tax.
+- 'sellingPrice' is MRP if available, else 0.
+- Ensure numeric values are numbers, not strings.
+- Try to infer the 'category' based on the product name and supplier context.`;
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured');
+  }
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: 'application/pdf', data: base64Pdf } }
+        ]
+      }],
+      generationConfig: {
+        temperature: 0.1, // low temperature for extraction
+        maxOutputTokens: 4096,
+        responseMimeType: 'application/json',
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini Vision API error: ${response.status} - ${err}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+  
+  try {
+    const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch (e) {
+    console.error("Failed to parse Gemini response:", rawText);
+    throw new Error("Failed to parse invoice data from AI response.");
+  }
+}
+
 // ── Data Gatherers ───────────────────────────────────────────────────────────
 
 async function gatherSalesHistory(businessId: string): Promise<MonthlySales[]> {

@@ -5,6 +5,8 @@ import { journalEntrySchema } from '@/shared/lib/validations';
 import { generateNextNumber } from '@/shared/lib/accounting-utils';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth();

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /** GET /api/v1/business  — fetch business info
  *  PUT /api/v1/business  — update (SUPER_ADMIN) */
 
@@ -31,3 +32,4 @@ export async function PUT(req: NextRequest) {
     return internalError();
   }
 }
+

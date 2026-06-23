@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/products        — paginated product list
  * POST /api/v1/products        — create product
@@ -80,3 +81,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

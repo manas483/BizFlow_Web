@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/customers        — paginated customer list
  * POST /api/v1/customers        — create customer
@@ -60,3 +61,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

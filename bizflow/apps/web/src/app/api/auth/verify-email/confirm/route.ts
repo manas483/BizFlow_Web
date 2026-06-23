@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { verifyOtp } from "@/shared/lib/otp";
 import { authRateLimit } from "@/shared/lib/rate-limit";
@@ -55,3 +56,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "An unexpected error occurred.", code: "SERVER_ERROR" }, { status: 500 });
   }
 }
+

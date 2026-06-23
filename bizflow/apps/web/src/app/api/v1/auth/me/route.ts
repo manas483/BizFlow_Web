@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/auth/me       — return full current user + business info
  * POST /api/v1/auth/logout   — revoke the supplied refresh_token
@@ -47,3 +48,4 @@ export async function GET(req: NextRequest) {
     return err('INTERNAL_ERROR', 'Internal Server Error', 500);
   }
 }
+

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * POST /api/v1/notifications/mark-all-read
  *
@@ -34,3 +35,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

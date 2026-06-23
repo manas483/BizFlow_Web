@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { generateForecast } from '@/shared/lib/gemini';
@@ -29,3 +30,4 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to generate forecast' }, { status: 500 });
   }
 }
+

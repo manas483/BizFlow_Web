@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET /api/v1/profile
  * PUT /api/v1/profile
@@ -53,3 +54,4 @@ export async function PUT(req: NextRequest) {
     return internalError();
   }
 }
+

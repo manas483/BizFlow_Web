@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/sales        — paginated sales list  (?summary=true for lightweight mobile list)
  * POST /api/v1/sales        — create sale (invoice)
@@ -154,3 +155,4 @@ export async function POST(req: NextRequest) {
     return internalError(e.message);
   }
 }
+

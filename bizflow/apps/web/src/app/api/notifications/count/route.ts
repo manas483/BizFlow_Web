@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { getUnreadCount, markAllRead } from '@/shared/lib/notification-engine';
@@ -35,3 +36,4 @@ export async function POST() {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/notifications   — paginated notification list (role-filtered)
  * POST /api/v1/notifications   — create notification (admin)
@@ -64,3 +65,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

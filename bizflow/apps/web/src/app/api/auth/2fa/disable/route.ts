@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuth, withAuth, getRequestMeta } from '@/shared/lib/api-guard';
 import { prisma } from '@/shared/lib/db';
@@ -114,3 +115,4 @@ export const POST = withAuth(async (req: Request) => {
 
   return NextResponse.json({ success: true, message: 'Two-factor authentication disabled' });
 });
+

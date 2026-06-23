@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/leaves   — paginated leave list (role-aware)
  * POST /api/v1/leaves   — employee applies for leave
@@ -104,3 +105,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

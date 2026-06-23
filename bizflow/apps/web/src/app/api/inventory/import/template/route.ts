@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { requireAuth, AuthError } from "@/shared/lib/api-guard";
@@ -113,3 +114,4 @@ export async function GET() {
     return NextResponse.json({ error: "Failed to generate template" }, { status: 500 });
   }
 }
+

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/employees   — paginated employee list
  * POST /api/v1/employees   — onboard employee (invite flow via Resend)
@@ -94,3 +95,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

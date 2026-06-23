@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/credit-notes   — paginated credit note list
  * POST /api/v1/credit-notes   — create credit note (race-condition-safe numbering)
@@ -88,3 +89,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

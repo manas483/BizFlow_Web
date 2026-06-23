@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET  /api/v1/expenses   — paginated expense list
  * POST /api/v1/expenses   — create expense
@@ -63,3 +64,4 @@ export async function POST(req: NextRequest) {
     return internalError();
   }
 }
+

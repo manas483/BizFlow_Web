@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { getReorderAlerts } from '@/shared/lib/stock-engine';
@@ -17,3 +18,4 @@ export async function GET() {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+

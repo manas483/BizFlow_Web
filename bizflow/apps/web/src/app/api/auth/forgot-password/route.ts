@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { prisma } from "@/shared/lib/db";
 import { sendPasswordResetEmail } from "@/shared/lib/email";
@@ -61,3 +62,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

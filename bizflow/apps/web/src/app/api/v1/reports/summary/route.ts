@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * GET /api/v1/reports/summary
  *
@@ -67,3 +68,4 @@ export async function GET(req: NextRequest) {
     return internalError();
   }
 }
+

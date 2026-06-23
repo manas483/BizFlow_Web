@@ -7,6 +7,7 @@
  */
 
 import { prisma } from '@/shared/lib/db';
+import { consumeLayers, type LayerConsumptionResult } from '@/shared/lib/layer-engine';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -210,4 +211,111 @@ export async function getStockSummary(businessId: string) {
   const totalProducts = products.length;
 
   return { totalStock, reservedStock, availableStock, totalProducts };
+}
+
+// ── Layer-Aware Stock Adjustment ─────────────────────────────────────────────
+
+export interface AdjustStockWithLayersParams {
+  productId: string;
+  qty: number;
+  type: StockAdjustmentType;
+  businessId: string;
+  warehouseId?: string;
+  transactionId: string;
+  transactionType: string;
+  specificLayerId?: string;    // For SPECIFIC identification method
+  tx?: any;
+}
+
+/**
+ * Layer-aware stock adjustment.
+ *
+ * For outbound movements (sale, purchase_return):
+ *   Consumes inventory layers via the business's costing method (FIFO/LIFO/WAC/etc.)
+ *   Returns the COGS breakdown from consumed layers.
+ *
+ * For inbound movements (purchase, sale_return):
+ *   Only adjusts the product stock count (layers are created separately by createLayer).
+ *
+ * Always updates Product.stock and creates a StockMovement record.
+ */
+export async function adjustStockWithLayers(params: AdjustStockWithLayersParams): Promise<LayerConsumptionResult | null> {
+  const {
+    productId,
+    qty,
+    type,
+    businessId,
+    warehouseId,
+    transactionId,
+    transactionType,
+    specificLayerId,
+    tx = prisma,
+  } = params;
+
+  if (qty === 0) return null;
+
+  if (!await isAutoStockEnabled(businessId)) {
+    return null;
+  }
+
+  let layerResult: LayerConsumptionResult | null = null;
+
+  // Determine stock direction and whether to consume layers
+  let increment = 0;
+  switch (type) {
+    case 'sale':
+    case 'purchase_return': {
+      increment = -qty;
+
+      // Consume from inventory layers
+      layerResult = await consumeLayers({
+        itemId: productId,
+        warehouseId,
+        quantity: qty,
+        transactionId,
+        transactionType,
+        specificLayerId,
+        businessId,
+        tx,
+      });
+      break;
+    }
+    case 'purchase':
+    case 'sale_return': {
+      increment = qty;
+      // Layers are created by createLayer() in the calling code, not here
+      break;
+    }
+    case 'transfer':
+    case 'manual': {
+      // Transfers handled by transfer-engine; manual adjustments may or may not consume layers
+      return null;
+    }
+  }
+
+  // Update product stock count
+  const updatedProduct = await tx.product.update({
+    where: { id: productId },
+    data: { stock: { increment } },
+  });
+
+  // Create stock movement record
+  await tx.stockMovement.create({
+    data: {
+      productId,
+      warehouseId: warehouseId || null,
+      type: increment > 0 ? 'IN' : 'OUT',
+      quantity: increment,
+      referenceId: transactionId,
+      notes: `${transactionType}: ${transactionId}`,
+      businessId,
+    },
+  });
+
+  // Check reorder level
+  if (updatedProduct.stock <= (updatedProduct.reorderLevel || updatedProduct.minStock)) {
+    await checkAndNotifyReorder(updatedProduct, businessId, tx);
+  }
+
+  return layerResult;
 }

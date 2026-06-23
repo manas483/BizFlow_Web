@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * POST   /api/v1/device-tokens        — register FCM token on login
  * DELETE /api/v1/device-tokens/[token] — deregister on logout
@@ -51,3 +52,4 @@ export async function GET(req: NextRequest) {
     return internalError();
   }
 }
+

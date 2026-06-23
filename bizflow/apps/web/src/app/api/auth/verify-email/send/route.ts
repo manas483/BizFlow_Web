@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from "next/server";
 import { prisma } from "@/shared/lib/db";
 import { createOtpRecord } from "@/shared/lib/otp";
@@ -55,3 +56,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "An unexpected error occurred." }, { status: 500 });
   }
 }
+

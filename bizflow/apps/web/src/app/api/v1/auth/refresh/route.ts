@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 /**
  * POST /api/v1/auth/refresh
  *
@@ -103,3 +104,4 @@ export async function POST(req: NextRequest) {
     return err('INTERNAL_ERROR', 'Internal Server Error', 500);
   }
 }
+
