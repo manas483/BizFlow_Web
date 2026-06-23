@@ -60,11 +60,11 @@ ${text}`
               });
             };
 
-            let response = await makeOpenRouterRequest("google/gemini-2.0-flash-lite-preview-02-05:free");
+            let response = await makeOpenRouterRequest("nousresearch/hermes-3-llama-3.1-405b:free");
             
             if (!response.ok && response.status === 429) {
-              console.warn("Gemini is rate limited, trying auto-router...");
-              response = await makeOpenRouterRequest("openrouter/free");
+              console.warn("Hermes is rate limited, trying Llama 3.3 70B...");
+              response = await makeOpenRouterRequest("meta-llama/llama-3.3-70b-instruct:free");
             }
 
             if (response.ok) {
