@@ -15,25 +15,26 @@ export async function parseInvoicePdfLocally(buffer: Buffer): Promise<any> {
         
         // 1. If OpenRouter key is available, use it to intelligently parse the extracted text
         if (process.env.OPENROUTER_API_KEY) {
-          const makeOpenRouterRequest = async (modelName: string) => {
-            return await fetch("https://openrouter.ai/api/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://bizflow.app",
-                "X-Title": "BizFlow"
-              },
-              body: JSON.stringify({
-                model: modelName,
-                messages: [
-                  {
-                    role: "system",
-                    content: "You are an AI that extracts invoice details. You must respond ONLY with valid JSON. Do not include markdown blocks like ```json."
-                  },
-                  {
-                    role: "user",
-                    content: `Extract the invoice details from the following raw PDF text. 
+          try {
+            const makeOpenRouterRequest = async (modelName: string) => {
+              return await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                  "Content-Type": "application/json",
+                  "HTTP-Referer": "https://bizflow.app",
+                  "X-Title": "BizFlow"
+                },
+                body: JSON.stringify({
+                  model: modelName,
+                  messages: [
+                    {
+                      role: "system",
+                      content: "You are an AI that extracts invoice details. You must respond ONLY with valid JSON. Do not include markdown blocks like ```json."
+                    },
+                    {
+                      role: "user",
+                      content: `Extract the invoice details from the following raw PDF text. 
 Return a JSON object with this exact structure:
 {
   "invoiceNumber": "string",
@@ -53,39 +54,41 @@ Return a JSON object with this exact structure:
 
 Raw text:
 ${text}`
-                  }
-                ]
-              })
-            });
-          };
+                    }
+                  ]
+                })
+              });
+            };
 
-          let response = await makeOpenRouterRequest("google/gemini-2.0-pro-exp-02-05:free");
-          
-          if (!response.ok && response.status === 429) {
-            console.warn("Gemini is rate limited, trying auto-router...");
-            response = await makeOpenRouterRequest("openrouter/free");
-          }
-
-          if (response.ok) {
-            const data = await response.json();
-            let content = data.choices[0].message.content || "";
+            let response = await makeOpenRouterRequest("google/gemini-2.0-flash-lite-preview-02-05:free");
             
-            // Extract just the JSON object to avoid prefix/suffix text like "User Safety: safe"
-            const firstBrace = content.indexOf('{');
-            const lastBrace = content.lastIndexOf('}');
-            
-            let cleanJson = content;
-            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace >= firstBrace) {
-              cleanJson = content.substring(firstBrace, lastBrace + 1);
-            } else {
-              cleanJson = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            if (!response.ok && response.status === 429) {
+              console.warn("Gemini is rate limited, trying auto-router...");
+              response = await makeOpenRouterRequest("openrouter/free");
             }
-            
-            const parsed = JSON.parse(cleanJson);
-            
-            return resolve(parsed);
-          } else {
-            console.warn("OpenRouter API failed, falling back to Regex:", await response.text());
+
+            if (response.ok) {
+              const data = await response.json();
+              let content = data.choices[0].message.content || "";
+              
+              // Extract just the JSON object to avoid prefix/suffix text
+              const firstBrace = content.indexOf('{');
+              const lastBrace = content.lastIndexOf('}');
+              
+              if (firstBrace === -1 || lastBrace === -1) {
+                throw new Error(`Model returned no JSON: ${content}`);
+              }
+
+              let cleanJson = content.substring(firstBrace, lastBrace + 1);
+              const parsed = JSON.parse(cleanJson);
+              
+              return resolve(parsed);
+            } else {
+              console.warn("OpenRouter API failed, falling back to Regex:", await response.text());
+            }
+          } catch (llmErr) {
+            console.warn("LLM Parsing failed, falling back to Regex:", llmErr);
+            // DO NOT reject here. We let execution continue to the regex fallback below.
           }
         }
 
