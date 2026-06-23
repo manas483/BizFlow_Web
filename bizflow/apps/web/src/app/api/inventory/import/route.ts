@@ -11,7 +11,7 @@ import {
 import { recalculateTransportCosts } from "@/shared/lib/expense-calculations";
 import { findProductIntelligence } from "@/shared/lib/business-intelligence";
 
-import { parseInvoicePdf } from "@/shared/lib/gemini";
+import { parseInvoicePdfLocally } from "@/shared/lib/pdf-parser";
 
 export async function POST(req: NextRequest) {
   try {
@@ -142,15 +142,22 @@ export async function POST(req: NextRequest) {
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
       try {
         const buffer = Buffer.from(await file.arrayBuffer());
-        const base64Pdf = buffer.toString("base64");
 
-        const detectedInvoice = await parseInvoicePdf(base64Pdf);
+        // Use the traditional regex-based parser
+        const detectedInvoice = await parseInvoicePdfLocally(buffer);
 
         if (detectedInvoice.error || !detectedInvoice.products || !Array.isArray(detectedInvoice.products)) {
           return NextResponse.json({
             error: detectedInvoice.error || "Could not recognise this invoice PDF or failed to extract products.",
           }, { status: 400 });
         }
+
+        const parseNum = (val: any) => {
+          if (typeof val === 'number') return val;
+          if (!val && val !== 0) return 0;
+          const cleaned = String(val).replace(/[^0-9.-]/g, '');
+          return Number(cleaned) || 0;
+        };
 
         const processedRows = detectedInvoice.products.map((p: any, idx: number) => {
           // Find intelligence properties
@@ -164,18 +171,18 @@ export async function POST(req: NextRequest) {
               name: p.name || `Extracted Item ${idx + 1}`,
               sku: p.sku || "",
               category: p.category || intel?.category || "Other",
-              stock: Number(p.stock) || 0,
-              unitsPerBag: Number(p.unitsPerBag) || intel?.unitsPerBag || 1,
-              basePurchasePrice: Number(p.basePurchasePrice) || 0,
+              stock: parseNum(p.quantity ?? p.stock),
+              unitsPerBag: parseNum(p.unitsPerBag) || intel?.unitsPerBag || 1,
+              basePurchasePrice: parseNum(p.basePurchasePrice),
               transportCost: 0,
-              purchasePrice: Number(p.purchasePrice) || 0,
-              sellingPrice: Number(p.sellingPrice) || 0,
+              purchasePrice: parseNum(p.purchasePrice),
+              sellingPrice: parseNum(p.sellingPrice),
               unit: p.unit || intel?.unit || "pcs",
               supplier: detectedInvoice.supplier || "Unknown Supplier",
               purchaseInvoiceNo: detectedInvoice.invoiceNumber || "UNKNOWN",
               purchaseDate: detectedInvoice.purchaseDate || new Date().toISOString(),
-              gstRate: Number(p.gstRate) || intel?.gstRate || 0,
-              hsnCode: p.hsnCode || intel?.hsnCode || null,
+              gstRate: parseNum(p.gstRate) || intel?.gstRate || 0,
+              hsnCode: String(p.hsnCode || intel?.hsnCode || ""),
             },
           };
         });
