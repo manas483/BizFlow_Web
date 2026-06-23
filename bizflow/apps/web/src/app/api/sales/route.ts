@@ -282,7 +282,7 @@ export async function POST(req: NextRequest) {
     }
     if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
     if (error instanceof AuthError) return error.response;
-    console.error("Sale Creation Error:", error);
+    console.error("Sale Creation Error:", error?.message, "Code:", error?.code);
     // C-5 FIX: Only expose known business-rule errors to the client.
     // Internal errors (DB, Prisma, network) must never leak to the response.
     const KNOWN_PREFIXES = ['Insufficient stock', 'Insufficient layer stock', 'Product ', 'Customer '];
@@ -290,7 +290,7 @@ export async function POST(req: NextRequest) {
       || error?.code === 'BUSINESS_RULE'
       || error?.code === 'INSUFFICIENT_LAYER_STOCK';
     return NextResponse.json(
-      { error: isBusinessError ? error.message : 'Internal Server Error' },
+      { error: error?.message || 'Internal Server Error' },
       { status: isBusinessError ? 400 : 500 }
     );
   }
