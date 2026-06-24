@@ -123,10 +123,19 @@ export async function POST(req: NextRequest) {
             if (shouldAddStock) {
               newTotalStock += incomingQuantity;
             }
+
+            const updateData: any = {
+              ...productData,
+              stock: newTotalStock,
+              basePurchasePrice: productData.basePurchasePrice > 0 ? productData.basePurchasePrice : existingProduct?.basePurchasePrice,
+              transportCost: productData.transportCost > 0 ? productData.transportCost : existingProduct?.transportCost,
+              purchasePrice: productData.purchasePrice > 0 ? productData.purchasePrice : existingProduct?.purchasePrice,
+              sellingPrice: productData.sellingPrice > 0 ? productData.sellingPrice : existingProduct?.sellingPrice,
+            };
             
             await prisma.product.update({ 
               where: { id: existingId }, 
-              data: { ...productData, stock: newTotalStock } 
+              data: updateData 
             });
             
             if (shouldAddStock && incomingQuantity > 0) {
@@ -468,7 +477,15 @@ export async function POST(req: NextRequest) {
             const existingProduct = await prisma.product.findUnique({ where: { id: existingId } });
             const stockDiff = productData.stock - (existingProduct?.stock || 0);
             
-            await prisma.product.update({ where: { id: existingId }, data: productData });
+            const updateData: any = {
+              ...productData,
+              basePurchasePrice: productData.basePurchasePrice > 0 ? productData.basePurchasePrice : existingProduct?.basePurchasePrice,
+              transportCost: productData.transportCost > 0 ? productData.transportCost : existingProduct?.transportCost,
+              purchasePrice: productData.purchasePrice > 0 ? productData.purchasePrice : existingProduct?.purchasePrice,
+              sellingPrice: productData.sellingPrice > 0 ? productData.sellingPrice : existingProduct?.sellingPrice,
+            };
+
+            await prisma.product.update({ where: { id: existingId }, data: updateData });
             
             if (stockDiff > 0) {
               await prisma.stockMovement.create({
