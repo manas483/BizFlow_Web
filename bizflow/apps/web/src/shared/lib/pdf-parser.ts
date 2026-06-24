@@ -281,34 +281,38 @@ function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): 
     const sl = slEntries[i];
     const slNo = parseInt(sl.text, 10);
     const rowY = sl.y;
+    const prevSlY = i > 0 ? slEntries[i - 1].y : minDataY - 2.0;
     const nextSlY = (i + 1 < slEntries.length) ? slEntries[i + 1].y : tableEndY;
 
-    const rowTexts = sorted.filter(t =>
-      sameRow(t.y, rowY, 0.3) && t.y >= minDataY - 0.15 && t.y < tableEndY
+    const fullRowSlice = sorted.filter(t =>
+      t.y > prevSlY + 0.2 && t.y < nextSlY - 0.2 && t.y >= minDataY - 0.15 && t.y < tableEndY
     );
 
-    const descTexts = rowTexts.filter(t =>
-      t.x >= config.descMinX && t.x <= config.descMaxX && t.text !== String(slNo)
+    const descTexts = fullRowSlice.filter(t =>
+      sameRow(t.y, rowY, 0.3) && t.x >= config.descMinX && t.x <= config.descMaxX && t.text !== String(slNo)
     );
-    const hsnTexts = rowTexts.filter(t =>
-      t.x >= config.hsnMinX && t.x <= config.hsnMaxX && /^\d{4,8}$/.test(t.text)
+    const hsnTexts = fullRowSlice.filter(t =>
+      t.x >= config.hsnMinX - 1.0 && t.x <= config.hsnMaxX + 1.0 && /^\d{4,8}$/.test(t.text)
     );
-    const qtyTexts = rowTexts.filter(t =>
-      t.x >= config.qtyMinX && t.x <= config.qtyMaxX
+    const qtyTexts = fullRowSlice.filter(t =>
+      t.x >= config.qtyMinX - 3.0 && t.x <= config.qtyMaxX + 3.0 &&
+      !(t.x >= config.hsnMinX - 0.5 && t.x <= config.hsnMaxX + 0.5 && /^\d{4,8}$/.test(t.text)) &&
+      !(config.rateInclMinX > 0 && t.x >= config.rateInclMinX - 0.1) &&
+      !(config.rateTaxableMinX > 0 && t.x >= config.rateTaxableMinX - 0.1)
     );
-    const rateInclTexts = rowTexts.filter(t =>
-      t.x >= config.rateInclMinX && t.x <= config.rateInclMaxX &&
+    const rateInclTexts = fullRowSlice.filter(t =>
+      t.x >= config.rateInclMinX - 1.0 && t.x <= config.rateInclMaxX + 1.0 &&
       /[\d,.]/.test(t.text) && !/Nos|bags|pcs/i.test(t.text)
     );
-    const rateTaxableTexts = rowTexts.filter(t =>
-      t.x >= config.rateTaxableMinX && t.x <= config.rateTaxableMaxX &&
+    const rateTaxableTexts = fullRowSlice.filter(t =>
+      t.x >= config.rateTaxableMinX - 1.0 && t.x <= config.rateTaxableMaxX + 1.0 &&
       /[\d,.]/.test(t.text) && !/Nos|bags|pcs/i.test(t.text)
     );
-    const perUnitTexts = rowTexts.filter(t =>
-      t.x >= config.perUnitMinX && t.x <= config.perUnitMaxX && /^[A-Za-z]+$/.test(t.text)
+    const perUnitTexts = fullRowSlice.filter(t =>
+      t.x >= config.perUnitMinX - 1.0 && t.x <= config.perUnitMaxX + 1.0 && /^[A-Za-z]+$/.test(t.text)
     );
-    const amountTexts = rowTexts.filter(t =>
-      t.x >= config.amountMinX && t.x <= config.amountMaxX && /[\d,.]/.test(t.text)
+    const amountTexts = fullRowSlice.filter(t =>
+      t.x >= config.amountMinX - 1.5 && t.x <= config.amountMaxX + 1.5 && /[\d,.]/.test(t.text)
     );
 
     // Multi-line description continuation
@@ -566,9 +570,25 @@ export async function parseInvoicePdfLocally(buffer: Buffer, businessId?: string
         const taxTotals = extractTaxTotals(texts, hasGst);
 
         const products: ExtractedProduct[] = rawProducts.map(raw => {
-          const { quantity, unit: rawUnit } = parseQuantityUnit(raw.quantityText);
+          let { quantity, unit: rawUnit } = parseQuantityUnit(raw.quantityText);
           const unit = normalizeUnit(raw.perUnit || rawUnit);
           const gstRate = gstRates.get(raw.hsnCode) || 0;
+
+          // Fallback: If quantity could not be parsed, calculate it using simple math
+          if (quantity === 0 && raw.amount > 0) {
+            if (raw.rateTaxable > 0) {
+              const calculatedQty = Math.round(raw.amount / raw.rateTaxable);
+              if (Math.abs(calculatedQty * raw.rateTaxable - raw.amount) < 5.0) {
+                quantity = calculatedQty;
+              }
+            } else if (raw.rateIncl > 0) {
+              const calculatedQty = Math.round(raw.amount / raw.rateIncl);
+              if (Math.abs(calculatedQty * raw.rateIncl - raw.amount) < 5.0) {
+                quantity = calculatedQty;
+              }
+            }
+          }
+
           return {
             name: raw.description,
             sku: '',
