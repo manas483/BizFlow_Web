@@ -86,6 +86,8 @@ export async function recalculateTransportCosts(businessId: string) {
   // 7. Update products in the database if their transportCost has changed
   // We can do this in a prisma transaction to be fast and safe
   const updatePromises = [];
+  const updatedProducts: Array<{ id: string; purchaseInvoiceNo: string; newTransportCost: number; basePurchasePrice: number; stock: number }> = [];
+
   for (const p of products) {
     if (p.purchaseInvoiceNo && p.purchaseInvoiceNo.trim()) {
       const newTransportCost = Number((productTransportCostMap[p.id] || 0).toFixed(2));
@@ -105,11 +107,79 @@ export async function recalculateTransportCosts(businessId: string) {
             },
           })
         );
+        updatedProducts.push({
+          id: p.id,
+          purchaseInvoiceNo: p.purchaseInvoiceNo.trim(),
+          newTransportCost,
+          basePurchasePrice: p.basePurchasePrice,
+          stock: p.stock,
+        });
       }
     }
   }
 
   if (updatePromises.length > 0) {
     await prisma.$transaction(updatePromises);
+  }
+
+  // 8. Sync InventoryLayers — update landedCost/unitCost to match the new transport costs.
+  //    This ensures FIFO/LIFO COGS calculations use the correct landed cost
+  //    when expenses (transport, labour, loading, etc.) are added AFTER invoice import.
+  if (updatedProducts.length > 0) {
+    try {
+      for (const up of updatedProducts) {
+        // Find layers created from this invoice for this product
+        const layers = await prisma.inventoryLayer.findMany({
+          where: {
+            itemId: up.id,
+            receiptNo: up.purchaseInvoiceNo,
+            businessId,
+          },
+        });
+
+        for (const layer of layers) {
+          // Recalculate: total transport expense for this layer = perUnit × originalQty
+          const totalTransportForLayer = Number((up.newTransportCost * layer.originalQty).toFixed(4));
+          const newLandedCost = Number((layer.purchaseCost + totalTransportForLayer).toFixed(4));
+          const newUnitCost = Number((newLandedCost / layer.originalQty).toFixed(4));
+
+          // Update the layer's costs
+          await prisma.inventoryLayer.update({
+            where: { id: layer.id },
+            data: {
+              landedCost: newLandedCost,
+              unitCost: newUnitCost,
+            },
+          });
+
+          // Upsert the transport cost breakdown line in InventoryLayerCost
+          const existingCostLine = await prisma.inventoryLayerCost.findFirst({
+            where: {
+              layerId: layer.id,
+              expenseType: 'transport',
+            },
+          });
+
+          if (existingCostLine) {
+            await prisma.inventoryLayerCost.update({
+              where: { id: existingCostLine.id },
+              data: { amount: totalTransportForLayer },
+            });
+          } else if (totalTransportForLayer > 0) {
+            await prisma.inventoryLayerCost.create({
+              data: {
+                layerId: layer.id,
+                expenseType: 'transport',
+                amount: totalTransportForLayer,
+                remarks: 'Distributed from expense allocation',
+              },
+            });
+          }
+        }
+      }
+    } catch (err) {
+      // Gracefully handle if InventoryLayer tables aren't migrated yet
+      console.warn('[ExpenseCalc] Could not sync InventoryLayers — tables may not be migrated:', (err as any)?.message);
+    }
   }
 }

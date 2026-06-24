@@ -1,0 +1,6 @@
+# Test scripts with API keys
+bizflow/apps/web/test-*.js
+bizflow/apps/web/train-*.js
+
+# Sample docs / PDFs
+bizflow/docs/*.pdf
