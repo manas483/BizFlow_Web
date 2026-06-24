@@ -249,24 +249,26 @@ interface RawProductRow {
 function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): RawProductRow[] {
   const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
 
-  const slHeader = sorted.find(t => t.text === 'Sl' && t.x < 3.0);
+  const slHeader = sorted.find(t => 
+    /^(Sl|S\.No|Sr\.No|S\.N\.|S No|Sl No|#)/i.test(t.text.trim()) && t.x < 5.0
+  );
   if (!slHeader) return [];
 
-  const tableStartY = slHeader.y + config.tableStartYOffset;
+  // Use the slHeader Y position directly instead of strict offset
+  const minDataY = slHeader.y + 0.2;
 
   const totalRow = sorted.find(t =>
-    t.text === 'Total' &&
-    t.y > tableStartY + 1.0 &&
-    t.x >= config.totalRowMinX
+    t.text.toLowerCase().includes('total') &&
+    t.y > minDataY + 1.0 &&
+    t.x >= config.totalRowMinX - 2.0 // Add some tolerance
   );
   const tableEndY = totalRow ? totalRow.y : 999;
 
-  // Use >= with small tolerance (0.15) because the learned offset can match exactly
   const slEntries = sorted.filter(t =>
-    /^\d+$/.test(t.text) &&
-    t.x >= config.slNoMinX && t.x <= config.slNoMaxX &&
-    t.y >= tableStartY - 0.15 && t.y < tableEndY &&
-    parseInt(t.text) <= 999
+    /^\d+\.?$/.test(t.text.trim()) &&
+    t.x >= config.slNoMinX - 0.5 && t.x <= config.slNoMaxX + 0.5 && // Add some tolerance
+    t.y > minDataY && t.y < tableEndY &&
+    parseInt(t.text.trim()) <= 999
   );
 
   const products: RawProductRow[] = [];
@@ -279,7 +281,7 @@ function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): 
     const nextSlY = (i + 1 < slEntries.length) ? slEntries[i + 1].y : tableEndY;
 
     const rowTexts = sorted.filter(t =>
-      sameRow(t.y, rowY, 0.3) && t.y >= tableStartY - 0.15 && t.y < tableEndY
+      sameRow(t.y, rowY, 0.3) && t.y >= minDataY - 0.15 && t.y < tableEndY
     );
 
     const descTexts = rowTexts.filter(t =>
