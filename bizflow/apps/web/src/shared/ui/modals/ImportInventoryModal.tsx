@@ -339,8 +339,6 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           products: productsWithExpenses,
-          totalTransportCost: totalExpenseAmount,
-          expenses: invoiceExpenses.filter(e => e.amount > 0).map(e => ({ category: e.category, amount: e.amount })),
         }),
       });
       setProgress(80);
