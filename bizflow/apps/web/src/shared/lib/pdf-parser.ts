@@ -246,13 +246,16 @@ interface RawProductRow {
   amount: number;
 }
 
-function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): RawProductRow[] {
+function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): { products: RawProductRow[], debugInfo: string } {
   const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
 
   const slHeader = sorted.find(t => 
-    /^(Sl|S\.No|Sr\.No|S\.N\.|S No|Sl No|#)/i.test(t.text.trim()) && t.x < 5.0
+    /^(sl|s\.?\s*no\.?|sr\.?\s*no\.?|s\.n\.|#|item|code)/i.test(t.text.trim()) && t.x < 10.0
   );
-  if (!slHeader) return [];
+  if (!slHeader) {
+    const possibleHeaders = sorted.filter(t => t.y < 15 && t.x < 10).map(t => t.text).join(', ');
+    return { products: [], debugInfo: `slHeader not found. Looked for 'sl', 's.no', etc. Possible headers found: ${possibleHeaders}` };
+  }
 
   // Use the slHeader Y position directly instead of strict offset
   const minDataY = slHeader.y + 0.2;
@@ -332,7 +335,8 @@ function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): 
     });
   }
 
-  return products;
+  const debugInfo = `slHeader found at y=${slHeader.y}. slEntries found: ${slEntries.length}. First data y: ${minDataY}. TableEndY: ${tableEndY}. Products extracted: ${products.length}.`;
+  return { products, debugInfo };
 }
 
 // ── GST Rate Extraction ──────────────────────────────────────────────────────
@@ -545,12 +549,13 @@ export async function parseInvoicePdfLocally(buffer: Buffer, businessId?: string
         const header = extractHeader(texts, config);
         console.log(`[PDFParser] Header: supplier=${header.supplier}, invoice=${header.invoiceNumber}, date=${header.date}`);
 
-        const rawProducts = extractProductRows(texts, config);
+        const productResult = extractProductRows(texts, config);
+        const rawProducts = productResult.products;
         console.log(`[PDFParser] Found ${rawProducts.length} product rows`);
 
         if (rawProducts.length === 0) {
           return resolve({
-            error: 'Could not extract any products from this invoice. The trained template may need retraining.',
+            error: `Could not extract any products from this invoice. The trained template may need retraining. DEBUG: ${productResult.debugInfo}`,
             invoiceNumber: header.invoiceNumber,
             supplier: header.supplier,
             products: [],
