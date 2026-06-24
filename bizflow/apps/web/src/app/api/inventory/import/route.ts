@@ -40,22 +40,20 @@ export async function POST(req: NextRequest) {
       // have their own transport costs, distribute proportionally by base value.
       const totalTransport = Number(invoiceTransportCost ?? 0);
       if (totalTransport > 0) {
-        const totalInvoiceValue = verifiedProducts.reduce(
+        const totalBaseValue = verifiedProducts.reduce(
           (sum: number, p: any) => sum + (Number(p.basePurchasePrice ?? p.purchasePrice ?? 0) * Number(p.stock ?? 0)),
           0
         );
-        if (totalInvoiceValue > 0) {
-          for (const p of verifiedProducts) {
-            const lineValue = Number(p.basePurchasePrice ?? p.purchasePrice ?? 0) * Number(p.stock ?? 0);
-            const share = lineValue / totalInvoiceValue;
+        if (totalBaseValue > 0) {
+          verifiedProducts.forEach((p: any) => {
             const qty = Number(p.stock ?? 0);
-            // Distribute as per-unit transport cost
-            if (qty > 0 && !Number(p.transportCost)) {
-              p.transportCost = Number(((totalTransport * share) / qty).toFixed(4));
-              // Recalculate purchasePrice = basePurchasePrice + transportCost
+            if (qty > 0) {
+              const baseValue = Number(p.basePurchasePrice ?? p.purchasePrice ?? 0) * qty;
+              const share = baseValue / totalBaseValue;
+              p.transportCost = Number((Number(p.transportCost ?? 0) + ((totalTransport * share) / qty)).toFixed(4));
               p.purchasePrice = Number(p.basePurchasePrice ?? p.purchasePrice ?? 0) + p.transportCost;
             }
-          }
+          });
         }
       }
 
@@ -126,12 +124,9 @@ export async function POST(req: NextRequest) {
               newTotalStock += incomingQuantity;
             }
             
-            // Do NOT overwrite existing cost fields (basePurchasePrice, transportCost, purchasePrice)
-            const { basePurchasePrice, transportCost, purchasePrice, ...updateData } = productData;
-            
             await prisma.product.update({ 
               where: { id: existingId }, 
-              data: { ...updateData, stock: newTotalStock } 
+              data: { ...productData, stock: newTotalStock } 
             });
             
             if (shouldAddStock && incomingQuantity > 0) {
@@ -473,8 +468,7 @@ export async function POST(req: NextRequest) {
             const existingProduct = await prisma.product.findUnique({ where: { id: existingId } });
             const stockDiff = productData.stock - (existingProduct?.stock || 0);
             
-            const { basePurchasePrice, transportCost, purchasePrice, ...updateData } = productData;
-            await prisma.product.update({ where: { id: existingId }, data: updateData });
+            await prisma.product.update({ where: { id: existingId }, data: productData });
             
             if (stockDiff > 0) {
               await prisma.stockMovement.create({
