@@ -282,6 +282,27 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
         setColumnMapping(data.columnMapping ?? {});
         setUnmapped(data.unmappedHeaders ?? []);
         setSuggestions(data.mappingSuggestions ?? {});
+
+        const validProducts: InvoiceProduct[] = (data.validation?.processedRows ?? [])
+          .filter((r: any) => r.errors?.length === 0)
+          .map((r: any) => ({
+            name: r.data.name ?? "",
+            sku: r.data.sku ?? "",
+            category: r.data.category ?? "",
+            stock: Number(r.data.stock ?? 0),
+            unitsPerBag: Number(r.data.unitsPerBag ?? 1),
+            basePurchasePrice: Number(r.data.basePurchasePrice ?? r.data.purchasePrice ?? 0),
+            transportCost: Number(r.data.transportCost ?? 0),
+            purchasePrice: Number(r.data.purchasePrice ?? 0),
+            sellingPrice: Number(r.data.sellingPrice ?? 0),
+            unit: r.data.unit ?? "pcs",
+            supplier: r.data.supplier ?? "",
+            purchaseInvoiceNo: r.data.purchaseInvoiceNo ?? "",
+            purchaseDate: r.data.purchaseDate ?? "",
+            gstRate: Number(r.data.gstRate ?? 0),
+            hsnCode: r.data.hsnCode ?? "",
+          }));
+        setInvoiceProducts(validProducts);
         setStep("review");
       }
     } catch { setImportError("Network error. Please try again."); setStep("upload"); }
@@ -299,24 +320,8 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     if (f) processFile(f);
   };
 
-  // Excel import (existing flow)
-  const handleImport = async () => {
-    if (!file) return;
-    setStep("importing"); setProgress(10);
-    try {
-      const fd = new FormData();
-      fd.append("file", file); fd.append("mode", "import");
-      setProgress(40);
-      const res = await fetch("/api/inventory/import", { method: "POST", body: fd });
-      setProgress(80);
-      const data = await res.json();
-      if (!res.ok) { setImportError(data.error ?? "Import failed"); setStep("review"); return; }
-      setImportResults(data.results);
-      setProgress(100);
-      setStep("done");
-      qc.invalidateQueries({ queryKey: ["products"] });
-    } catch { setImportError("Network error during import."); setStep("review"); }
-  };
+  // Excel import (now unified with JSON flow)
+  // handleImport is no longer needed since Excel uses handleInvoiceConfirmImport
 
   // Invoice PDF confirmed import
   const handleInvoiceConfirmImport = async () => {
@@ -957,6 +962,117 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
             </div>
           )}
 
+          {/* ── Additional Expenses Section (Excel) ── */}
+          {!hasErrors && invoiceProducts.length > 0 && (
+            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+              <button
+                onClick={() => { if (invoiceExpenses.length === 0) addExpense(); setShowExpenses(!showExpenses); }}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium hover:bg-primary/3 transition-colors"
+                style={{ background: "var(--bg-surface-2)" }}
+              >
+                <span className="flex items-center gap-2 text-primary">
+                  <Truck size={13} className="text-violet-400" />
+                  Additional Expenses
+                  {totalExpenseAmount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px] font-semibold">
+                      ₹{totalExpenseAmount.toLocaleString('en-IN')}
+                    </span>
+                  )}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-primary/30">
+                    {invoiceExpenses.length === 0 ? "Add transport, labour, loading..." : `${invoiceExpenses.length} expense${invoiceExpenses.length !== 1 ? 's' : ''}`}
+                  </span>
+                  {showExpenses ? <ChevronUp size={12} className="text-primary/40" /> : <ChevronDown size={12} className="text-primary/40" />}
+                </span>
+              </button>
+
+              {showExpenses && (
+                <div className="p-3 space-y-4 border-t" style={{ borderColor: "var(--border)" }}>
+                  {invoiceExpenses.map((exp) => (
+                    <div key={exp.id} className="space-y-1.5 pb-2 border-b border-dashed" style={{ borderColor: "var(--border)" }}>
+                      <div className="flex items-center gap-2">
+                        <select
+                          className="flex-1 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] outline-none px-2 py-1.5 transition-colors focus:border-violet-500/40"
+                          value={exp.category}
+                          onChange={(e) => updateExpense(exp.id, "category", e.target.value)}
+                        >
+                          {EXPENSE_CATEGORIES.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary/30 text-[11px]">₹</span>
+                          <input
+                            type="number"
+                            className="w-28 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] text-right outline-none pl-5 pr-2 py-1.5 transition-colors focus:border-violet-500/40"
+                            value={exp.amount || ""}
+                            onChange={(e) => updateExpense(exp.id, "amount", Number(e.target.value))}
+                            placeholder="0"
+                            min={0}
+                            step="any"
+                          />
+                        </div>
+                        <button onClick={() => removeExpense(exp.id)}
+                          className="text-rose-400/50 hover:text-rose-400 transition-colors p-1">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                      {/* Product selection chips */}
+                      <div className="flex flex-wrap gap-1">
+                        {invoiceProducts.map((p, idx) => {
+                          const isSelected = !exp.applicableProductIndices || exp.applicableProductIndices.includes(idx);
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => toggleProductApplicability(exp.id, idx, invoiceProducts.length)}
+                              className={`text-[9px] px-1.5 py-0.5 rounded transition-colors border ${isSelected ? 'bg-violet-500/10 text-violet-400 border-violet-500/30 font-medium' : 'bg-primary/5 text-primary/40 border-primary/10'}`}
+                            >
+                              {p.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+
+                  <button onClick={addExpense}
+                    className="flex items-center gap-1.5 text-[11px] text-violet-400 hover:text-violet-300 transition-colors py-1">
+                    <Plus size={11} /> Add Expense
+                  </button>
+
+                  {/* Distribution Preview */}
+                  {totalExpenseAmount > 0 && invoiceProducts.length > 0 && (
+                    <div className="mt-2 pt-2 border-t space-y-1" style={{ borderColor: "var(--border)" }}>
+                      <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview (by bags)</p>
+                      <div className="grid gap-1">
+                        {invoiceProducts.map((p, idx) => {
+                          const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
+                          const share = getProductExpenseShare(p, idx);
+                          const perUnit = getProductPerUnitExpense(p, idx);
+                          if (share <= 0) return null;
+                          return (
+                            <div key={idx} className="flex items-center justify-between text-[10px] px-1 py-0.5 rounded hover:bg-primary/3">
+                              <span className="text-primary/60 truncate flex-1">{p.name}</span>
+                              <span className="text-primary/30 mx-2">{bags.toFixed(1)} bag{bags !== 1 ? 's' : ''}</span>
+                              <span className="text-emerald-400 font-medium w-16 text-right">+₹{perUnit.toFixed(2)}/u</span>
+                              <span className="text-violet-400 font-medium w-16 text-right">₹{share.toFixed(2)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-semibold pt-1 border-t" style={{ borderColor: "var(--border)" }}>
+                        <span className="text-primary/60">Total</span>
+                        <span className="text-primary/30">{totalBags.toFixed(1)} bags</span>
+                        <span className="text-violet-400">₹{totalExpenseAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Success note */}
           {!hasErrors && (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
@@ -985,7 +1101,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                 Fix {validationSummary.errors} Error{validationSummary.errors !== 1 ? "s" : ""} First
               </Button>
             ) : (
-              <Button size="sm" className="flex-1" onClick={handleImport}>
+              <Button size="sm" className="flex-1" onClick={handleInvoiceConfirmImport}>
                 Import {validationSummary.valid} Products
               </Button>
             )}
