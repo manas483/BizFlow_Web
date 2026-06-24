@@ -39,6 +39,7 @@ interface InvoiceExpense {
   id: string;
   category: string;
   amount: number;
+  applicableProductIndices?: number[]; // undefined means all products
 }
 
 const EXPENSE_CATEGORIES = [
@@ -155,25 +156,46 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     setShowExpenses(true);
   };
   const removeExpense = (id: string) => setInvoiceExpenses(prev => prev.filter(e => e.id !== id));
-  const updateExpense = (id: string, field: keyof InvoiceExpense, value: string | number) => {
+  const updateExpense = (id: string, field: keyof InvoiceExpense, value: any) => {
     setInvoiceExpenses(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
   };
-
-  // Calculate total expenses and per-product distribution
-  const totalExpenseAmount = invoiceExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  const totalBags = invoiceProducts.reduce((sum, p) => sum + (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1), 0);
-  const expensePerBag = totalBags > 0 ? totalExpenseAmount / totalBags : 0;
-
-  const getProductExpenseShare = (p: InvoiceProduct) => {
-    const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
-    return Number((bags * expensePerBag).toFixed(2));
+  const toggleProductApplicability = (id: string, productIdx: number, totalProducts: number) => {
+    setInvoiceExpenses(prev => prev.map(e => {
+      if (e.id !== id) return e;
+      const current = e.applicableProductIndices || Array.from({length: totalProducts}, (_, i) => i);
+      const updated = current.includes(productIdx) ? current.filter(i => i !== productIdx) : [...current, productIdx];
+      return { ...e, applicableProductIndices: updated.length === totalProducts ? undefined : updated };
+    }));
   };
 
-  const getProductPerUnitExpense = (p: InvoiceProduct) => {
+  const getProductExpenseShare = (p: InvoiceProduct, pIdx: number) => {
+    let totalShare = 0;
+    for (const exp of invoiceExpenses) {
+      if (!exp.amount) continue;
+      const appliesTo = exp.applicableProductIndices || Array.from({length: invoiceProducts.length}, (_, i) => i);
+      if (!appliesTo.includes(pIdx)) continue;
+      
+      const applicableBags = invoiceProducts
+        .filter((_, i) => appliesTo.includes(i))
+        .reduce((sum, ap) => sum + ((Number(ap.stock) || 0) / (Number(ap.unitsPerBag) || 1)), 0);
+      
+      if (applicableBags > 0) {
+        const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
+        const expPerBag = exp.amount / applicableBags;
+        totalShare += bags * expPerBag;
+      }
+    }
+    return Number(totalShare.toFixed(2));
+  };
+
+  const getProductPerUnitExpense = (p: InvoiceProduct, pIdx: number) => {
     const qty = Number(p.stock) || 0;
     if (qty <= 0) return 0;
-    return Number((getProductExpenseShare(p) / qty).toFixed(4));
+    return Number((getProductExpenseShare(p, pIdx) / qty).toFixed(4));
   };
+
+  const totalExpenseAmount = invoiceExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const totalBags = invoiceProducts.reduce((sum, p) => sum + (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1), 0);
 
   const reset = () => {
     setStep("upload"); setFile(null); setValidationSummary(null);
@@ -302,8 +324,8 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     setStep("importing"); setProgress(10);
     try {
       // Bake inline expenses into each product's transportCost before sending
-      const productsWithExpenses = invoiceProducts.map(p => {
-        const perUnitExpense = getProductPerUnitExpense(p);
+      const productsWithExpenses = invoiceProducts.map((p, idx) => {
+        const perUnitExpense = getProductPerUnitExpense(p, idx);
         return {
           ...p,
           transportCost: Number(p.transportCost || 0) + perUnitExpense,
@@ -739,34 +761,51 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
             </button>
 
             {showExpenses && (
-              <div className="p-3 space-y-2 border-t" style={{ borderColor: "var(--border)" }}>
+              <div className="p-3 space-y-4 border-t" style={{ borderColor: "var(--border)" }}>
                 {invoiceExpenses.map((exp) => (
-                  <div key={exp.id} className="flex items-center gap-2">
-                    <select
-                      className="flex-1 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] outline-none px-2 py-1.5 transition-colors focus:border-violet-500/40"
-                      value={exp.category}
-                      onChange={(e) => updateExpense(exp.id, "category", e.target.value)}
-                    >
-                      {EXPENSE_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                    <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary/30 text-[11px]">₹</span>
-                      <input
-                        type="number"
-                        className="w-28 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] text-right outline-none pl-5 pr-2 py-1.5 transition-colors focus:border-violet-500/40"
-                        value={exp.amount || ""}
-                        onChange={(e) => updateExpense(exp.id, "amount", Number(e.target.value))}
-                        placeholder="0"
-                        min={0}
-                        step="any"
-                      />
+                  <div key={exp.id} className="space-y-1.5 pb-2 border-b border-dashed" style={{ borderColor: "var(--border)" }}>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="flex-1 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] outline-none px-2 py-1.5 transition-colors focus:border-violet-500/40"
+                        value={exp.category}
+                        onChange={(e) => updateExpense(exp.id, "category", e.target.value)}
+                      >
+                        {EXPENSE_CATEGORIES.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary/30 text-[11px]">₹</span>
+                        <input
+                          type="number"
+                          className="w-28 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] text-right outline-none pl-5 pr-2 py-1.5 transition-colors focus:border-violet-500/40"
+                          value={exp.amount || ""}
+                          onChange={(e) => updateExpense(exp.id, "amount", Number(e.target.value))}
+                          placeholder="0"
+                          min={0}
+                          step="any"
+                        />
+                      </div>
+                      <button onClick={() => removeExpense(exp.id)}
+                        className="text-rose-400/50 hover:text-rose-400 transition-colors p-1">
+                        <Trash2 size={12} />
+                      </button>
                     </div>
-                    <button onClick={() => removeExpense(exp.id)}
-                      className="text-rose-400/50 hover:text-rose-400 transition-colors p-1">
-                      <Trash2 size={12} />
-                    </button>
+                    {/* Product selection chips */}
+                    <div className="flex flex-wrap gap-1">
+                      {invoiceProducts.map((p, idx) => {
+                        const isSelected = !exp.applicableProductIndices || exp.applicableProductIndices.includes(idx);
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => toggleProductApplicability(exp.id, idx, invoiceProducts.length)}
+                            className={`text-[9px] px-1.5 py-0.5 rounded transition-colors border ${isSelected ? 'bg-violet-500/10 text-violet-400 border-violet-500/30 font-medium' : 'bg-primary/5 text-primary/40 border-primary/10'}`}
+                          >
+                            {p.name}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
 
@@ -782,8 +821,11 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                     <div className="grid gap-1">
                       {invoiceProducts.map((p, idx) => {
                         const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
-                        const share = getProductExpenseShare(p);
-                        const perUnit = getProductPerUnitExpense(p);
+                        const share = getProductExpenseShare(p, idx);
+                        const perUnit = getProductPerUnitExpense(p, idx);
+                        // Only show products that received some expense share
+                        if (share <= 0) return null;
+                        
                         return (
                           <div key={idx} className="flex items-center justify-between text-[10px] px-1 py-0.5 rounded hover:bg-primary/3">
                             <span className="text-primary/60 truncate flex-1">{p.name}</span>
