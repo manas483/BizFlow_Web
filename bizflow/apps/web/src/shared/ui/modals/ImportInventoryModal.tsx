@@ -8,7 +8,7 @@ import { Button } from "@/shared/ui/ui/Button";
 import {
   Upload, Download, FileSpreadsheet, CheckCircle2, XCircle,
   AlertTriangle, RotateCcw, ChevronDown, ChevronUp, Loader2,
-  FileText, Pencil, Trash2, Plus
+  FileText, Pencil, Trash2, Plus, Truck, IndianRupee
 } from "lucide-react";
 import { useBusiness } from "@/shared/hooks/useBusiness";
 import { getBusinessProfile } from "@/shared/lib/business-intelligence";
@@ -34,6 +34,17 @@ interface InvoiceProduct {
 interface InvoiceInfo {
   invoiceNumber: string; supplier: string; purchaseDate: string;
 }
+
+interface InvoiceExpense {
+  id: string;
+  category: string;
+  amount: number;
+}
+
+const EXPENSE_CATEGORIES = [
+  "Transport", "Labour", "Loading", "Unloading", "Freight",
+  "Insurance", "Customs", "Handling", "Other",
+];
 
 const CategoryCell = ({ value, options, onChange }: { value: string, options: string[], onChange: (val: string) => void }) => {
   const [open, setOpen] = useState(false);
@@ -124,6 +135,10 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
   const [invoiceProducts, setInvoiceProducts] = useState<InvoiceProduct[]>([]);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
+  // Invoice expenses state (inline expense entry during import)
+  const [invoiceExpenses, setInvoiceExpenses] = useState<InvoiceExpense[]>([]);
+  const [showExpenses, setShowExpenses] = useState(false);
+
   // Training state
   const [trainingRequired, setTrainingRequired] = useState(false);
   const [trainingPreview, setTrainingPreview] = useState<any>(null);
@@ -134,6 +149,32 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
   const [importError, setImportError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
 
+  // ── Expense helpers ──
+  const addExpense = () => {
+    setInvoiceExpenses(prev => [...prev, { id: crypto.randomUUID(), category: "Transport", amount: 0 }]);
+    setShowExpenses(true);
+  };
+  const removeExpense = (id: string) => setInvoiceExpenses(prev => prev.filter(e => e.id !== id));
+  const updateExpense = (id: string, field: keyof InvoiceExpense, value: string | number) => {
+    setInvoiceExpenses(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+  };
+
+  // Calculate total expenses and per-product distribution
+  const totalExpenseAmount = invoiceExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const totalBags = invoiceProducts.reduce((sum, p) => sum + (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1), 0);
+  const expensePerBag = totalBags > 0 ? totalExpenseAmount / totalBags : 0;
+
+  const getProductExpenseShare = (p: InvoiceProduct) => {
+    const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
+    return Number((bags * expensePerBag).toFixed(2));
+  };
+
+  const getProductPerUnitExpense = (p: InvoiceProduct) => {
+    const qty = Number(p.stock) || 0;
+    if (qty <= 0) return 0;
+    return Number((getProductExpenseShare(p) / qty).toFixed(4));
+  };
+
   const reset = () => {
     setStep("upload"); setFile(null); setValidationSummary(null);
     setErrors([]); setWarnings([]); setImportResults(null);
@@ -142,6 +183,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     setIsInvoicePdf(false); setInvoiceInfo(null); setInvoiceProducts([]);
     setEditingIdx(null);
     setTrainingRequired(false); setTrainingPreview(null); setIsTraining(false);
+    setInvoiceExpenses([]); setShowExpenses(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -259,11 +301,25 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     if (invoiceProducts.length === 0) return;
     setStep("importing"); setProgress(10);
     try {
+      // Bake inline expenses into each product's transportCost before sending
+      const productsWithExpenses = invoiceProducts.map(p => {
+        const perUnitExpense = getProductPerUnitExpense(p);
+        return {
+          ...p,
+          transportCost: Number(p.transportCost || 0) + perUnitExpense,
+          purchasePrice: Number(p.basePurchasePrice || 0) + Number(p.transportCost || 0) + perUnitExpense,
+        };
+      });
+
       setProgress(40);
       const res = await fetch("/api/inventory/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ products: invoiceProducts }),
+        body: JSON.stringify({
+          products: productsWithExpenses,
+          totalTransportCost: totalExpenseAmount,
+          expenses: invoiceExpenses.filter(e => e.amount > 0).map(e => ({ category: e.category, amount: e.amount })),
+        }),
       });
       setProgress(80);
       const data = await res.json();
@@ -658,11 +714,105 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
             </div>
           </div>
 
+          {/* ── Additional Expenses Section ── */}
+          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+            <button
+              onClick={() => { if (invoiceExpenses.length === 0) addExpense(); setShowExpenses(!showExpenses); }}
+              className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium hover:bg-primary/3 transition-colors"
+              style={{ background: "var(--bg-surface-2)" }}
+            >
+              <span className="flex items-center gap-2 text-primary">
+                <Truck size={13} className="text-violet-400" />
+                Additional Expenses
+                {totalExpenseAmount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px] font-semibold">
+                    ₹{totalExpenseAmount.toLocaleString('en-IN')}
+                  </span>
+                )}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-[10px] text-primary/30">
+                  {invoiceExpenses.length === 0 ? "Add transport, labour, loading..." : `${invoiceExpenses.length} expense${invoiceExpenses.length !== 1 ? 's' : ''}`}
+                </span>
+                {showExpenses ? <ChevronUp size={12} className="text-primary/40" /> : <ChevronDown size={12} className="text-primary/40" />}
+              </span>
+            </button>
+
+            {showExpenses && (
+              <div className="p-3 space-y-2 border-t" style={{ borderColor: "var(--border)" }}>
+                {invoiceExpenses.map((exp) => (
+                  <div key={exp.id} className="flex items-center gap-2">
+                    <select
+                      className="flex-1 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] outline-none px-2 py-1.5 transition-colors focus:border-violet-500/40"
+                      value={exp.category}
+                      onChange={(e) => updateExpense(exp.id, "category", e.target.value)}
+                    >
+                      {EXPENSE_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary/30 text-[11px]">₹</span>
+                      <input
+                        type="number"
+                        className="w-28 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] text-right outline-none pl-5 pr-2 py-1.5 transition-colors focus:border-violet-500/40"
+                        value={exp.amount || ""}
+                        onChange={(e) => updateExpense(exp.id, "amount", Number(e.target.value))}
+                        placeholder="0"
+                        min={0}
+                        step="any"
+                      />
+                    </div>
+                    <button onClick={() => removeExpense(exp.id)}
+                      className="text-rose-400/50 hover:text-rose-400 transition-colors p-1">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
+
+                <button onClick={addExpense}
+                  className="flex items-center gap-1.5 text-[11px] text-violet-400 hover:text-violet-300 transition-colors py-1">
+                  <Plus size={11} /> Add Expense
+                </button>
+
+                {/* Distribution Preview */}
+                {totalExpenseAmount > 0 && invoiceProducts.length > 0 && (
+                  <div className="mt-2 pt-2 border-t space-y-1" style={{ borderColor: "var(--border)" }}>
+                    <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview (by bags)</p>
+                    <div className="grid gap-1">
+                      {invoiceProducts.map((p, idx) => {
+                        const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
+                        const share = getProductExpenseShare(p);
+                        const perUnit = getProductPerUnitExpense(p);
+                        return (
+                          <div key={idx} className="flex items-center justify-between text-[10px] px-1 py-0.5 rounded hover:bg-primary/3">
+                            <span className="text-primary/60 truncate flex-1">{p.name}</span>
+                            <span className="text-primary/30 mx-2">{bags.toFixed(1)} bag{bags !== 1 ? 's' : ''}</span>
+                            <span className="text-emerald-400 font-medium w-16 text-right">+₹{perUnit.toFixed(2)}/u</span>
+                            <span className="text-violet-400 font-medium w-16 text-right">₹{share.toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] font-semibold pt-1 border-t" style={{ borderColor: "var(--border)" }}>
+                      <span className="text-primary/60">Total</span>
+                      <span className="text-primary/30">{totalBags.toFixed(1)} bags</span>
+                      <span className="text-violet-400">₹{totalExpenseAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Summary */}
           <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
             <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
             <p className="text-xs text-emerald-400">
-              {invoiceProducts.length} products extracted from invoice. Review the data above and click <strong>Confirm & Import</strong>.
+              {invoiceProducts.length} products extracted.
+              {totalExpenseAmount > 0
+                ? <> ₹{totalExpenseAmount.toLocaleString('en-IN')} in expenses will be distributed across {totalBags.toFixed(1)} bags.</>
+                : <> Review the data above and click <strong>Confirm & Import</strong>.</>}
             </p>
           </div>
 
