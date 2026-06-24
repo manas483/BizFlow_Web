@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/shared/lib/db';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { expenseSchema } from '@/shared/lib/validations';
-import { recalculateTransportCosts } from '@/shared/lib/expense-calculations';
+import { allocateExpenseToLayers, reverseExpenseAllocation } from '@/shared/lib/expense-calculations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -49,7 +49,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     });
 
-    await recalculateTransportCosts(session.user.businessId);
+    await reverseExpenseAllocation(expense.id, session.user.businessId);
+    await allocateExpenseToLayers(expense.id, session.user.businessId);
 
     const { logAudit, computeChanges } = await import('@/shared/lib/audit');
     const changes = computeChanges(existing as any, expense as any);
@@ -87,7 +88,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     await prisma.expense.delete({ where: { id } });
 
-    await recalculateTransportCosts(session.user.businessId);
+    await reverseExpenseAllocation(id, session.user.businessId);
 
     const { logAudit } = await import('@/shared/lib/audit');
     await logAudit({

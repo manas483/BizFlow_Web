@@ -327,6 +327,7 @@ model Expense {
   excludedProductIds String[] @default([])
   createdAt          DateTime @default(now())
   business           Business @relation(fields: [businessId], references: [id])
+  expenseAllocations ExpenseAllocationHistory[]
 }
 
 model Employee {
@@ -1033,6 +1034,8 @@ model InventoryLayer {
 
   // ── Supplier Reference ──
   supplierId             String?                             // Supplier name or future FK
+  supplierInvoiceNo      String?
+  supplierInvoiceDate    DateTime?
   purchaseInvoiceId      String?                             // Link to purchase receipt
 
   // ── Multi-Currency ──
@@ -1061,6 +1064,7 @@ model InventoryLayer {
   serials                InventorySerial[]
   costAdjustments        InventoryCostAdjustment[]
   revaluations           InventoryRevaluation[]
+  expenseAllocations     ExpenseAllocationHistory[]
 
   @@index([businessId, itemId])
   @@index([businessId, itemId, warehouseId])
@@ -1083,6 +1087,23 @@ model InventoryLayerCost {
   @@index([layerId])
 }
 
+/// Expense Allocation History — tracks historical allocations and edits
+model ExpenseAllocationHistory {
+  id          String   @id @default(cuid())
+  expenseId   String
+  layerId     String
+  oldAmount   Float
+  newAmount   Float
+  action      String   // "ALLOCATED" | "EDITED" | "DELETED"
+  createdAt   DateTime @default(now())
+
+  layer       InventoryLayer @relation(fields: [layerId], references: [id], onDelete: Cascade)
+  expense     Expense        @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+  @@index([layerId])
+}
+
 /// Inventory Layer Consumption — tracks which layer was consumed by each transaction.
 model InventoryLayerConsumption {
   id              String   @id @default(cuid())
@@ -1101,6 +1122,7 @@ model InventoryLayerConsumption {
   @@index([transactionId])
   @@index([layerId])
   @@index([businessId, createdAt])
+  @@index([transactionId, transactionType])
 }
 
 /// Inventory Serial — per-unit serial/IMEI tracking linked to layers (Phase 2).

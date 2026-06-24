@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/shared/lib/db';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { expenseSchema } from '@/shared/lib/validations';
-import { recalculateTransportCosts } from '@/shared/lib/expense-calculations';
+import { allocateExpenseToLayers } from '@/shared/lib/expense-calculations';
 import { z } from 'zod';
 
 export async function GET(req: NextRequest) {
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    await recalculateTransportCosts(session.user.businessId);
+    await allocateExpenseToLayers(expense.id, session.user.businessId);
 
     // Auto-post journal entry for expense (Dr Expense / Cr Cash)
     const { postExpenseJournal, postCashBookEntry } = await import('@/shared/lib/auto-journal');

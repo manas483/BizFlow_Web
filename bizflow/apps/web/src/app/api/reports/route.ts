@@ -139,9 +139,9 @@ export async function GET(req: NextRequest) {
       }),
 
       // Inventory Valuation
-      prisma.product.findMany({
-        where: { businessId },
-        select: { stock: true, purchasePrice: true }
+      prisma.inventoryLayer.findMany({
+        where: { businessId, status: 'ACTIVE', remainingQty: { gt: 0 } },
+        select: { remainingQty: true, unitCost: true }
       }),
 
       // Credit Notes (Refunds/Returns)
@@ -176,7 +176,7 @@ export async function GET(req: NextRequest) {
     
     const collectionEfficiency = totalSales > 0 ? (collectedAmount / totalSales) * 100 : 0;
     const profitMargin = totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
-    const inventoryValuation = inventoryProducts.reduce((acc, p) => acc + (Math.max(0, p.stock) * p.purchasePrice), 0);
+    const inventoryValuation = inventoryProducts.reduce((acc: number, p: any) => acc + (Math.max(0, p.remainingQty) * p.unitCost), 0);
 
     // GST Analytics
     let totalGstCollected = 0;

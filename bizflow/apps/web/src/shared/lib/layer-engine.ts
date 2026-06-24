@@ -243,6 +243,8 @@ export async function createLayer(params: CreateLayerParams): Promise<string> {
     });
   }
 
+  await recalculateProductWAC(itemId, businessId, tx);
+
   return layer.id;
 }
 
@@ -539,6 +541,8 @@ async function consumeSpecific(
     },
   });
 
+  await recalculateProductWAC(layer.itemId, businessId, tx);
+
   await tx.inventoryLayerConsumption.create({
     data: {
       transactionId,
@@ -650,6 +654,8 @@ async function consumeStandard(tx: any, params: ConsumeLayersParams): Promise<La
     remaining = round4(remaining - consumeQty);
   }
 
+  await recalculateProductWAC(itemId, businessId, tx);
+
   const totalCOGS = round4(consumptions.reduce((sum, c) => sum + c.amount, 0));
   return { totalCOGS, consumptions };
 }
@@ -715,6 +721,14 @@ export async function restoreLayer(params: RestoreLayerParams): Promise<void> {
 
   if (remaining > 0) {
     console.warn(`[LayerEngine] Could not fully restore ${quantity} units for txn ${transactionId}. ${remaining} units unresolved.`);
+  }
+
+  // Deduce the itemId from the first consumption, or pass it via params if needed. We can get it from consumptions.
+  if (consumptions.length > 0) {
+    const layer = await tx.inventoryLayer.findUnique({ where: { id: consumptions[0].layerId } });
+    if (layer) {
+      await recalculateProductWAC(layer.itemId, businessId, tx);
+    }
   }
 }
 
@@ -832,6 +846,7 @@ export async function applyLateLandedCost(params: LateLandedCostParams): Promise
       businessId,
     },
   });
+  await recalculateProductWAC(layer.itemId, businessId, tx);
 
   return {
     costAdjustmentId: adjustment.id,
@@ -921,4 +936,19 @@ export async function getLayerStock(
   });
 
   return layers.reduce((sum: number, l: any) => sum + l.remainingQty, 0);
+}
+
+/**
+ * Update Product WAC by recalculating from active layers.
+ */
+export async function recalculateProductWAC(
+  itemId: string,
+  businessId: string,
+  tx: any = prisma
+): Promise<void> {
+  const newWAC = await getWeightedAverageCost(itemId, businessId, undefined, tx);
+  await tx.product.update({
+    where: { id: itemId },
+    data: { purchasePrice: newWAC }
+  });
 }

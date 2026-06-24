@@ -19,6 +19,7 @@ import NewSaleModal from "@/shared/ui/modals/NewSaleModal";
 import { useDashboardStats } from "@/shared/hooks/useDashboard";
 import { useProducts } from "@/shared/hooks/useProducts";
 import { useSales } from "@/shared/hooks/useSales";
+import { InventoryIntegrityWidget } from "@/shared/ui/widgets/InventoryIntegrityWidget";
 import { useReports } from "@/shared/hooks/useReports";
 import { useSession } from "next-auth/react";
 import { useRecommendations, trackActivity } from "@/shared/hooks/useRecommendations";
@@ -214,6 +215,10 @@ export default function DashboardPage() {
           color="rose"
           subtitle="vs last month"
         />
+      </div>
+
+      <div className="grid grid-cols-1 mb-6">
+        <InventoryIntegrityWidget />
       </div>
 
       {/* Charts Row */}

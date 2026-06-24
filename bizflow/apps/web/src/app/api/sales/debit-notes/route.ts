@@ -24,8 +24,8 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth();
     const body = await req.json();
-    const validatedData = debitCreditNoteSchema.parse(body);
-    const { saleId, customerId, reason, amount, taxAmount, notes } = validatedData;
+    
+    const { saleId, customerId, reason, amount, taxAmount, notes, items } = body;
 
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, businessId: session.user.businessId },
@@ -42,16 +42,43 @@ export async function POST(req: NextRequest) {
     }
 
     const count = await prisma.debitNote.count({ where: { businessId: session.user.businessId } });
-    const debitNoteNo = `DN-${new Date().getFullYear()}-${String(count + 1).padStart(3, '0')}`;
+    const debitNoteNo = \DN-\-\\;
 
-    const note = await prisma.debitNote.create({
-      data: {
-        debitNoteNo, saleId, customerId,
-        reason, amount: Number(amount),
-        taxAmount: Number(taxAmount) || 0,
-        notes, businessId: session.user.businessId,
-      },
+    const note = await prisma.(async (tx: any) => {
+      const createdNote = await tx.debitNote.create({
+        data: {
+          debitNoteNo, saleId, customerId,
+          reason, amount: Number(amount),
+          taxAmount: Number(taxAmount) || 0,
+          notes, businessId: session.user.businessId,
+        },
+      });
+
+      // Handle layer-aware inventory return
+      if (items && Array.isArray(items)) {
+        const { reduceLayer } = await import('@/shared/lib/layer-engine');
+        for (const item of items) {
+          if (item.qty > 0 && item.layerId) {
+            await reduceLayer({
+              layerId: item.layerId,
+              quantity: item.qty,
+              transactionId: createdNote.id,
+              transactionType: 'purchase_return',
+              businessId: session.user.businessId,
+              tx
+            });
+            // Update product stock
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: { decrement: item.qty } }
+            });
+          }
+        }
+      }
+
+      return createdNote;
     });
+
     return NextResponse.json(note, { status: 201 });
   } catch (e: any) {
     if (e instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: e.issues }, { status: 400 });
@@ -60,5 +87,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-
 

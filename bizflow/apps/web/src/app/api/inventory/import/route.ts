@@ -126,9 +126,12 @@ export async function POST(req: NextRequest) {
               newTotalStock += incomingQuantity;
             }
             
+            // Do NOT overwrite existing cost fields (basePurchasePrice, transportCost, purchasePrice)
+            const { basePurchasePrice, transportCost, purchasePrice, ...updateData } = productData;
+            
             await prisma.product.update({ 
               where: { id: existingId }, 
-              data: { ...productData, stock: newTotalStock } 
+              data: { ...updateData, stock: newTotalStock } 
             });
             
             if (shouldAddStock && incomingQuantity > 0) {
@@ -151,6 +154,7 @@ export async function POST(req: NextRequest) {
                 purchaseCost: productData.basePurchasePrice * incomingQuantity,
                 expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * incomingQuantity }] : [],
                 receiptNo: productData.purchaseInvoiceNo || undefined,
+                purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
                 receiptDate: productData.purchaseDate || new Date(),
                 supplierId: productData.purchaseFrom || productData.supplier || undefined,
                 sourceTransactionType: 'purchase',
@@ -180,6 +184,7 @@ export async function POST(req: NextRequest) {
                 purchaseCost: productData.basePurchasePrice * newProduct.stock,
                 expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * newProduct.stock }] : [],
                 receiptNo: productData.purchaseInvoiceNo || undefined,
+                purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
                 receiptDate: productData.purchaseDate || new Date(),
                 supplierId: productData.purchaseFrom || productData.supplier || undefined,
                 sourceTransactionType: 'purchase',
@@ -468,7 +473,8 @@ export async function POST(req: NextRequest) {
             const existingProduct = await prisma.product.findUnique({ where: { id: existingId } });
             const stockDiff = productData.stock - (existingProduct?.stock || 0);
             
-            await prisma.product.update({ where: { id: existingId }, data: productData }); 
+            const { basePurchasePrice, transportCost, purchasePrice, ...updateData } = productData;
+            await prisma.product.update({ where: { id: existingId }, data: updateData });
             
             if (stockDiff > 0) {
               await prisma.stockMovement.create({
@@ -489,6 +495,7 @@ export async function POST(req: NextRequest) {
                 purchaseCost: productData.basePurchasePrice * stockDiff,
                 expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * stockDiff }] : [],
                 receiptNo: productData.purchaseInvoiceNo || undefined,
+                purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
                 receiptDate: new Date(),
                 supplierId: productData.purchaseFrom || undefined,
                 sourceTransactionType: 'purchase',
@@ -518,6 +525,7 @@ export async function POST(req: NextRequest) {
                 purchaseCost: productData.basePurchasePrice * newProduct.stock,
                 expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * newProduct.stock }] : [],
                 receiptNo: productData.purchaseInvoiceNo || undefined,
+                purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
                 receiptDate: new Date(),
                 supplierId: productData.purchaseFrom || undefined,
                 sourceTransactionType: 'purchase',
@@ -547,6 +555,7 @@ export async function POST(req: NextRequest) {
               purchaseCost: productData.basePurchasePrice * newProduct.stock,
               expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * newProduct.stock }] : [],
               receiptNo: productData.purchaseInvoiceNo || undefined,
+              purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
               receiptDate: new Date(),
               supplierId: productData.purchaseFrom || undefined,
               sourceTransactionType: 'purchase',

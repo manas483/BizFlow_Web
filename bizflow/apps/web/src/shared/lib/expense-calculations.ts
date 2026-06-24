@@ -1,185 +1,95 @@
+
 import { prisma } from './db';
+import { postCOGSAdjustmentJournal } from './auto-journal';
 
+// Helper to fully recalculate or allocate a specific expense incrementally
 export async function recalculateTransportCosts(businessId: string) {
-  // 1. Fetch all products for this business
-  const products = await prisma.product.findMany({
-    where: { businessId },
+  // Keeping this for backward compatibility or rebuild utility
+  console.log('Use incremental allocation instead');
+}
+
+export async function allocateExpenseToLayers(expenseId: string, businessId: string, tx: any = prisma) {
+  const expense = await tx.expense.findFirst({ where: { id: expenseId, businessId } });
+  if (!expense) return;
+
+  const invs = (expense as any).invoiceNumbers || [];
+  if (invs.length === 0) return;
+  const validInvs = invs.map((i: string) => i.trim());
+  const excludedProducts = (expense as any).excludedProductIds || [];
+
+  const layers = await tx.inventoryLayer.findMany({
+    where: { businessId, purchaseInvoiceId: { in: validInvs } },
+    include: { product: true }
   });
 
-  // 2. Fetch all expenses for this business
-  const expenses = await prisma.expense.findMany({
-    where: { businessId },
-  });
+  if (layers.length === 0) return;
 
-  // 3. For each invoice number, find all products associated with it
-  // Map: invoiceNo -> Product[]
-  const invoiceProductsMap: Record<string, typeof products> = {};
-  for (const p of products) {
-    if (p.purchaseInvoiceNo) {
-      const inv = p.purchaseInvoiceNo.trim();
-      if (inv) {
-        if (!invoiceProductsMap[inv]) {
-          invoiceProductsMap[inv] = [];
-        }
-        invoiceProductsMap[inv].push(p);
-      }
+  let totalTransportUnitsForExpense = 0;
+  for (const layer of layers) {
+    if (!excludedProducts.includes(layer.itemId)) {
+      totalTransportUnitsForExpense += layer.originalQty / (layer.product?.unitsPerBag || 1);
     }
   }
 
-  // 4. Calculate total transport units (bags/kattas) for each invoice
-  // Map: invoiceNo -> total transport units
-  const invoiceTotalTransportUnitsMap: Record<string, number> = {};
-  for (const [inv, prods] of Object.entries(invoiceProductsMap)) {
-    invoiceTotalTransportUnitsMap[inv] = prods.reduce(
-      (sum, p) => sum + (p.stock || 0) / (p.unitsPerBag || 1),
-      0
-    );
-  }
+  if (totalTransportUnitsForExpense > 0) {
+    const expensePerTransportUnit = expense.amount / totalTransportUnitsForExpense;
 
-  // 5. For each product with a purchaseInvoiceNo, we need to calculate its new transportCost.
-  // Let's initialize a map: productId -> newTransportCost
-  const productTransportCostMap: Record<string, number> = {};
-
-  // Initialize all products with purchaseInvoiceNo to 0 first (in case there are no expenses)
-  for (const p of products) {
-    if (p.purchaseInvoiceNo && p.purchaseInvoiceNo.trim()) {
-      productTransportCostMap[p.id] = 0;
-    }
-  }
-
-  // 6. Go through each expense and distribute its amount
-  for (const exp of expenses) {
-    const invs = (exp as any).invoiceNumbers || [];
-    if (!invs || invs.length === 0) continue;
-
-    // Filter to invoices that actually exist in our products
-    const validInvs = invs.map((i: string) => i.trim()).filter((i: string) => !!invoiceProductsMap[i]);
-    if (validInvs.length === 0) continue;
-
-    const excludedProducts = (exp as any).excludedProductIds || [];
-
-    // Find the sum of transport units across all products in ALL selected invoices for this expense, excluding those in excludedProductIds
-    let totalTransportUnitsForExpense = 0;
-    for (const inv of validInvs) {
-      for (const p of invoiceProductsMap[inv]) {
-        if (!excludedProducts.includes(p.id)) {
-          totalTransportUnitsForExpense += (p.stock || 0) / (p.unitsPerBag || 1);
-        }
-      }
-    }
-
-    if (totalTransportUnitsForExpense > 0) {
-      const expensePerTransportUnit = exp.amount / totalTransportUnitsForExpense;
-
-      // Allocate to all included products in these invoices
-      for (const inv of validInvs) {
-        for (const p of invoiceProductsMap[inv]) {
-          if (!excludedProducts.includes(p.id)) {
-            const expensePerRetailUnit = expensePerTransportUnit / (p.unitsPerBag || 1);
-            productTransportCostMap[p.id] = (productTransportCostMap[p.id] || 0) + expensePerRetailUnit;
-          }
-        }
-      }
-    }
-  }
-
-  // 7. Update products in the database if their transportCost has changed
-  // We can do this in a prisma transaction to be fast and safe
-  const updatePromises = [];
-  const updatedProducts: Array<{ id: string; purchaseInvoiceNo: string; newTransportCost: number; basePurchasePrice: number; stock: number }> = [];
-
-  for (const p of products) {
-    if (p.purchaseInvoiceNo && p.purchaseInvoiceNo.trim()) {
-      const newTransportCost = Number((productTransportCostMap[p.id] || 0).toFixed(2));
-      const newPurchasePrice = Number((p.basePurchasePrice + newTransportCost).toFixed(2));
-
-      // Only update if it actually changed
-      if (
-        Math.abs(p.transportCost - newTransportCost) > 0.005 ||
-        Math.abs(p.purchasePrice - newPurchasePrice) > 0.005
-      ) {
-        updatePromises.push(
-          prisma.product.update({
-            where: { id: p.id },
-            data: {
-              transportCost: newTransportCost,
-              purchasePrice: newPurchasePrice,
-            },
-          })
-        );
-        updatedProducts.push({
-          id: p.id,
-          purchaseInvoiceNo: p.purchaseInvoiceNo.trim(),
-          newTransportCost,
-          basePurchasePrice: p.basePurchasePrice,
-          stock: p.stock,
-        });
-      }
-    }
-  }
-
-  if (updatePromises.length > 0) {
-    await prisma.$transaction(updatePromises);
-  }
-
-  // 8. Sync InventoryLayers — update landedCost/unitCost to match the new transport costs.
-  //    This ensures FIFO/LIFO COGS calculations use the correct landed cost
-  //    when expenses (transport, labour, loading, etc.) are added AFTER invoice import.
-  if (updatedProducts.length > 0) {
-    try {
-      for (const up of updatedProducts) {
-        // Find layers created from this invoice for this product
-        const layers = await prisma.inventoryLayer.findMany({
-          where: {
-            itemId: up.id,
-            receiptNo: up.purchaseInvoiceNo,
-            businessId,
-          },
+    for (const layer of layers) {
+      if (!excludedProducts.includes(layer.itemId)) {
+        const expenseForLayer = expensePerTransportUnit * (layer.originalQty / (layer.product?.unitsPerBag || 1));
+        
+        // Use applyLateLandedCost
+        const { applyLateLandedCost } = await import('./layer-engine');
+        await applyLateLandedCost({
+          layerId: layer.id,
+          expenseType: expense.category,
+          amount: expenseForLayer,
+          remarks: \Allocated from Expense \\,
+          businessId,
+          tx
         });
 
-        for (const layer of layers) {
-          // Recalculate: total transport expense for this layer = perUnit × originalQty
-          const totalTransportForLayer = Number((up.newTransportCost * layer.originalQty).toFixed(4));
-          const newLandedCost = Number((layer.purchaseCost + totalTransportForLayer).toFixed(4));
-          const newUnitCost = Number((newLandedCost / layer.originalQty).toFixed(4));
-
-          // Update the layer's costs
-          await prisma.inventoryLayer.update({
-            where: { id: layer.id },
-            data: {
-              landedCost: newLandedCost,
-              unitCost: newUnitCost,
-            },
-          });
-
-          // Upsert the transport cost breakdown line in InventoryLayerCost
-          const existingCostLine = await prisma.inventoryLayerCost.findFirst({
-            where: {
-              layerId: layer.id,
-              expenseType: 'transport',
-            },
-          });
-
-          if (existingCostLine) {
-            await prisma.inventoryLayerCost.update({
-              where: { id: existingCostLine.id },
-              data: { amount: totalTransportForLayer },
-            });
-          } else if (totalTransportForLayer > 0) {
-            await prisma.inventoryLayerCost.create({
-              data: {
-                layerId: layer.id,
-                expenseType: 'transport',
-                amount: totalTransportForLayer,
-                remarks: 'Distributed from expense allocation',
-              },
-            });
+        // Record history
+        await tx.expenseAllocationHistory.create({
+          data: {
+            expenseId: expense.id,
+            layerId: layer.id,
+            oldAmount: 0,
+            newAmount: expenseForLayer,
+            action: 'ALLOCATED'
           }
-        }
+        });
       }
-    } catch (err) {
-      // Gracefully handle if InventoryLayer tables aren't migrated yet
-      console.warn('[ExpenseCalc] Could not sync InventoryLayers — tables may not be migrated:', (err as any)?.message);
     }
   }
 }
+
+export async function reverseExpenseAllocation(expenseId: string, businessId: string, tx: any = prisma) {
+  const histories = await tx.expenseAllocationHistory.findMany({
+    where: { expenseId, action: 'ALLOCATED' }
+  });
+
+  const { applyLateLandedCost } = await import('./layer-engine');
+
+  for (const history of histories) {
+    await applyLateLandedCost({
+      layerId: history.layerId,
+      expenseType: 'reversal',
+      amount: -history.newAmount, // negative amount to reverse
+      remarks: \Reversed from Expense \\,
+      businessId,
+      tx
+    });
+
+    await tx.expenseAllocationHistory.create({
+      data: {
+        expenseId: expenseId,
+        layerId: history.layerId,
+        oldAmount: history.newAmount,
+        newAmount: 0,
+        action: 'DELETED'
+      }
+    });
+  }
+}
+
