@@ -172,11 +172,17 @@ export default function EditProductModal({ product, onClose }: { product: any; o
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <FormField label="Purchase Cost (₹/Unit)">
             <ModalInput type="number" min="0" step="any" value={form.basePurchasePrice}
-              onChange={(e) => setForm({ ...form, basePurchasePrice: e.target.value })} />
+              onChange={(e) => {
+                const b = e.target.value;
+                setForm({ ...form, basePurchasePrice: b, purchasePrice: String((Number(b) || 0) + (Number(form.transportCost) || 0)) });
+              }} />
           </FormField>
           <FormField label="Additional Cost (₹/Unit)">
             <ModalInput type="number" min="0" step="any" value={form.transportCost}
-              onChange={(e) => setForm({ ...form, transportCost: e.target.value })} />
+              onChange={(e) => {
+                const t = e.target.value;
+                setForm({ ...form, transportCost: t, purchasePrice: String((Number(form.basePurchasePrice) || 0) + (Number(t) || 0)) });
+              }} />
           </FormField>
           <FormField label="Landed Cost (₹/Unit)">
             <ModalInput type="number" min="0" step="any" value={form.purchasePrice}

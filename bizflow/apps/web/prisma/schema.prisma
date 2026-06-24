@@ -73,6 +73,8 @@ model Business {
   periodClosings        InventoryPeriodClosing[]
   stockCounts           StockCount[]
   billsOfMaterial       BillOfMaterial[]
+  // ── ML-Trained Invoice Templates ──
+  invoiceTemplates      InvoiceTemplate[]
 }
 
 model User {
@@ -1263,4 +1265,22 @@ model BillOfMaterialItem {
   bom         BillOfMaterial @relation(fields: [bomId], references: [id], onDelete: Cascade)
 
   @@index([bomId])
+}
+
+/// ML-Trained Invoice Template — stores learned coordinate zones from sample PDFs.
+/// Each template represents one invoice format (e.g., "Tally Sales", "Tally GST Composite").
+model InvoiceTemplate {
+  id            String   @id @default(cuid())
+  name          String                          // Human-readable name, e.g., "AGROCHEM GST Invoice"
+  fingerprint   String                          // Format fingerprint for fast matching
+  templateData  Json                            // Learned FormatConfig as JSON
+  trainingMeta  Json?                           // Training stats: accuracy, column count, etc.
+  sampleCount   Int      @default(1)            // How many samples trained this template
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([businessId, fingerprint])
+  @@index([businessId])
 }

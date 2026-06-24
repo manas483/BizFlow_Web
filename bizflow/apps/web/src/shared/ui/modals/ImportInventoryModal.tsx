@@ -13,7 +13,7 @@ import {
 import { useBusiness } from "@/shared/hooks/useBusiness";
 import { getBusinessProfile } from "@/shared/lib/business-intelligence";
 
-type Step = "upload" | "validating" | "review" | "importing" | "done";
+type Step = "upload" | "validating" | "review" | "training" | "importing" | "done";
 
 interface ValidationSummary {
   total: number; valid: number; errors: number; warnings: number; duplicates: number;
@@ -124,6 +124,11 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
   const [invoiceProducts, setInvoiceProducts] = useState<InvoiceProduct[]>([]);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
+  // Training state
+  const [trainingRequired, setTrainingRequired] = useState(false);
+  const [trainingPreview, setTrainingPreview] = useState<any>(null);
+  const [isTraining, setIsTraining] = useState(false);
+
   // Import state
   const [importResults, setImportResults] = useState<ImportResults | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -136,6 +141,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     setUnmapped([]); setSuggestions({});
     setIsInvoicePdf(false); setInvoiceInfo(null); setInvoiceProducts([]);
     setEditingIdx(null);
+    setTrainingRequired(false); setTrainingPreview(null); setIsTraining(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -169,9 +175,19 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
       setProgress(100);
       if (!res.ok) { setImportError(data.error ?? "Validation failed"); setStep("upload"); return; }
 
+      // Handle training_required mode (no matching template for this PDF)
+      if (data.mode === "training_required") {
+        setIsInvoicePdf(true);
+        setTrainingRequired(true);
+        setTrainingPreview(data.trainedPreview || null);
+        setStep("review");
+        return;
+      }
+
       if (data.isInvoicePdf) {
         // PDF Invoice flow
         setIsInvoicePdf(true);
+        setTrainingRequired(false);
         setInvoiceInfo(data.invoiceInfo);
         const products: InvoiceProduct[] = (data.validation?.processedRows ?? []).map((r: any) => ({
           name: r.data.name ?? "",
@@ -260,6 +276,97 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     } catch { setImportError("Network error during import."); setStep("review"); }
   };
 
+  // Train template then re-parse the PDF
+  const handleTrainTemplate = async () => {
+    if (!file) return;
+    setIsTraining(true); setImportError(null); setStep("training"); setProgress(10);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      setProgress(30);
+      const trainRes = await fetch("/api/inventory/train-template", { method: "POST", body: fd });
+      const trainData = await trainRes.json();
+      setProgress(60);
+      if (!trainRes.ok) {
+        setImportError(trainData.error ?? "Training failed");
+        setIsTraining(false);
+        setStep("review");
+        return;
+      }
+
+      toast.success(`Template "${trainData.template?.name}" trained successfully!`);
+
+      // If the train endpoint returned extraction results directly, use them
+      if (trainData.extraction && trainData.extraction.products?.length > 0) {
+        setTrainingRequired(false);
+        setIsInvoicePdf(true);
+        setInvoiceInfo({
+          invoiceNumber: trainData.extraction.invoiceNumber || "Unknown",
+          supplier: trainData.extraction.supplier || "Unknown Supplier",
+          purchaseDate: trainData.extraction.purchaseDate || new Date().toISOString(),
+        });
+        const products: InvoiceProduct[] = trainData.extraction.products.map((p: any) => ({
+          name: p.name ?? "", sku: p.sku ?? "", category: p.category ?? "",
+          stock: Number(p.quantity ?? p.stock ?? 0),
+          unitsPerBag: Number(p.unitsPerBag ?? 1),
+          basePurchasePrice: Number(p.basePurchasePrice ?? 0),
+          transportCost: 0,
+          purchasePrice: Number(p.purchasePrice ?? 0),
+          sellingPrice: Number(p.sellingPrice ?? 0),
+          unit: p.unit ?? "pcs",
+          supplier: trainData.extraction.supplier ?? "",
+          purchaseInvoiceNo: trainData.extraction.invoiceNumber ?? "",
+          purchaseDate: trainData.extraction.purchaseDate ?? "",
+          gstRate: Number(p.gstRate ?? 0),
+          hsnCode: p.hsnCode ?? "",
+        }));
+        setInvoiceProducts(products);
+        setValidationSummary({ total: products.length, valid: products.length, errors: 0, warnings: 0, duplicates: 0 });
+        setProgress(100);
+        setIsTraining(false);
+        setStep("review");
+        return;
+      }
+
+      // Fallback: Re-parse the file now that the template is trained
+      setProgress(80);
+      const fd2 = new FormData();
+      fd2.append("file", file); fd2.append("mode", "validate");
+      const parseRes = await fetch("/api/inventory/import", { method: "POST", body: fd2 });
+      const parseData = await parseRes.json();
+      setProgress(100);
+
+      if (!parseRes.ok || parseData.mode === "training_required") {
+        setImportError(parseData.error ?? "Still could not parse this invoice after training. Please try again.");
+        setIsTraining(false);
+        setStep("review");
+        return;
+      }
+
+      // Success — populate the review step
+      setTrainingRequired(false);
+      setIsInvoicePdf(true);
+      setInvoiceInfo(parseData.invoiceInfo);
+      const products: InvoiceProduct[] = (parseData.validation?.processedRows ?? []).map((r: any) => ({
+        name: r.data.name ?? "", sku: r.data.sku ?? "", category: r.data.category ?? "",
+        stock: Number(r.data.stock ?? 0), unitsPerBag: Number(r.data.unitsPerBag ?? 1),
+        basePurchasePrice: Number(r.data.basePurchasePrice ?? 0), transportCost: Number(r.data.transportCost ?? 0),
+        purchasePrice: Number(r.data.purchasePrice ?? 0), sellingPrice: Number(r.data.sellingPrice ?? 0),
+        unit: r.data.unit ?? "pcs", supplier: r.data.supplier ?? "",
+        purchaseInvoiceNo: r.data.purchaseInvoiceNo ?? "", purchaseDate: r.data.purchaseDate ?? "",
+        gstRate: Number(r.data.gstRate ?? 0), hsnCode: r.data.hsnCode ?? "",
+      }));
+      setInvoiceProducts(products);
+      setValidationSummary(parseData.validation?.summary ?? null);
+      setIsTraining(false);
+      setStep("review");
+    } catch {
+      setImportError("Network error during training. Please try again.");
+      setIsTraining(false);
+      setStep("review");
+    }
+  };
+
   // Edit invoice product inline
   const updateInvoiceProduct = (idx: number, field: keyof InvoiceProduct, value: string | number) => {
     setInvoiceProducts(prev => {
@@ -291,8 +398,8 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
       {/* Step Indicator */}
       <div className="flex items-center gap-1 mb-5">
         {(["upload", "review", "done"] as const).map((s, i) => {
-          const active = step === s || (step === "validating" && s === "upload") || (step === "importing" && s === "review");
-          const done = (s === "upload" && ["review","importing","done"].includes(step)) ||
+          const active = step === s || (step === "validating" && s === "upload") || (step === "importing" && s === "review") || (step === "training" && s === "review");
+          const done = (s === "upload" && ["review","training","importing","done"].includes(step)) ||
                        (s === "review" && step === "done");
           return (
             <div key={s} className="flex items-center gap-1 flex-1">
@@ -370,8 +477,83 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
         </div>
       )}
 
+      {/* ── STEP: TRAINING (learning new PDF format) ── */}
+      {step === "training" && (
+        <div className="flex flex-col items-center gap-5 py-8">
+          <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
+            <Loader2 size={28} className="text-violet-400 animate-spin" />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-semibold text-primary">Learning invoice format…</p>
+            <p className="text-xs text-primary/40 mt-1">Analyzing column positions, table structure & labels</p>
+          </div>
+          <div className="w-64 h-2 bg-primary/10 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-violet-600 to-purple-500 rounded-full transition-all duration-700"
+              style={{ width: `${progress}%` }} />
+          </div>
+          <p className="text-xs text-primary/30">{progress}% complete</p>
+        </div>
+      )}
+
+      {/* ── STEP: REVIEW (Training Required — new PDF format) ── */}
+      {step === "review" && isInvoicePdf && trainingRequired && (
+        <div className="space-y-4">
+          <div className="rounded-xl p-5 text-center" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}>
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle size={24} className="text-amber-400" />
+            </div>
+            <p className="text-sm font-semibold text-primary">New Invoice Format Detected</p>
+            <p className="text-xs text-primary/40 mt-1 max-w-sm mx-auto">
+              This invoice format hasn&apos;t been seen before. BizFlow needs to learn it once so future uploads are instant.
+            </p>
+          </div>
+
+          {trainingPreview && (
+            <div className="rounded-xl p-3" style={{ background: "var(--bg-surface-2)", border: "1px solid var(--border)" }}>
+              <p className="text-xs font-semibold text-primary mb-2">📋 Auto-Detected Structure</p>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {trainingPreview.formatName && (
+                  <div>
+                    <span className="text-primary/40">Format:</span>{" "}
+                    <span className="text-primary font-medium">{trainingPreview.formatName}</span>
+                  </div>
+                )}
+                {trainingPreview.columnCount > 0 && (
+                  <div>
+                    <span className="text-primary/40">Columns:</span>{" "}
+                    <span className="text-primary font-medium">{trainingPreview.columnCount}</span>
+                  </div>
+                )}
+                {trainingPreview.productRowCount > 0 && (
+                  <div>
+                    <span className="text-primary/40">Products found:</span>{" "}
+                    <span className="text-primary font-medium">{trainingPreview.productRowCount}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {importError && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
+              <XCircle size={14} className="text-rose-400 flex-shrink-0" />
+              <p className="text-xs text-rose-400">{importError}</p>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Button variant="secondary" size="sm" icon={<RotateCcw size={13} />} onClick={reset} className="flex-1">
+              Re-upload
+            </Button>
+            <Button size="sm" className="flex-1" onClick={handleTrainTemplate} disabled={isTraining}>
+              {isTraining ? "Training…" : "Train & Import"}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* ── STEP: REVIEW (Invoice PDF) ── */}
-      {step === "review" && isInvoicePdf && invoiceInfo && (
+      {step === "review" && isInvoicePdf && !trainingRequired && invoiceInfo && (
         <div className="space-y-4">
           {/* Invoice Header */}
           <div className="rounded-xl p-4" style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)" }}>

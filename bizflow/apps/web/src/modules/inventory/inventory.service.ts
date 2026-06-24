@@ -1,6 +1,6 @@
 import { prisma } from '@/shared/lib/db';
 import { recalculateTransportCosts } from '@/shared/lib/expense-calculations';
-import { createLayer } from '@/shared/lib/layer-engine';
+import { createLayerSafe } from '@/shared/lib/layer-engine';
 
 export class InventoryService {
   static async getProducts(businessId: string, search?: string | null, category?: string | null, page = 1, limit = 25) {
@@ -60,7 +60,7 @@ export class InventoryService {
         ? [{ expenseType: 'transport', amount: transportTotal }]
         : [];
 
-      await createLayer({
+      await createLayerSafe({
         itemId: product.id,
         receiptNo: product.purchaseInvoiceNo || undefined,
         receiptDate: product.purchaseDate || undefined,
@@ -163,7 +163,7 @@ export class InventoryService {
             ? [{ expenseType: 'transport', amount: transportTotal }]
             : [];
 
-          await createLayer({
+          await createLayerSafe({
             itemId: updated.id,
             receiptNo: updated.purchaseInvoiceNo || undefined,
             receiptDate: purchaseDate ? new Date(purchaseDate) : undefined,

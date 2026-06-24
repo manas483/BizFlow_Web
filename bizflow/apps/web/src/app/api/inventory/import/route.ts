@@ -10,6 +10,7 @@ import {
 } from "@/shared/lib/inventory-import";
 import { recalculateTransportCosts } from "@/shared/lib/expense-calculations";
 import { findProductIntelligence } from "@/shared/lib/business-intelligence";
+import { createLayerSafe } from "@/shared/lib/layer-engine";
 
 import { parseInvoicePdfLocally } from "@/shared/lib/pdf-parser";
 
@@ -28,10 +29,34 @@ export async function POST(req: NextRequest) {
     /* ── 1. JSON body → Confirmed Import (from invoice review or Excel review) ── */
     if (contentType.includes("application/json")) {
       const body = await req.json();
-      const { products: verifiedProducts } = body;
+      const { products: verifiedProducts, totalTransportCost: invoiceTransportCost } = body;
 
       if (!Array.isArray(verifiedProducts) || verifiedProducts.length === 0) {
         return NextResponse.json({ error: "No products provided for import." }, { status: 400 });
+      }
+
+      // ── Distribute invoice-level transport cost by value ──
+      // If the invoice has a total transport cost and individual products don't
+      // have their own transport costs, distribute proportionally by base value.
+      const totalTransport = Number(invoiceTransportCost ?? 0);
+      if (totalTransport > 0) {
+        const totalInvoiceValue = verifiedProducts.reduce(
+          (sum: number, p: any) => sum + (Number(p.basePurchasePrice ?? p.purchasePrice ?? 0) * Number(p.stock ?? 0)),
+          0
+        );
+        if (totalInvoiceValue > 0) {
+          for (const p of verifiedProducts) {
+            const lineValue = Number(p.basePurchasePrice ?? p.purchasePrice ?? 0) * Number(p.stock ?? 0);
+            const share = lineValue / totalInvoiceValue;
+            const qty = Number(p.stock ?? 0);
+            // Distribute as per-unit transport cost
+            if (qty > 0 && !Number(p.transportCost)) {
+              p.transportCost = Number(((totalTransport * share) / qty).toFixed(4));
+              // Recalculate purchasePrice = basePurchasePrice + transportCost
+              p.purchasePrice = Number(p.basePurchasePrice ?? p.purchasePrice ?? 0) + p.transportCost;
+            }
+          }
+        }
       }
 
       const results = { created: 0, updated: 0, failed: 0 };
@@ -78,21 +103,58 @@ export async function POST(req: NextRequest) {
 
           if (existingId) {
             const existingProduct = await prisma.product.findUnique({ where: { id: existingId } });
-            const stockDiff = productData.stock - (existingProduct?.stock || 0);
             
-            await prisma.product.update({ where: { id: existingId }, data: productData });
+            const incomingQuantity = productData.stock;
+            let newTotalStock = existingProduct?.stock || 0;
+            let shouldAddStock = true;
             
-            if (stockDiff > 0) {
+            // Check if we already added stock for this exact invoice
+            if (productData.purchaseInvoiceNo) {
+              const duplicateMovement = await prisma.stockMovement.findFirst({
+                where: {
+                  productId: existingId,
+                  referenceId: productData.purchaseInvoiceNo,
+                  businessId,
+                }
+              });
+              if (duplicateMovement) {
+                shouldAddStock = false;
+              }
+            }
+            
+            if (shouldAddStock) {
+              newTotalStock += incomingQuantity;
+            }
+            
+            await prisma.product.update({ 
+              where: { id: existingId }, 
+              data: { ...productData, stock: newTotalStock } 
+            });
+            
+            if (shouldAddStock && incomingQuantity > 0) {
               await prisma.stockMovement.create({
                 data: {
                   productId: existingId,
                   type: 'IN',
-                  quantity: stockDiff,
+                  quantity: incomingQuantity,
                   notes: productData.purchaseFrom || productData.supplier || 'Restock from import',
                   referenceId: productData.purchaseInvoiceNo || null,
                   createdAt: productData.purchaseDate || undefined,
                   businessId,
                 }
+              });
+
+              // Create Inventory Layer for LIFO/FIFO Costing
+              await createLayerSafe({
+                itemId: existingId,
+                quantity: incomingQuantity,
+                purchaseCost: productData.basePurchasePrice * incomingQuantity,
+                expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * incomingQuantity }] : [],
+                receiptNo: productData.purchaseInvoiceNo || undefined,
+                receiptDate: productData.purchaseDate || new Date(),
+                supplierId: productData.purchaseFrom || productData.supplier || undefined,
+                sourceTransactionType: 'purchase',
+                businessId,
               });
             }
             results.updated++;
@@ -109,6 +171,19 @@ export async function POST(req: NextRequest) {
                   createdAt: newProduct.purchaseDate || undefined,
                   businessId,
                 }
+              });
+
+              // Create Inventory Layer for LIFO/FIFO Costing
+              await createLayerSafe({
+                itemId: newProduct.id,
+                quantity: newProduct.stock,
+                purchaseCost: productData.basePurchasePrice * newProduct.stock,
+                expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * newProduct.stock }] : [],
+                receiptNo: productData.purchaseInvoiceNo || undefined,
+                receiptDate: productData.purchaseDate || new Date(),
+                supplierId: productData.purchaseFrom || productData.supplier || undefined,
+                sourceTransactionType: 'purchase',
+                businessId,
               });
             }
             results.created++;
@@ -138,18 +213,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
     }
 
-    /* ── 2a. PDF Invoice Parsing (AI Extraction) ── */
+    /* ── 2a. PDF Invoice Parsing (ML-Trained Template Extraction) ── */
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
       try {
         const buffer = Buffer.from(await file.arrayBuffer());
 
-        // Use the traditional regex-based parser
-        const detectedInvoice = await parseInvoicePdfLocally(buffer);
+        // ML-trained parser — uses templates learned from sample PDFs
+        const detectedInvoice = await parseInvoicePdfLocally(buffer, businessId);
+
+        // ── Training required: no matching template found ──
+        if (detectedInvoice.trainingRequired) {
+          return NextResponse.json({
+            mode: "training_required",
+            isInvoicePdf: true,
+            message: detectedInvoice.message,
+            trainedPreview: detectedInvoice.trainedPreview || null,
+            fingerprint: detectedInvoice.fingerprint || "",
+          }, { status: 200 });
+        }
 
         if (detectedInvoice.error || !detectedInvoice.products || !Array.isArray(detectedInvoice.products)) {
           return NextResponse.json({
             error: detectedInvoice.error || "Could not recognise this invoice PDF or failed to extract products.",
           }, { status: 400 });
+        }
+
+        // Check mathematical validation
+        if (detectedInvoice.validationPassed === false) {
+          console.warn("PDF validation warning:", detectedInvoice.validationDetails);
         }
 
         const parseNum = (val: any) => {
@@ -159,29 +250,64 @@ export async function POST(req: NextRequest) {
           return Number(cleaned) || 0;
         };
 
+        const { computeStringSimilarity, cleanProductName, generateFallbackSku } = await import("@/shared/lib/product-matcher");
+
+        const existingProducts = await prisma.product.findMany({
+          where: { businessId },
+          select: { name: true, sku: true, category: true, hsnCode: true, unit: true, unitsPerBag: true, gstRate: true }
+        });
+
         const processedRows = detectedInvoice.products.map((p: any, idx: number) => {
+          let matchedDbProduct = null;
+          let bestScore = 0.55; // similarity threshold
+          
+          for (const dbP of existingProducts) {
+            if (p.sku && dbP.sku && p.sku.toLowerCase() === dbP.sku.toLowerCase()) {
+              matchedDbProduct = dbP;
+              break;
+            }
+            const score = computeStringSimilarity(p.name, dbP.name);
+            if (score > bestScore) {
+              bestScore = score;
+              matchedDbProduct = dbP;
+            }
+          }
+
           // Find intelligence properties
           const intel = findProductIntelligence(businessType, p.name, p.sku);
+          
+          let finalName = p.name;
+          let finalSku = matchedDbProduct?.sku || p.sku || "";
+          
+          if (matchedDbProduct) {
+            finalName = matchedDbProduct.name;
+          } else {
+            finalName = cleanProductName(p.name);
+            if (!finalSku) {
+              finalSku = generateFallbackSku(finalName);
+            }
+          }
+
           return {
             rowIndex: idx + 1,
             action: "create" as const,
             errors: [] as { row: number; column: string; message: string; severity: "error" }[],
             warnings: [] as { row: number; column: string; message: string; severity: "warning" }[],
             data: {
-              name: p.name || `Extracted Item ${idx + 1}`,
-              sku: p.sku || "",
-              category: p.category || intel?.category || "Other",
+              name: finalName || `Extracted Item ${idx + 1}`,
+              sku: finalSku,
+              category: matchedDbProduct?.category || p.category || intel?.category || "Other",
               stock: parseNum(p.quantity ?? p.stock),
-              unitsPerBag: parseNum(p.unitsPerBag) || intel?.unitsPerBag || 1,
-              basePurchasePrice: parseNum(p.basePurchasePrice),
-              transportCost: 0,
-              purchasePrice: parseNum(p.purchasePrice),
+              unitsPerBag: matchedDbProduct?.unitsPerBag || parseNum(p.unitsPerBag) || intel?.unitsPerBag || 1,
+              basePurchasePrice: parseNum(p.basePurchasePrice) || parseNum(p.purchasePrice),
+              transportCost: parseNum(p.transportCost),
+              purchasePrice: (parseNum(p.basePurchasePrice) || parseNum(p.purchasePrice)) + parseNum(p.transportCost),
               sellingPrice: parseNum(p.sellingPrice),
-              unit: p.unit || intel?.unit || "pcs",
+              unit: matchedDbProduct?.unit || p.unit || intel?.unit || "pcs",
               supplier: detectedInvoice.supplier || "Unknown Supplier",
               purchaseInvoiceNo: detectedInvoice.invoiceNumber || "UNKNOWN",
               purchaseDate: detectedInvoice.purchaseDate || new Date().toISOString(),
-              gstRate: parseNum(p.gstRate) || intel?.gstRate || 0,
+              gstRate: matchedDbProduct?.gstRate || parseNum(p.gstRate) || intel?.gstRate || 0,
               hsnCode: String(p.hsnCode || intel?.hsnCode || ""),
             },
           };
@@ -193,7 +319,14 @@ export async function POST(req: NextRequest) {
           invoiceInfo: {
             invoiceNumber: detectedInvoice.invoiceNumber || "Unknown",
             supplier: detectedInvoice.supplier || "Unknown Supplier",
+            supplierGstin: detectedInvoice.supplierGstin || "",
             purchaseDate: detectedInvoice.purchaseDate || new Date().toISOString(),
+            eWayBillNo: detectedInvoice.eWayBillNo || "",
+            format: detectedInvoice.format || "unknown",
+            templateName: detectedInvoice.templateName || "",
+            grandTotal: detectedInvoice.grandTotal || 0,
+            validationPassed: detectedInvoice.validationPassed ?? true,
+            validationDetails: detectedInvoice.validationDetails || "",
           },
           validation: {
             valid: true,
@@ -211,6 +344,8 @@ export async function POST(req: NextRequest) {
         }, { status: 400 });
       }
     }
+
+
 
     /* ── 2b. Excel / CSV Parsing ── */
     const allowedTypes = [
@@ -315,10 +450,14 @@ export async function POST(req: NextRequest) {
           stock: Number(d.stock ?? 0),
           minStock: Number(d.minStock ?? intel?.minStock ?? 5),
           unitsPerBag: Number(d.unitsPerBag || intel?.unitsPerBag || 1),
+          basePurchasePrice: Number(d.basePurchasePrice ?? d.purchasePrice ?? intel?.purchasePrice ?? 0),
+          transportCost: Number(d.transportCost ?? 0),
           purchasePrice: Number(d.purchasePrice ?? intel?.purchasePrice ?? 0),
           sellingPrice: Number(d.sellingPrice ?? 0),
           unit: String(d.unit || intel?.unit || "pcs"),
           supplier: d.supplier ? String(d.supplier) : null,
+          purchaseFrom: d.supplier ? String(d.supplier) : null,
+          purchaseInvoiceNo: d.purchaseInvoiceNo ? String(d.purchaseInvoiceNo) : null,
           hsnCode: d.hsnCode ? String(d.hsnCode) : (intel?.hsnCode ?? null),
           gstRate: Number(d.gstRate ?? intel?.gstRate ?? 0),
         };
@@ -338,10 +477,22 @@ export async function POST(req: NextRequest) {
                   type: 'IN',
                   quantity: stockDiff,
                   notes: productData.supplier || 'Restock from import',
-                  referenceId: null, // excel imports usually don't have invoice no unless added
+                  referenceId: productData.purchaseInvoiceNo || null,
                   createdAt: undefined,
                   businessId,
                 }
+              });
+
+              await createLayerSafe({
+                itemId: existingId,
+                quantity: stockDiff,
+                purchaseCost: productData.basePurchasePrice * stockDiff,
+                expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * stockDiff }] : [],
+                receiptNo: productData.purchaseInvoiceNo || undefined,
+                receiptDate: new Date(),
+                supplierId: productData.purchaseFrom || undefined,
+                sourceTransactionType: 'purchase',
+                businessId,
               });
             }
             results.updated++; 
@@ -354,9 +505,23 @@ export async function POST(req: NextRequest) {
                   productId: newProduct.id,
                   type: 'IN',
                   quantity: newProduct.stock,
-                  notes: newProduct.supplier || 'Initial stock from import',
+                  notes: newProduct.purchaseFrom || newProduct.supplier || 'Initial stock from import',
+                  referenceId: newProduct.purchaseInvoiceNo || null,
+                  createdAt: undefined,
                   businessId,
                 }
+              });
+
+              await createLayerSafe({
+                itemId: newProduct.id,
+                quantity: newProduct.stock,
+                purchaseCost: productData.basePurchasePrice * newProduct.stock,
+                expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * newProduct.stock }] : [],
+                receiptNo: productData.purchaseInvoiceNo || undefined,
+                receiptDate: new Date(),
+                supplierId: productData.purchaseFrom || undefined,
+                sourceTransactionType: 'purchase',
+                businessId,
               });
             }
             results.created++; 
@@ -369,9 +534,23 @@ export async function POST(req: NextRequest) {
                 productId: newProduct.id,
                 type: 'IN',
                 quantity: newProduct.stock,
-                notes: newProduct.supplier || 'Initial stock from import',
+                notes: newProduct.purchaseFrom || newProduct.supplier || 'Initial stock from import',
+                referenceId: newProduct.purchaseInvoiceNo || null,
+                createdAt: undefined,
                 businessId,
               }
+            });
+
+            await createLayerSafe({
+              itemId: newProduct.id,
+              quantity: newProduct.stock,
+              purchaseCost: productData.basePurchasePrice * newProduct.stock,
+              expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * newProduct.stock }] : [],
+              receiptNo: productData.purchaseInvoiceNo || undefined,
+              receiptDate: new Date(),
+              supplierId: productData.purchaseFrom || undefined,
+              sourceTransactionType: 'purchase',
+              businessId,
             });
           }
           results.created++;

@@ -246,6 +246,35 @@ export async function createLayer(params: CreateLayerParams): Promise<string> {
   return layer.id;
 }
 
+/**
+ * Safe wrapper around `createLayer` that gracefully handles cases where
+ * the InventoryLayer tables haven't been migrated yet.
+ *
+ * Returns the layer ID on success, or `null` if the tables don't exist.
+ * This eliminates the need for callers to probe with `inventoryLayer.findFirst()`.
+ */
+export async function createLayerSafe(params: CreateLayerParams): Promise<string | null> {
+  try {
+    return await createLayer(params);
+  } catch (err: any) {
+    // Prisma P2021 = "The table ... does not exist in the current database"
+    // Also catch generic "does not exist" / "relation ... does not exist" from raw queries
+    const message = err?.message ?? '';
+    const code = err?.code ?? '';
+    if (
+      code === 'P2021' ||
+      message.includes('does not exist') ||
+      message.includes('relation') ||
+      message.includes('P2021')
+    ) {
+      console.warn('[LayerEngine] InventoryLayer tables not migrated — skipping layer creation.');
+      return null;
+    }
+    // Re-throw unexpected errors so they are not silently swallowed
+    throw err;
+  }
+}
+
 // ── Consume Layers ───────────────────────────────────────────────────────────
 
 /**
