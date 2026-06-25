@@ -274,6 +274,8 @@ function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): 
     parseInt(t.text.trim()) <= 999
   );
 
+  console.log('DEBUG slNoTexts:', slEntries.map(s => ({ text: s.text, y: s.y, x: s.x })));
+
   const products: RawProductRow[] = [];
   const excludePatterns = /^(Output|CGST|SGST|Rounded|Total|Amount|Tax|HSN)/i;
 
@@ -292,28 +294,37 @@ function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): 
       sameRow(t.y, rowY, 0.3) && t.x >= config.descMinX && t.x <= config.descMaxX && t.text !== String(slNo)
     );
     const hsnTexts = fullRowSlice.filter(t =>
-      t.x >= config.hsnMinX - 1.0 && t.x <= config.hsnMaxX + 1.0 && /^\d{4,8}$/.test(t.text)
+      sameRow(t.y, rowY, 0.3) && t.x >= config.hsnMinX - 1.0 && t.x <= config.hsnMaxX + 1.0 && /^\d{4,8}$/.test(t.text)
     );
-    const qtyTexts = fullRowSlice.filter(t =>
-      t.x >= config.qtyMinX - 3.0 && t.x <= config.qtyMaxX + 3.0 &&
-      !(t.x >= config.hsnMinX - 0.5 && t.x <= config.hsnMaxX + 0.5 && /^\d{4,8}$/.test(t.text)) &&
-      !(config.rateInclMinX > 0 && t.x >= config.rateInclMinX - 0.1) &&
-      !(config.rateTaxableMinX > 0 && t.x >= config.rateTaxableMinX - 0.1)
-    );
+    const qtyTexts = fullRowSlice.filter(t => {
+      const isSameRow = sameRow(t.y, rowY, 0.3);
+      if (!isSameRow) return false;
+      const inX = t.x >= config.qtyMinX - 3.0 && t.x <= config.qtyMaxX + 3.0;
+      const notHsn = !(t.x >= config.hsnMinX - 0.5 && t.x <= config.hsnMaxX + 0.5 && /^\d{4,8}$/.test(t.text));
+      const hasUnitText = /Nos|bags|pcs|kg|gm|ltr|ml|box/i.test(t.text);
+      const notRateIncl = !(config.rateInclMinX > 0 && t.x >= config.rateInclMinX - 0.1 && !hasUnitText);
+      const notRateTaxable = !(config.rateTaxableMinX > 0 && t.x >= config.rateTaxableMinX - 0.1 && !hasUnitText);
+      return inX && notHsn && notRateIncl && notRateTaxable;
+    });
     const rateInclTexts = fullRowSlice.filter(t =>
-      t.x >= config.rateInclMinX - 1.0 && t.x <= config.rateInclMaxX + 1.0 &&
-      /[\d,.]/.test(t.text) && !/Nos|bags|pcs/i.test(t.text)
+      sameRow(t.y, rowY, 0.3) && t.x >= config.rateInclMinX - 1.0 && t.x <= config.rateInclMaxX + 1.0 &&
+      /[\d,.]/.test(t.text) && !/Nos|bags|pcs|kg|gm|ltr|ml|box/i.test(t.text)
     );
     const rateTaxableTexts = fullRowSlice.filter(t =>
-      t.x >= config.rateTaxableMinX - 1.0 && t.x <= config.rateTaxableMaxX + 1.0 &&
-      /[\d,.]/.test(t.text) && !/Nos|bags|pcs/i.test(t.text)
+      sameRow(t.y, rowY, 0.3) && t.x >= config.rateTaxableMinX - 1.0 && t.x <= config.rateTaxableMaxX + 1.0 &&
+      /[\d,.]/.test(t.text) && !/Nos|bags|pcs|kg|gm|ltr|ml|box/i.test(t.text)
     );
     const perUnitTexts = fullRowSlice.filter(t =>
-      t.x >= config.perUnitMinX - 1.0 && t.x <= config.perUnitMaxX + 1.0 && /^[A-Za-z]+$/.test(t.text)
+      sameRow(t.y, rowY, 0.3) && t.x >= config.perUnitMinX - 1.0 && t.x <= config.perUnitMaxX + 1.0 && /^[A-Za-z]+$/.test(t.text)
     );
-    const amountTexts = fullRowSlice.filter(t =>
-      t.x >= config.amountMinX - 1.5 && t.x <= config.amountMaxX + 1.5 && /[\d,.]/.test(t.text)
-    );
+    const amountTexts = fullRowSlice.filter(t => {
+      const isSameRow = sameRow(t.y, rowY, 0.3);
+      if (!isSameRow) return false;
+      // Use a wider tolerance for amount in case it's misaligned to the right
+      const inX = t.x >= config.amountMinX - 2.0 && t.x <= config.amountMaxX + 3.0;
+      const isNum = /[\d,.]/.test(t.text);
+      return inX && isNum;
+    });
 
     // Multi-line description continuation
     const continuationTexts = sorted.filter(t =>
@@ -573,6 +584,7 @@ export async function parseInvoicePdfLocally(buffer: Buffer, businessId?: string
           let { quantity, unit: rawUnit } = parseQuantityUnit(raw.quantityText);
           const unit = normalizeUnit(raw.perUnit || rawUnit);
           const gstRate = gstRates.get(raw.hsnCode) || 0;
+          console.log(`DEBUG: raw.quantityText='${raw.quantityText}', parsed quantity=${quantity}, amount=${raw.amount}, rateTaxable=${raw.rateTaxable}, rateIncl=${raw.rateIncl}`);
 
           // Fallback: If quantity could not be parsed, calculate it using simple math
           if (quantity === 0 && raw.amount > 0) {
