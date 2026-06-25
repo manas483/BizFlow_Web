@@ -452,7 +452,8 @@ export function getOnboardingConfig(businessType: string) {
 export function findProductIntelligence(
   businessType: string,
   name: string,
-  sku?: string
+  sku?: string,
+  hsnCode?: string
 ): Partial<SeedProduct> | null {
   const profile = getBusinessProfile(businessType);
   if (!profile || !profile.seedProducts) return null;
@@ -484,6 +485,18 @@ export function findProductIntelligence(
         searchName.includes(p.name.trim().toLowerCase())
     );
     if (matched) return matched;
+  }
+
+  // 4. Try HSN Code fallback for category mapping
+  if (hsnCode) {
+    const hsnStr = String(hsnCode).trim();
+    // Try to find any product in this business profile with a matching HSN prefix
+    const matched = profile.seedProducts.find(
+      (p) => p.hsnCode && hsnStr.startsWith(String(p.hsnCode).trim())
+    );
+    if (matched) {
+       return { category: matched.category, hsnCode: matched.hsnCode, gstRate: matched.gstRate };
+    }
   }
 
   return null;

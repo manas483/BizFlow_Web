@@ -27,6 +27,8 @@ interface RawTextElement {
   x: number;
   y: number;
   text: string;
+  bold?: boolean;
+  fontSize?: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -119,8 +121,21 @@ function extractHeader(texts: RawTextElement[]) {
     // Extract Supplier Name (heuristic: large bold text near the top)
     const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
     for (const t of sorted) {
+       const textLower = t.text.toLowerCase();
        // A common pattern is finding a recognizable company name before GSTIN
-       if (t.y < 10 && t.text.length > 5 && !t.text.includes('GSTIN') && !t.text.includes('Invoice')) {
+       // It usually contains letters and spaces (not just an ID like AGR-SLP-26-01608)
+       if (
+         t.y < 15 && 
+         t.text.length > 5 && 
+         /[a-zA-Z]/.test(t.text) && 
+         t.text.includes(' ') && 
+         !textLower.includes('gstin') && 
+         !textLower.includes('invoice') && 
+         !textLower.includes('erp slip') &&
+         !textLower.includes('original') &&
+         !textLower.includes('duplicate') &&
+         !textLower.includes('challan')
+       ) {
          supplier = t.text;
          break;
        }
@@ -155,10 +170,16 @@ function extractProductRows(rows: RawTextElement[][]) {
     const products = [];
     
     // Find the Y coordinate of the "Total" row to stop parsing products
-    let tableEndY = 999;
+    let tableEndY = 99999;
     for (const row of rows) {
         const textStr = row.map(t => t.text.toLowerCase()).join(' ');
-        if (textStr.includes('total') || textStr.includes('rounded')) {
+        if (
+            textStr.includes('total') || 
+            textStr.includes('rounded') || 
+            textStr.includes('continued') || 
+            textStr.includes('amount chargeable') ||
+            textStr.includes('computer generated invoice')
+        ) {
             tableEndY = row[0].y - 0.5; // stop slightly before
             break;
         }
@@ -216,6 +237,25 @@ function extractProductRows(rows: RawTextElement[][]) {
             lineTotal: amount,
             gstRate: 0 // Will populate later
         });
+      } else if (products.length > 0 && numbers.length === 0 && !hsnText && !qtyText) {
+        // Orphan row: likely a continuation of the previous item's description
+        const textStr = textsInRow.join(' ').toLowerCase();
+        if (
+            !textStr.includes('continued') &&
+            !textStr.includes('computer generated') &&
+            !textStr.includes('authorised') &&
+            !textStr.includes('amount chargeable')
+        ) {
+            const descTexts = textsInRow.filter(t => 
+                !/^\d+$/.test(t) &&
+                !/^(Nos|bags|pcs|kg|gm|ltr|ml|box|pack|pkt)$/i.test(t) &&
+                !/^\d+\s*$/.test(t)
+            );
+            const extraDesc = descTexts.join(' ').replace(/\|/g, '').trim();
+            if (extraDesc) {
+                products[products.length - 1].name += ' ' + extraDesc;
+            }
+        }
       }
     }
     
@@ -365,14 +405,19 @@ export async function parseInvoicePdfLocally(buffer: Buffer, businessId?: string
           return reject(new Error('PDF has no pages'));
         }
 
-        const page0 = pdfData.Pages[0];
         const texts: RawTextElement[] = [];
-        for (const t of page0.Texts) {
-          texts.push({
-            x: t.x,
-            y: t.y,
-            text: safeDecode(t.R[0].T).trim()
-          });
+        let yOffset = 0;
+        for (const page of pdfData.Pages) {
+            for (const t of page.Texts) {
+                texts.push({
+                    x: t.x,
+                    y: t.y + yOffset,
+                    text: safeDecode(t.R[0].T).trim(),
+                    bold: t.R?.[0]?.TS?.[2] === 1,
+                    fontSize: t.R?.[0]?.TS?.[1]
+                });
+            }
+            yOffset += page.Height || 100;
         }
 
         if (texts.length === 0) {

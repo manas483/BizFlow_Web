@@ -273,7 +273,7 @@ export async function POST(req: NextRequest) {
           }
 
           // Find intelligence properties
-          const intel = findProductIntelligence(businessType, p.name, p.sku);
+          const intel = findProductIntelligence(businessType, p.name, p.sku, String(p.hsnCode || ""));
           
           let finalName = p.name;
           let finalSku = matchedDbProduct?.sku || p.sku || "";
