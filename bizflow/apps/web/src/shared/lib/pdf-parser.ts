@@ -297,9 +297,9 @@ function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): 
       sameRow(t.y, rowY, 0.3) && t.x >= config.hsnMinX - 1.0 && t.x <= config.hsnMaxX + 1.0 && /^\d{4,8}$/.test(t.text)
     );
     const qtyTexts = fullRowSlice.filter(t => {
-      const isSameRow = sameRow(t.y, rowY, 0.3);
+      const isSameRow = sameRow(t.y, rowY, 0.5);
       if (!isSameRow) return false;
-      const inX = t.x >= config.qtyMinX - 3.0 && t.x <= config.qtyMaxX + 3.0;
+      const inX = t.x >= config.qtyMinX - 10.0 && t.x <= config.qtyMaxX + 8.0;
       const notHsn = !(t.x >= config.hsnMinX - 0.5 && t.x <= config.hsnMaxX + 0.5 && /^\d{4,8}$/.test(t.text));
       const hasUnitText = /Nos|bags|pcs|kg|gm|ltr|ml|box/i.test(t.text);
       const notRateIncl = !(config.rateInclMinX > 0 && t.x >= config.rateInclMinX - 0.1 && !hasUnitText);
@@ -318,10 +318,10 @@ function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): 
       sameRow(t.y, rowY, 0.3) && t.x >= config.perUnitMinX - 1.0 && t.x <= config.perUnitMaxX + 1.0 && /^[A-Za-z]+$/.test(t.text)
     );
     const amountTexts = fullRowSlice.filter(t => {
-      const isSameRow = sameRow(t.y, rowY, 0.3);
+      const isSameRow = sameRow(t.y, rowY, 0.5);
       if (!isSameRow) return false;
-      // Use a wider tolerance for amount in case it's misaligned to the right
-      const inX = t.x >= config.amountMinX - 2.0 && t.x <= config.amountMaxX + 3.0;
+      // Use a much wider tolerance for amount in case it's misaligned to the right
+      const inX = t.x >= config.amountMinX - 8.0 && t.x <= config.amountMaxX + 15.0;
       const isNum = /[\d,.]/.test(t.text);
       return inX && isNum;
     });
