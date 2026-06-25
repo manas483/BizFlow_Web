@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Modal } from './Modal';
-import { FormField } from '../forms/FormField';
-import { ModalInput } from '../forms/ModalInput';
-import { ModalFooter } from '../forms/ModalFooter';
-import { CustomSelect } from '../forms/CustomSelect';
-import { CustomMultiSelect } from '../forms/CustomMultiSelect';
-import { useProducts } from '@/hooks/useProducts';
-import { useBusiness } from '@/hooks/useBusiness';
-import { useExpenses } from '@/hooks/useExpenses';
+import Modal, { FormField, ModalInput, ModalFooter } from "@/shared/ui/ui/Modal";
+import { CustomSelect } from '@/shared/ui/ui/CustomSelect';
+import { CustomMultiSelect } from '@/shared/ui/ui/CustomMultiSelect';
+import { useProducts } from '@/shared/hooks/useProducts';
+import { useBusiness } from '@/shared/hooks/useBusiness';
+import { useExpenses } from '@/shared/hooks/useExpenses';
 import { toast } from 'react-hot-toast';
 import { Receipt } from 'lucide-react';
-import { getBusinessProfile } from '@/shared/lib/business-profiles';
+import { getBusinessProfile } from '@/shared/lib/business-intelligence';
 
 const CATEGORIES = [
   { value: 'Transport', label: 'Transport / Shipping' },
