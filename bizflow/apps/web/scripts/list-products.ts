@@ -1,0 +1,1 @@
+import 'dotenv/config'; import { prisma } from '../src/shared/lib/db'; async function main() { const products = await prisma.product.findMany({ take: 5 }); console.log(products.map(p => ({ id: p.id, name: p.name }))); } main().finally(() => prisma.$disconnect());

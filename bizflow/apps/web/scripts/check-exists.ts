@@ -1,0 +1,1 @@
+import 'dotenv/config'; import { prisma } from '../src/shared/lib/db'; async function main() { const p = await prisma.product.findFirst({ where: { id: 'cmqsadrhu000004lbarvjlxan' } }); console.log(p ? 'exists' : 'does not exist'); } main().finally(() => process.exit(0));

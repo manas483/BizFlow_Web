@@ -1,0 +1,1 @@
+import 'dotenv/config'; import { prisma } from '../src/shared/lib/db'; async function main() { const product = await prisma.product.findFirst({ where: { name: 'Ashirwad -Kalachampa Gold' } }); const layer = await prisma.inventoryLayer.findFirst({ where: { itemId: product.id } }); console.log(layer); } main().finally(() => prisma.$disconnect());

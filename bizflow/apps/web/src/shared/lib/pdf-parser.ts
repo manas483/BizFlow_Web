@@ -326,6 +326,32 @@ function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): 
       return inX && isNum;
     });
 
+    let amount = amountTexts.length > 0 ? parseNumber(amountTexts[0].text) : 0;
+    let quantityText = qtyTexts.map(t => t.text).join(' ');
+
+    // Robust fallbacks if X-coordinates shifted too much between OSes (Windows vs Linux on Vercel)
+    if (amount === 0) {
+      // Amount is usually the right-most number in the row
+      const rightMostNums = fullRowSlice
+        .filter(t => /[\d,.]/.test(t.text) && t.x > config.descMaxX && sameRow(t.y, rowY, 0.5))
+        .sort((a, b) => b.x - a.x);
+      if (rightMostNums.length > 0) {
+        amount = parseNumber(rightMostNums[0].text);
+      }
+    }
+
+    if (!quantityText || quantityText.trim() === '') {
+      // Quantity usually has a unit suffix
+      const withUnit = fullRowSlice.find(t => 
+        /Nos|bags|pcs|kg|gm|ltr|ml|box/i.test(t.text) && 
+        sameRow(t.y, rowY, 0.5) &&
+        t.x > config.descMaxX
+      );
+      if (withUnit) {
+        quantityText = withUnit.text;
+      }
+    }
+
     // Multi-line description continuation
     const continuationTexts = sorted.filter(t =>
       t.y > rowY + 0.2 && t.y < nextSlY - 0.2 &&
@@ -342,11 +368,11 @@ function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): 
     products.push({
       slNo, y: rowY, description,
       hsnCode: hsnTexts.length > 0 ? hsnTexts[0].text : '',
-      quantityText: qtyTexts.map(t => t.text).join(' '),
+      quantityText: quantityText,
       rateIncl: rateInclTexts.length > 0 ? parseNumber(rateInclTexts[0].text) : 0,
       rateTaxable: rateTaxableTexts.length > 0 ? parseNumber(rateTaxableTexts[0].text) : 0,
       perUnit: perUnitTexts.length > 0 ? perUnitTexts[0].text : '',
-      amount: amountTexts.length > 0 ? parseNumber(amountTexts[0].text) : 0,
+      amount: amount,
     });
   }
 
