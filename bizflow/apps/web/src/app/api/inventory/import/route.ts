@@ -230,16 +230,6 @@ export async function POST(req: NextRequest) {
         // ML-trained parser — uses templates learned from sample PDFs
         const detectedInvoice = await parseInvoicePdfLocally(buffer, businessId);
 
-        // ── Training required: no matching template found ──
-        if (detectedInvoice.trainingRequired) {
-          return NextResponse.json({
-            mode: "training_required",
-            isInvoicePdf: true,
-            message: detectedInvoice.message,
-            trainedPreview: detectedInvoice.trainedPreview || null,
-            fingerprint: detectedInvoice.fingerprint || "",
-          }, { status: 200 });
-        }
 
         if (detectedInvoice.error || !detectedInvoice.products || !Array.isArray(detectedInvoice.products)) {
           return NextResponse.json({

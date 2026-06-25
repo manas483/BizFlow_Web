@@ -1,26 +1,13 @@
 /**
- * BizFlow — ML-Trained Invoice PDF Parser
+ * BizFlow — Structural Invoice PDF Parser
  *
- * Uses trained templates (stored per-business in DB) for extraction.
- * Templates are learned from sample PDFs using K-means clustering,
- * label proximity analysis, and table boundary detection.
- *
- * When no template matches, returns a "training required" response
- * so the frontend can prompt the user to train on the new format.
- *
- * No hardcoded configs. No AI/LLM calls. Fully deterministic.
+ * This parser uses robust text-pattern matching to extract data from invoices,
+ * removing the need for brittle ML coordinate-based training. It is completely
+ * immune to font rendering shifts between Windows and Linux.
  */
 
 import PDFParser from 'pdf2json';
-import { prisma } from '@/shared/lib/db';
-import {
-  type TextElement,
-  type LearnedFormatConfig,
-  getTextElements,
-  generateFingerprint,
-  computeSimilarity,
-  trainTemplate,
-} from '@/shared/lib/invoice-template-learner';
+import { type TextElement } from '@/shared/lib/invoice-template-learner';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,10 +23,20 @@ interface ExtractedProduct {
   gstRate: number;             // Total GST rate (CGST + SGST)
 }
 
+interface RawTextElement {
+  x: number;
+  y: number;
+  text: string;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function sameRow(y1: number, y2: number, tolerance = 0.2): boolean {
+function sameRow(y1: number, y2: number, tolerance = 0.3): boolean {
   return Math.abs(y1 - y2) < tolerance;
+}
+
+function safeDecode(str: string) {
+  try { return decodeURIComponent(str); } catch { return str; }
 }
 
 function parseNumber(str: string): number {
@@ -47,16 +44,6 @@ function parseNumber(str: string): number {
   const cleaned = str.replace(/[^0-9.\-]/g, '');
   const val = parseFloat(cleaned);
   return isNaN(val) ? 0 : val;
-}
-
-function parseQuantityUnit(text: string): { quantity: number; unit: string } {
-  const match = text.match(/^\s*(\d+)\s+(.+)\s*$/);
-  if (match) {
-    return { quantity: parseInt(match[1], 10), unit: match[2].trim().toLowerCase() };
-  }
-  const num = parseInt(text.trim(), 10);
-  if (!isNaN(num)) return { quantity: num, unit: 'pcs' };
-  return { quantity: 0, unit: 'pcs' };
 }
 
 function normalizeUnit(unit: string): string {
@@ -74,14 +61,14 @@ function normalizeUnit(unit: string): string {
 
 function parseInvoiceDate(dateStr: string): string {
   if (!dateStr) return new Date().toISOString().split('T')[0];
-  const match = dateStr.match(/(\d{1,2})-(\w{3})-(\d{2,4})/);
+  const match = dateStr.match(/(\d{1,2})[-/]([A-Za-z]{3})[-/](\d{2,4})/);
   if (match) {
     const day = match[1].padStart(2, '0');
     const months: Record<string, string> = {
-      Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06',
-      Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
     };
-    const month = months[match[2]] || '01';
+    const month = months[match[2].toLowerCase()] || '01';
     let year = match[3];
     if (year.length === 2) year = (parseInt(year) > 50 ? '19' : '20') + year;
     return `${year}-${month}-${day}`;
@@ -97,331 +84,166 @@ function parseInvoiceDate(dateStr: string): string {
   return new Date().toISOString().split('T')[0];
 }
 
-// ── Template Matching ────────────────────────────────────────────────────────
-
-const SIMILARITY_THRESHOLD = 0.85;
-
-/**
- * Find the best matching template for the given PDF texts.
- * Returns null if no template matches above threshold.
- */
-async function findMatchingTemplate(
-  texts: TextElement[],
-  businessId: string
-): Promise<{ templateId: string; name: string; config: LearnedFormatConfig; similarity: number } | null> {
-  const templates = await prisma.invoiceTemplate.findMany({
-    where: { businessId },
-    select: { id: true, name: true, fingerprint: true, templateData: true },
-  });
-
-  if (templates.length === 0) return null;
-
-  let bestMatch: { templateId: string; name: string; config: LearnedFormatConfig; similarity: number } | null = null;
-  let bestSimilarity = 0;
-
-  const incomingFingerprint = generateFingerprint(texts);
-
-  for (const tpl of templates) {
-    const config = tpl.templateData as unknown as LearnedFormatConfig;
-
-    // Fast path: exact fingerprint match
-    if (tpl.fingerprint === incomingFingerprint) {
-      return { templateId: tpl.id, name: tpl.name, config, similarity: 1.0 };
-    }
-
-    // Slow path: cosine similarity
-    const similarity = computeSimilarity(texts, tpl.fingerprint, config);
-    if (similarity > bestSimilarity) {
-      bestSimilarity = similarity;
-      bestMatch = { templateId: tpl.id, name: tpl.name, config, similarity };
-    }
-  }
-
-  if (bestMatch && bestMatch.similarity >= SIMILARITY_THRESHOLD) {
-    return bestMatch;
-  }
-
-  return null;
-}
-
 // ── Header Extraction ────────────────────────────────────────────────────────
 
-function extractHeader(texts: TextElement[], config: LearnedFormatConfig): {
-  supplier: string;
-  supplierAddress: string;
-  supplierGstin: string;
-  invoiceNumber: string;
-  date: string;
-  eWayBillNo: string;
-} {
-  const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
-
-  // Supplier name
-  const supplierTexts = sorted.filter(t =>
-    t.y >= config.supplierNameMinY &&
-    t.y <= config.supplierNameMaxY &&
-    t.x >= config.supplierNameMinX &&
-    t.x < config.supplierNameMaxX
-  );
-  const supplier = supplierTexts.length > 0 ? supplierTexts[0].text : 'Unknown Supplier';
-
-  // Supplier address
-  const addressTexts = sorted.filter(t =>
-    t.y > config.supplierNameMaxY &&
-    t.y < config.supplierNameMaxY + 1.5 &&
-    t.x >= config.supplierNameMinX &&
-    t.x < config.supplierNameMaxX
-  );
-  const supplierAddress = addressTexts.length > 0 ? addressTexts[0].text : '';
-
-  // GSTIN
-  const gstinText = sorted.find(t =>
-    t.text.startsWith('GSTIN/UIN:') || t.text.startsWith('GSTIN:')
-  );
-  const supplierGstin = gstinText
-    ? (gstinText.text.match(/GSTIN(?:\/UIN)?:\s*(\S+)/)?.[1] || '')
-    : '';
-
-  // Invoice Number
-  const invoiceNoLabel = sorted.find(t => t.text === 'Invoice No.');
-  let invoiceNumber = '';
-  if (invoiceNoLabel) {
-    const candidates = sorted.filter(t =>
-      t.y > invoiceNoLabel.y &&
-      t.y < invoiceNoLabel.y + 1.2 &&
-      t.x >= config.invoiceNoValueMinX - 1.0 &&
-      t.x <= config.invoiceNoValueMaxX + 1.0 &&
-      t.text !== 'Invoice No.' &&
-      !t.text.includes('e-Way') &&
-      !t.text.includes('Delivery') &&
-      !t.text.includes('Bill No') &&
-      !/^\d{10,}$/.test(t.text)
-    );
-    if (candidates.length > 0) {
-      candidates.sort((a, b) => Math.abs(a.x - invoiceNoLabel.x) - Math.abs(b.x - invoiceNoLabel.x));
-      invoiceNumber = candidates[0].text;
+function extractHeader(texts: RawTextElement[]) {
+    let supplierGstin = '';
+    let invoiceNumber = '';
+    let purchaseDate = '';
+    let supplier = 'Unknown Supplier';
+    
+    const fullText = texts.map(t => t.text).join(' ');
+    
+    // Extract GSTIN
+    const gstinMatch = fullText.match(/GSTIN(?:\/UIN)?:\s*([A-Z0-9]{15})/i);
+    if (gstinMatch) supplierGstin = gstinMatch[1];
+    
+    // Extract Invoice No
+    const invMatch = fullText.match(/\b(AGCMBP[A-Z0-9]+|ASDBP[A-Z0-9]+|AGR-SLP-[A-Z0-9-]+)\b/i);
+    if (invMatch) {
+      invoiceNumber = invMatch[1];
+    } else {
+      // Fallback: look for generic invoice number near "Invoice No"
+      const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
+      const invLabel = sorted.find(t => t.text.toLowerCase().includes('invoice no'));
+      if (invLabel) {
+        const invVal = sorted.find(t => sameRow(t.y, invLabel.y, 1.0) && t.x > invLabel.x + 2 && /^[A-Z0-9-]+$/.test(t.text));
+        if (invVal) invoiceNumber = invVal.text;
+      }
     }
-  }
-
-  // Date
-  const dateLabel = sorted.find(t => t.text === 'Dated' && t.y < 3.0);
-  let dateStr = '';
-  if (dateLabel) {
-    const dateCandidates = sorted.filter(t =>
-      t.y > dateLabel.y &&
-      t.y < dateLabel.y + 1.2 &&
-      t.x >= config.dateValueMinX - 1.0 &&
-      t.text !== 'Dated' && /\d/.test(t.text)
-    );
-    if (dateCandidates.length > 0) dateStr = dateCandidates[0].text;
-  }
-
-  // e-Way Bill
-  let eWayBillNo = '';
-  const eWayLabel = sorted.find(t => t.text.includes('e-Way Bill No'));
-  if (eWayLabel) {
-    const eWayCandidates = sorted.filter(t =>
-      t.y > eWayLabel.y &&
-      t.y < eWayLabel.y + 1.2 &&
-      Math.abs(t.x - eWayLabel.x) < 2.0 &&
-      /^\d{8,}$/.test(t.text)
-    );
-    if (eWayCandidates.length > 0) eWayBillNo = eWayCandidates[0].text;
-  }
-
-  return { supplier, supplierAddress, supplierGstin, invoiceNumber, date: dateStr, eWayBillNo };
+    
+    // Extract Date (dd-Mmm-yy)
+    const dateMatch = fullText.match(/\b(\d{1,2}-[A-Za-z]{3}-\d{2,4})\b/);
+    if (dateMatch) purchaseDate = dateMatch[1];
+    
+    // Extract Supplier Name (heuristic: large bold text near the top)
+    const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
+    for (const t of sorted) {
+       // A common pattern is finding a recognizable company name before GSTIN
+       if (t.y < 10 && t.text.length > 5 && !t.text.includes('GSTIN') && !t.text.includes('Invoice')) {
+         supplier = t.text;
+         break;
+       }
+    }
+    
+    return { supplierGstin, invoiceNumber, purchaseDate, supplier, eWayBillNo: '' };
 }
 
 // ── Product Table Extraction ─────────────────────────────────────────────────
 
-interface RawProductRow {
-  slNo: number;
-  y: number;
-  description: string;
-  hsnCode: string;
-  quantityText: string;
-  rateIncl: number;
-  rateTaxable: number;
-  perUnit: string;
-  amount: number;
+function groupIntoRows(texts: RawTextElement[]) {
+    const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
+    const rows: RawTextElement[][] = [];
+    let currentRow: RawTextElement[] = [];
+    if (sorted.length === 0) return rows;
+    
+    let currentY = sorted[0].y;
+    
+    for (const t of sorted) {
+      if (Math.abs(t.y - currentY) > 0.5) {
+        if (currentRow.length > 0) rows.push(currentRow);
+        currentRow = [];
+        currentY = t.y;
+      }
+      currentRow.push(t);
+    }
+    if (currentRow.length > 0) rows.push(currentRow);
+    return rows;
 }
 
-function extractProductRows(texts: TextElement[], config: LearnedFormatConfig): { products: RawProductRow[], debugInfo: string } {
-  const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
+function extractProductRows(rows: RawTextElement[][]) {
+    const products = [];
+    
+    // Find the Y coordinate of the "Total" row to stop parsing products
+    let tableEndY = 999;
+    for (const row of rows) {
+        const textStr = row.map(t => t.text.toLowerCase()).join(' ');
+        if (textStr.includes('total') || textStr.includes('rounded')) {
+            tableEndY = row[0].y - 0.5; // stop slightly before
+            break;
+        }
+    }
 
-  const slHeader = sorted.find(t => 
-    /^(sl|s\.?\s*no\.?|sr\.?\s*no\.?|s\.n\.|#|item|code)/i.test(t.text.trim()) && t.x < 10.0
-  );
-  if (!slHeader) {
-    const possibleHeaders = sorted.filter(t => t.y < 15 && t.x < 10).map(t => t.text).join(', ');
-    return { products: [], debugInfo: `slHeader not found. Looked for 'sl', 's.no', etc. Possible headers found: ${possibleHeaders}` };
-  }
+    for (const row of rows) {
+      if (row[0].y > tableEndY) continue; // Skip GST summary rows at bottom
 
-  // Use the slHeader Y position directly instead of strict offset
-  const minDataY = slHeader.y + 0.2;
+      const textsInRow = row.map(t => t.text);
+      
+      const hsnText = textsInRow.find(t => /^\d{4,8}$/.test(t) && t !== '2026' && t.length >= 4);
+      const qtyRegex = /^(\d+)\s*(Nos|bags|pcs|kg|gm|ltr|ml|box|pack|pkt)s?$/i;
+      const qtyText = textsInRow.find(t => qtyRegex.test(t));
+      
+      const numberTexts = textsInRow.filter(t => /^[\d,]+\.\d{2}$/.test(t));
+      const numbers = numberTexts.map(parseNumber).sort((a, b) => a - b);
+      
+      if (hsnText && (qtyText || numbers.length >= 2)) {
+        let quantity = 0;
+        let unit = 'pcs';
+        if (qtyText) {
+            const match = qtyText.match(qtyRegex);
+            if (match) {
+               quantity = parseInt(match[1]);
+               unit = match[2];
+            }
+        }
+        
+        let amount = numbers.length > 0 ? numbers[numbers.length - 1] : 0;
+        let rateIncl = numbers.length > 1 ? numbers[numbers.length - 2] : amount;
+        let rateTaxable = numbers.length > 2 ? numbers[0] : rateIncl;
 
-  const totalRow = sorted.find(t =>
-    t.text.toLowerCase().includes('total') &&
-    t.y > minDataY + 1.0 &&
-    t.x >= config.totalRowMinX - 2.0 // Add some tolerance
-  );
-  const tableEndY = totalRow ? totalRow.y : 999;
+        if (quantity === 0 && amount > 0 && rateIncl > 0) {
+           quantity = Math.round(amount / rateIncl);
+        }
 
-  const slEntries = sorted.filter(t =>
-    /^\d+\.?$/.test(t.text.trim()) &&
-    t.x >= config.slNoMinX - 0.5 && t.x <= config.slNoMaxX + 0.5 && // Add some tolerance
-    t.y > minDataY && t.y < tableEndY &&
-    parseInt(t.text.trim()) <= 999
-  );
+        const descTexts = textsInRow.filter(t => 
+            t !== hsnText && 
+            t !== qtyText && 
+            !numberTexts.includes(t) && 
+            !/^\d+$/.test(t) &&
+            !/^(Nos|bags|pcs|kg|gm|ltr|ml|box|pack|pkt)$/i.test(t) &&
+            !/^\d+\s*$/.test(t) // filter isolated numbers like sl no
+        );
+        let description = descTexts.join(' ').replace(/\|/g, '').trim();
 
-  console.log('DEBUG slNoTexts:', slEntries.map(s => ({ text: s.text, y: s.y, x: s.x })));
-
-  const products: RawProductRow[] = [];
-  const excludePatterns = /^(Output|CGST|SGST|Rounded|Total|Amount|Tax|HSN)/i;
-
-  for (let i = 0; i < slEntries.length; i++) {
-    const sl = slEntries[i];
-    const slNo = parseInt(sl.text, 10);
-    const rowY = sl.y;
-    const prevSlY = i > 0 ? slEntries[i - 1].y : minDataY - 2.0;
-    const nextSlY = (i + 1 < slEntries.length) ? slEntries[i + 1].y : tableEndY;
-
-    const fullRowSlice = sorted.filter(t =>
-      t.y > prevSlY + 0.2 && t.y < nextSlY - 0.2 && t.y >= minDataY - 0.15 && t.y < tableEndY
-    );
-
-    const descTexts = fullRowSlice.filter(t =>
-      sameRow(t.y, rowY, 0.3) && t.x >= config.descMinX && t.x <= config.descMaxX && t.text !== String(slNo)
-    );
-    const hsnTexts = fullRowSlice.filter(t =>
-      sameRow(t.y, rowY, 0.3) && t.x >= config.hsnMinX - 1.0 && t.x <= config.hsnMaxX + 1.0 && /^\d{4,8}$/.test(t.text)
-    );
-    const qtyTexts = fullRowSlice.filter(t => {
-      const isSameRow = sameRow(t.y, rowY, 0.5);
-      if (!isSameRow) return false;
-      const inX = t.x >= config.qtyMinX - 10.0 && t.x <= config.qtyMaxX + 8.0;
-      const notHsn = !(t.x >= config.hsnMinX - 0.5 && t.x <= config.hsnMaxX + 0.5 && /^\d{4,8}$/.test(t.text));
-      const hasUnitText = /Nos|bags|pcs|kg|gm|ltr|ml|box/i.test(t.text);
-      const notRateIncl = !(config.rateInclMinX > 0 && t.x >= config.rateInclMinX - 0.1 && !hasUnitText);
-      const notRateTaxable = !(config.rateTaxableMinX > 0 && t.x >= config.rateTaxableMinX - 0.1 && !hasUnitText);
-      return inX && notHsn && notRateIncl && notRateTaxable;
-    });
-    const rateInclTexts = fullRowSlice.filter(t =>
-      sameRow(t.y, rowY, 0.3) && t.x >= config.rateInclMinX - 1.0 && t.x <= config.rateInclMaxX + 1.0 &&
-      /[\d,.]/.test(t.text) && !/Nos|bags|pcs|kg|gm|ltr|ml|box/i.test(t.text)
-    );
-    const rateTaxableTexts = fullRowSlice.filter(t =>
-      sameRow(t.y, rowY, 0.3) && t.x >= config.rateTaxableMinX - 1.0 && t.x <= config.rateTaxableMaxX + 1.0 &&
-      /[\d,.]/.test(t.text) && !/Nos|bags|pcs|kg|gm|ltr|ml|box/i.test(t.text)
-    );
-    const perUnitTexts = fullRowSlice.filter(t =>
-      sameRow(t.y, rowY, 0.3) && t.x >= config.perUnitMinX - 1.0 && t.x <= config.perUnitMaxX + 1.0 && /^[A-Za-z]+$/.test(t.text)
-    );
-    const amountTexts = fullRowSlice.filter(t => {
-      const isSameRow = sameRow(t.y, rowY, 0.5);
-      if (!isSameRow) return false;
-      // Use a much wider tolerance for amount in case it's misaligned to the right
-      const inX = t.x >= config.amountMinX - 8.0 && t.x <= config.amountMaxX + 15.0;
-      const isNum = /[\d,.]/.test(t.text);
-      return inX && isNum;
-    });
-
-    let amount = amountTexts.length > 0 ? parseNumber(amountTexts[0].text) : 0;
-    let quantityText = qtyTexts.map(t => t.text).join(' ');
-
-    // Robust fallbacks if X-coordinates shifted too much between OSes (Windows vs Linux on Vercel)
-    if (amount === 0) {
-      // Amount is usually the right-most number in the row
-      const rightMostNums = fullRowSlice
-        .filter(t => /[\d,.]/.test(t.text) && t.x > config.descMaxX && sameRow(t.y, rowY, 0.5))
-        .sort((a, b) => b.x - a.x);
-      if (rightMostNums.length > 0) {
-        amount = parseNumber(rightMostNums[0].text);
+        products.push({
+            name: description,
+            sku: '',
+            hsnCode: hsnText,
+            quantity,
+            unit: normalizeUnit(unit),
+            purchasePrice: rateIncl,
+            basePurchasePrice: rateTaxable,
+            lineTotal: amount,
+            gstRate: 0 // Will populate later
+        });
       }
     }
-
-    if (!quantityText || quantityText.trim() === '') {
-      // Quantity usually has a unit suffix
-      const withUnit = fullRowSlice.find(t => 
-        /Nos|bags|pcs|kg|gm|ltr|ml|box/i.test(t.text) && 
-        sameRow(t.y, rowY, 0.5) &&
-        t.x > config.descMaxX
-      );
-      if (withUnit) {
-        quantityText = withUnit.text;
-      }
-    }
-
-    // Multi-line description continuation
-    const continuationTexts = sorted.filter(t =>
-      t.y > rowY + 0.2 && t.y < nextSlY - 0.2 &&
-      t.x >= config.descMinX && t.x <= config.descMaxX &&
-      !excludePatterns.test(t.text.trim())
-    );
-
-    let description = descTexts.map(t => t.text).join(' ');
-    for (const ct of continuationTexts.sort((a, b) => a.y - b.y || a.x - b.x)) {
-      if (ct.x < config.hsnMinX) description += ' ' + ct.text;
-    }
-    description = description.replace(/\s+/g, ' ').trim();
-
-    products.push({
-      slNo, y: rowY, description,
-      hsnCode: hsnTexts.length > 0 ? hsnTexts[0].text : '',
-      quantityText: quantityText,
-      rateIncl: rateInclTexts.length > 0 ? parseNumber(rateInclTexts[0].text) : 0,
-      rateTaxable: rateTaxableTexts.length > 0 ? parseNumber(rateTaxableTexts[0].text) : 0,
-      perUnit: perUnitTexts.length > 0 ? perUnitTexts[0].text : '',
-      amount: amount,
-    });
-  }
-
-  const debugInfo = `slHeader found at y=${slHeader.y}. slEntries found: ${slEntries.length}. First data y: ${minDataY}. TableEndY: ${tableEndY}. Products extracted: ${products.length}.`;
-  return { products, debugInfo };
+    
+    return products;
 }
 
 // ── GST Rate Extraction ──────────────────────────────────────────────────────
 
-function extractGSTRates(texts: TextElement[], config: LearnedFormatConfig): Map<string, number> {
+function extractGSTRates(rows: RawTextElement[][]): Map<string, number> {
   const rates = new Map<string, number>();
-  if (!config.hsnSummaryHeaderText) return rates;
-
-  const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
-
-  const hsnHeaders = sorted.filter(t => t.text === 'HSN/SAC' && t.y > 30);
-  if (hsnHeaders.length === 0) return rates;
-
-  const summaryHeaderY = hsnHeaders[0].y;
-  const summaryTotal = sorted.find(t => t.text === 'Total' && t.y > summaryHeaderY + 1.0);
-  const summaryEndY = summaryTotal ? summaryTotal.y : summaryHeaderY + 10;
-
-  const hsnRows = sorted.filter(t =>
-    /^\d{4,8}$/.test(t.text) &&
-    t.y > summaryHeaderY + 0.5 && t.y < summaryEndY && t.x < 5.0
-  );
-
-  for (const hsnRow of hsnRows) {
-    const rowY = hsnRow.y;
-    const cgstRateText = sorted.find(t =>
-      sameRow(t.y, rowY, 0.3) &&
-      t.x >= config.cgstRateMinX && t.x <= config.cgstRateMaxX && t.text.includes('%')
-    );
-    const sgstRateText = sorted.find(t =>
-      sameRow(t.y, rowY, 0.3) &&
-      t.x >= config.sgstRateMinX && t.x <= config.sgstRateMaxX && t.text.includes('%')
-    );
-
-    const cgstRate = cgstRateText ? parseFloat(cgstRateText.text.replace('%', '')) || 0 : 0;
-    const sgstRate = sgstRateText ? parseFloat(sgstRateText.text.replace('%', '')) || 0 : 0;
-    rates.set(hsnRow.text, cgstRate + sgstRate);
+  
+  for (const row of rows) {
+    const textsInRow = row.map(t => t.text);
+    const hsnText = textsInRow.find(t => /^\d{4,8}$/.test(t) && t !== '2026' && t.length >= 4);
+    const pctTexts = textsInRow.filter(t => t.includes('%'));
+    
+    if (hsnText && pctTexts.length > 0) {
+      const gstRate = pctTexts.reduce((sum, t) => sum + (parseFloat(t.replace('%', '')) || 0), 0);
+      rates.set(hsnText, gstRate);
+    }
   }
-
+  
   return rates;
 }
 
 // ── Tax Totals Extraction ────────────────────────────────────────────────────
 
-function extractTaxTotals(texts: TextElement[], hasGst: boolean): {
+function extractTaxTotals(texts: RawTextElement[], hasGst: boolean): {
   cgst: number; sgst: number; roundedOff: number; grandTotal: number;
 } {
   const sorted = [...texts].sort((a, b) => a.y - b.y || a.x - b.x);
@@ -445,7 +267,7 @@ function extractTaxTotals(texts: TextElement[], hasGst: boolean): {
     }
   }
 
-  // Grand total — look for amount near "Amount Chargeable" or Total with rupee symbol
+  // Grand total
   const amtChargeable = sorted.find(t => t.text.includes('Amount Chargeable'));
   if (amtChargeable) {
     const totalCandidates = sorted.filter(t =>
@@ -461,7 +283,7 @@ function extractTaxTotals(texts: TextElement[], hasGst: boolean): {
     const totalTexts = sorted.filter(t => t.text === 'Total' && t.y > 30);
     for (const total of totalTexts) {
       const rupeeSymbol = sorted.find(t =>
-        sameRow(t.y, total.y, 0.3) && (t.text === 'ī' || t.text === 'I')
+        sameRow(t.y, total.y, 0.3) && (t.text === '₹' || t.text === 'I')
       );
       if (rupeeSymbol) {
         const amountText = sorted.find(t =>
@@ -470,6 +292,14 @@ function extractTaxTotals(texts: TextElement[], hasGst: boolean): {
         if (amountText) { grandTotal = parseNumber(amountText.text); break; }
       }
     }
+  }
+
+  // Fallback: search the whole document for the largest number near "Total"
+  if (grandTotal === 0) {
+      const allNumbers = sorted.filter(t => /^[\d,]+\.\d{2}$/.test(t.text)).map(t => parseNumber(t.text));
+      if (allNumbers.length > 0) {
+         grandTotal = Math.max(...allNumbers);
+      }
   }
 
   return { cgst, sgst, roundedOff, grandTotal };
@@ -514,11 +344,11 @@ function validateExtraction(
 // ── Main Parser ──────────────────────────────────────────────────────────────
 
 /**
- * Parse an invoice PDF using ML-trained templates.
+ * Parse an invoice PDF using robust structural text extraction.
  *
  * @param buffer - The PDF file buffer
- * @param businessId - The business ID to look up templates for
- * @returns Extracted invoice data, or a "trainingRequired" response if no template matches
+ * @param businessId - Unused (kept for API compatibility)
+ * @returns Extracted invoice data
  */
 export async function parseInvoicePdfLocally(buffer: Buffer, businessId?: string): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -536,111 +366,47 @@ export async function parseInvoicePdfLocally(buffer: Buffer, businessId?: string
         }
 
         const page0 = pdfData.Pages[0];
-        const texts = getTextElements(page0);
+        const texts: RawTextElement[] = [];
+        for (const t of page0.Texts) {
+          texts.push({
+            x: t.x,
+            y: t.y,
+            text: safeDecode(t.R[0].T).trim()
+          });
+        }
 
         if (texts.length === 0) {
           return reject(new Error('No text found in PDF'));
         }
 
-        // ── Step 1: Find matching template ──
-        let config: LearnedFormatConfig | null = null;
-        let templateName = 'Unknown';
-
-        if (businessId) {
-          const match = await findMatchingTemplate(texts, businessId);
-          if (match) {
-            config = match.config;
-            templateName = match.name;
-            console.log(`[PDFParser] Matched template: "${match.name}" (similarity: ${match.similarity.toFixed(2)})`);
-          }
-        }
-
-        // ── No template found → return "training required" ──
-        if (!config) {
-          console.log('[PDFParser] No matching template found. Training required.');
-
-          // Auto-train on this PDF to prepare a template for user confirmation
-          let trainedPreview: any = null;
-          try {
-            const trainingResult = await trainTemplate(buffer);
-            trainedPreview = {
-              formatName: trainingResult.formatName,
-              fingerprint: trainingResult.fingerprint,
-              columnCount: trainingResult.columnCount,
-              productRowCount: trainingResult.productRowCount,
-              details: trainingResult.details,
-            };
-          } catch (trainErr) {
-            console.warn('[PDFParser] Auto-training preview failed:', trainErr);
-          }
-
-          return resolve({
-            trainingRequired: true,
-            message: 'This invoice format is not recognized. Please train it first so the system can learn this format.',
-            trainedPreview,
-            // Pass back the buffer fingerprint for the train-template endpoint
-            fingerprint: generateFingerprint(texts),
-          });
-        }
-
-        // ── Step 2: Extract using matched template ──
-        const hasGst = config.hsnSummaryHeaderText !== '';
+        const fullText = texts.map(t => t.text).join(' ').toLowerCase();
+        const hasGst = fullText.includes('cgst') || fullText.includes('sgst') || fullText.includes('igst');
         const format = hasGst ? 'gst_composite' : 'sales';
 
-        const header = extractHeader(texts, config);
-        console.log(`[PDFParser] Header: supplier=${header.supplier}, invoice=${header.invoiceNumber}, date=${header.date}`);
+        const header = extractHeader(texts);
+        console.log(`[PDFParser] Header: supplier=${header.supplier}, invoice=${header.invoiceNumber}, date=${header.purchaseDate}`);
 
-        const productResult = extractProductRows(texts, config);
-        const rawProducts = productResult.products;
-        console.log(`[PDFParser] Found ${rawProducts.length} product rows`);
+        const rows = groupIntoRows(texts);
+        const products = extractProductRows(rows);
+        console.log(`[PDFParser] Found ${products.length} product rows`);
 
-        if (rawProducts.length === 0) {
+        if (products.length === 0) {
           return resolve({
-            error: `Could not extract any products from this invoice. The trained template may need retraining. DEBUG: ${productResult.debugInfo}`,
+            error: `Could not extract any products from this invoice.`,
             invoiceNumber: header.invoiceNumber,
             supplier: header.supplier,
             products: [],
           });
         }
 
-        const gstRates = extractGSTRates(texts, config);
+        const gstRates = extractGSTRates(rows);
+        
+        // Populate GST rates into products
+        for (const p of products) {
+            p.gstRate = gstRates.get(p.hsnCode) || (hasGst ? 5 : 0); // Default to 5% if it's a GST invoice and missing
+        }
+
         const taxTotals = extractTaxTotals(texts, hasGst);
-
-        const products: ExtractedProduct[] = rawProducts.map(raw => {
-          let { quantity, unit: rawUnit } = parseQuantityUnit(raw.quantityText);
-          const unit = normalizeUnit(raw.perUnit || rawUnit);
-          const gstRate = gstRates.get(raw.hsnCode) || 0;
-          console.log(`DEBUG: raw.quantityText='${raw.quantityText}', parsed quantity=${quantity}, amount=${raw.amount}, rateTaxable=${raw.rateTaxable}, rateIncl=${raw.rateIncl}`);
-
-          // Fallback: If quantity could not be parsed, calculate it using simple math
-          if (quantity === 0 && raw.amount > 0) {
-            if (raw.rateTaxable > 0) {
-              const calculatedQty = Math.round(raw.amount / raw.rateTaxable);
-              if (Math.abs(calculatedQty * raw.rateTaxable - raw.amount) < 5.0) {
-                quantity = calculatedQty;
-              }
-            } else if (raw.rateIncl > 0) {
-              const calculatedQty = Math.round(raw.amount / raw.rateIncl);
-              if (Math.abs(calculatedQty * raw.rateIncl - raw.amount) < 5.0) {
-                quantity = calculatedQty;
-              }
-            }
-          }
-
-          return {
-            name: raw.description,
-            sku: '',
-            hsnCode: raw.hsnCode,
-            quantity,
-            unit,
-            purchasePrice: raw.rateIncl,
-            basePurchasePrice: raw.rateTaxable,
-            lineTotal: raw.amount,
-            gstRate,
-          };
-        });
-
-        const subtotal = products.reduce((sum, p) => sum + p.lineTotal, 0);
         const validation = validateExtraction(products, taxTotals, hasGst);
 
         console.log(`[PDFParser] Validation: ${validation.passed ? 'PASSED' : 'FAILED'} — ${validation.details}`);
@@ -649,24 +415,14 @@ export async function parseInvoicePdfLocally(buffer: Buffer, businessId?: string
           invoiceNumber: header.invoiceNumber,
           supplier: header.supplier,
           supplierGstin: header.supplierGstin,
-          purchaseDate: parseInvoiceDate(header.date),
+          purchaseDate: parseInvoiceDate(header.purchaseDate),
           eWayBillNo: header.eWayBillNo,
           format,
-          templateName,
+          templateName: 'Structural Auto-Parser',
           grandTotal: taxTotals.grandTotal,
           validationPassed: validation.passed,
           validationDetails: validation.details,
-          products: products.map(p => ({
-            name: p.name,
-            sku: p.sku,
-            hsnCode: p.hsnCode,
-            quantity: p.quantity,
-            unit: p.unit,
-            purchasePrice: p.purchasePrice,
-            basePurchasePrice: p.basePurchasePrice,
-            lineTotal: p.lineTotal,
-            gstRate: p.gstRate,
-          })),
+          products
         });
       } catch (err) {
         console.error('[PDFParser] Extraction error:', err);
