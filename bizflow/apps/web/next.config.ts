@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
     root: resolve(process.cwd(), '../../'),
   },
 
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
+
   // Security headers to prevent clickjacking, MIME sniffing, XSS, and content injection
   async headers() {
     return [

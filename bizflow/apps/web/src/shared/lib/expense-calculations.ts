@@ -44,7 +44,7 @@ export async function allocateExpenseToLayers(expenseId: string, businessId: str
           layerId: layer.id,
           expenseType: expense.category,
           amount: expenseForLayer,
-          remarks: \Allocated from Expense \\,
+          remarks: `Allocated from Expense ${expense.id}`,
           businessId,
           tx
         });
@@ -76,7 +76,7 @@ export async function reverseExpenseAllocation(expenseId: string, businessId: st
       layerId: history.layerId,
       expenseType: 'reversal',
       amount: -history.newAmount, // negative amount to reverse
-      remarks: \Reversed from Expense \\,
+      remarks: `Reversed from Expense ${expense.id}`,
       businessId,
       tx
     });

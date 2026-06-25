@@ -42,9 +42,9 @@ export async function POST(req: NextRequest) {
     }
 
     const count = await prisma.debitNote.count({ where: { businessId: session.user.businessId } });
-    const debitNoteNo = \DN-\-\\;
+    const debitNoteNo = `DN-${String(count + 1).padStart(4, '0')}`;
 
-    const note = await prisma.(async (tx: any) => {
+    const note = await prisma.$transaction(async (tx: any) => {
       const createdNote = await tx.debitNote.create({
         data: {
           debitNoteNo, saleId, customerId,
