@@ -27,7 +27,7 @@ export async function allocateExpenseToLayers(expenseId: string, businessId: str
   let totalTransportUnitsForExpense = 0;
   for (const layer of layers) {
     if (!excludedProducts.includes(layer.itemId)) {
-      totalTransportUnitsForExpense += layer.originalQty / (layer.product?.unitsPerBag || 1);
+      totalTransportUnitsForExpense += layer.originalQty;
     }
   }
 
@@ -36,7 +36,7 @@ export async function allocateExpenseToLayers(expenseId: string, businessId: str
 
     for (const layer of layers) {
       if (!excludedProducts.includes(layer.itemId)) {
-        const expenseForLayer = expensePerTransportUnit * (layer.originalQty / (layer.product?.unitsPerBag || 1));
+        const expenseForLayer = expensePerTransportUnit * layer.originalQty;
         
         // Use applyLateLandedCost
         const { applyLateLandedCost } = await import('./layer-engine');

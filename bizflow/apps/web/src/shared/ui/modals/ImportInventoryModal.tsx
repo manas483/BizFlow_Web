@@ -175,14 +175,14 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
       const appliesTo = exp.applicableProductIndices || Array.from({length: invoiceProducts.length}, (_, i) => i);
       if (!appliesTo.includes(pIdx)) continue;
       
-      const applicableBags = invoiceProducts
+      const applicableUnits = invoiceProducts
         .filter((_, i) => appliesTo.includes(i))
-        .reduce((sum, ap) => sum + ((Number(ap.stock) || 0) / (Number(ap.unitsPerBag) || 1)), 0);
+        .reduce((sum, ap) => sum + (Number(ap.stock) || 0), 0);
       
-      if (applicableBags > 0) {
-        const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
-        const expPerBag = exp.amount / applicableBags;
-        totalShare += bags * expPerBag;
+      if (applicableUnits > 0) {
+        const units = Number(p.stock) || 0;
+        const expPerUnit = exp.amount / applicableUnits;
+        totalShare += units * expPerUnit;
       }
     }
     return Number(totalShare.toFixed(2));
@@ -195,7 +195,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
   };
 
   const totalExpenseAmount = invoiceExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  const totalBags = invoiceProducts.reduce((sum, p) => sum + (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1), 0);
+  const totalUnits = invoiceProducts.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
 
   const reset = () => {
     setStep("upload"); setFile(null); setValidationSummary(null);
@@ -819,30 +819,32 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
 
                 {/* Distribution Preview */}
                 {totalExpenseAmount > 0 && invoiceProducts.length > 0 && (
-                  <div className="mt-2 pt-2 border-t space-y-1" style={{ borderColor: "var(--border)" }}>
-                    <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview (by bags)</p>
-                    <div className="grid gap-1">
+                  <div className="pt-2 border-t border-primary/5 mt-4">
+                    <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview (by quantity)</p>
+                    <div className="mt-2 space-y-1.5">
                       {invoiceProducts.map((p, idx) => {
-                        const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
-                        const share = getProductExpenseShare(p, idx);
+                        const units = Number(p.stock) || 0;
                         const perUnit = getProductPerUnitExpense(p, idx);
+                        const share = getProductExpenseShare(p, idx);
                         // Only show products that received some expense share
                         if (share <= 0) return null;
                         
                         return (
-                          <div key={idx} className="flex items-center justify-between text-[10px] px-1 py-0.5 rounded hover:bg-primary/3">
-                            <span className="text-primary/60 truncate flex-1">{p.name}</span>
-                            <span className="text-primary/30 mx-2">{bags.toFixed(1)} bag{bags !== 1 ? 's' : ''}</span>
+                          <div key={idx} className="flex items-center justify-between text-xs">
+                            <span className="text-primary/70 truncate w-1/3">{p.name || 'Unnamed Item'}</span>
+                            <span className="text-primary/30 mx-2">{units.toFixed(1)} qty</span>
                             <span className="text-emerald-400 font-medium w-16 text-right">+₹{perUnit.toFixed(2)}/u</span>
                             <span className="text-violet-400 font-medium w-16 text-right">₹{share.toFixed(2)}</span>
                           </div>
                         );
                       })}
                     </div>
-                    <div className="flex items-center justify-between text-[10px] font-semibold pt-1 border-t" style={{ borderColor: "var(--border)" }}>
-                      <span className="text-primary/60">Total</span>
-                      <span className="text-primary/30">{totalBags.toFixed(1)} bags</span>
-                      <span className="text-violet-400">₹{totalExpenseAmount.toLocaleString('en-IN')}</span>
+                    <div className="flex items-center justify-between text-xs font-medium pt-2 mt-2 border-t border-primary/5">
+                      <span className="text-primary/80">Total</span>
+                      <span className="text-primary/30">{totalUnits.toFixed(1)} qty</span>
+                      <span className="text-violet-400 font-semibold flex-1 text-right">
+                        ₹{totalExpenseAmount.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 2})}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -854,10 +856,9 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
           <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
             <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
             <p className="text-xs text-emerald-400">
-              {invoiceProducts.length} products extracted.
-              {totalExpenseAmount > 0
-                ? <> ₹{totalExpenseAmount.toLocaleString('en-IN')} in expenses will be distributed across {totalBags.toFixed(1)} bags.</>
-                : <> Review the data above and click <strong>Confirm & Import</strong>.</>}
+              {invoiceProducts.length > 0 
+                ? <> ₹{totalExpenseAmount.toLocaleString('en-IN')} in expenses will be distributed across {totalUnits.toFixed(1)} items.</>
+                : <> Extracting product information...</>}
             </p>
           </div>
 
@@ -1043,28 +1044,30 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
 
                   {/* Distribution Preview */}
                   {totalExpenseAmount > 0 && invoiceProducts.length > 0 && (
-                    <div className="mt-2 pt-2 border-t space-y-1" style={{ borderColor: "var(--border)" }}>
-                      <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview (by bags)</p>
-                      <div className="grid gap-1">
+                    <div className="pt-2 border-t border-primary/5 mt-4">
+                      <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview (by quantity)</p>
+                      <div className="mt-2 space-y-1.5">
                         {invoiceProducts.map((p, idx) => {
-                          const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
-                          const share = getProductExpenseShare(p, idx);
+                          const units = Number(p.stock) || 0;
                           const perUnit = getProductPerUnitExpense(p, idx);
+                          const share = getProductExpenseShare(p, idx);
                           if (share <= 0) return null;
                           return (
-                            <div key={idx} className="flex items-center justify-between text-[10px] px-1 py-0.5 rounded hover:bg-primary/3">
-                              <span className="text-primary/60 truncate flex-1">{p.name}</span>
-                              <span className="text-primary/30 mx-2">{bags.toFixed(1)} bag{bags !== 1 ? 's' : ''}</span>
+                            <div key={idx} className="flex items-center justify-between text-xs">
+                              <span className="text-primary/70 truncate w-1/3">{p.name || 'Unnamed Item'}</span>
+                              <span className="text-primary/30 mx-2">{units.toFixed(1)} qty</span>
                               <span className="text-emerald-400 font-medium w-16 text-right">+₹{perUnit.toFixed(2)}/u</span>
                               <span className="text-violet-400 font-medium w-16 text-right">₹{share.toFixed(2)}</span>
                             </div>
                           );
                         })}
                       </div>
-                      <div className="flex items-center justify-between text-[10px] font-semibold pt-1 border-t" style={{ borderColor: "var(--border)" }}>
-                        <span className="text-primary/60">Total</span>
-                        <span className="text-primary/30">{totalBags.toFixed(1)} bags</span>
-                        <span className="text-violet-400">₹{totalExpenseAmount.toLocaleString('en-IN')}</span>
+                      <div className="flex items-center justify-between text-xs font-medium pt-2 mt-2 border-t border-primary/5">
+                        <span className="text-primary/80">Total</span>
+                        <span className="text-primary/30">{totalUnits.toFixed(1)} qty</span>
+                        <span className="text-violet-400 font-semibold flex-1 text-right">
+                          ₹{totalExpenseAmount.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 2})}
+                        </span>
                       </div>
                     </div>
                   )}
