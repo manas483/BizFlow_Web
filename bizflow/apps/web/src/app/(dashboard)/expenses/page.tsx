@@ -12,8 +12,8 @@ import { formatCurrency, formatDate } from "@/shared/lib/utils";
 import { Receipt, Plus, TrendingDown, Repeat, Tag, Trash2, Pencil } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useState } from "react";
-import AddExpenseModal from "@/shared/ui/modals/AddExpenseModal";
-import EditExpenseModal from "@/shared/ui/modals/EditExpenseModal";
+import { AddExpenseModal } from "@/shared/ui/modals/AddExpenseModal";
+import { EditExpenseModal } from "@/shared/ui/modals/EditExpenseModal";
 
 // L-10: generates a stable, distinct color for ANY category name
 const KNOWN_COLORS: Record<string, string> = {
