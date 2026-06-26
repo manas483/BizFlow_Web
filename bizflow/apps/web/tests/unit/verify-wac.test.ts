@@ -2,9 +2,6 @@ import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import { prisma } from '../../src/shared/lib/db';
 import { CostingService } from '../../src/modules/inventory/costing.service';
 import { logger } from '../../src/shared/lib/logger';
-
-process.env.DATABASE_URL = "postgresql://neondb_owner:npg_VIc7akHMWOb0@ep-tiny-scene-aj1nynbc.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require";
-
 describe('WAC Costing Service', () => {
   const businessId = "cmqpggqbl000005ier4oy5qfs"; // Ashirwad Business ID
   let testProductId: string;
