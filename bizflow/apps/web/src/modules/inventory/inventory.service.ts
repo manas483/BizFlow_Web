@@ -1,6 +1,7 @@
 import { prisma } from '@/shared/lib/db';
 import { recalculateTransportCosts } from '@/shared/lib/expense-calculations';
 import { createLayerSafe } from '@/shared/lib/layer-engine';
+import { CostingService } from './costing.service';
 
 export class InventoryService {
   static async getProducts(businessId: string, search?: string | null, category?: string | null, page = 1, limit = 25) {
@@ -14,20 +15,25 @@ export class InventoryService {
     const [products, total, allFiltered] = await Promise.all([
       prisma.product.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
       prisma.product.count({ where }),
-      prisma.product.findMany({ where, select: { stock: true, minStock: true, purchasePrice: true, sellingPrice: true } })
+      prisma.product.findMany({ where, select: { stock: true, minStock: true, standardCost: true, sellingPrice: true } })
     ]);
+
+    const productsWithCosts = await CostingService.computeProductAverageCosts(products, businessId);
 
     const stats = {
       lowStock: allFiltered.filter(p => p.stock <= p.minStock).length,
-      totalValue: allFiltered.reduce((s, p) => s + (Math.max(0, p.stock) * p.purchasePrice), 0),
+      totalValue: allFiltered.reduce((s, p) => s + (Math.max(0, p.stock) * p.standardCost), 0),
       totalSellValue: allFiltered.reduce((s, p) => s + (Math.max(0, p.stock) * p.sellingPrice), 0),
     };
 
-    return { data: products, total, page, limit, totalPages: Math.ceil(total / limit), stats };
+    return { data: productsWithCosts, total, page, limit, totalPages: Math.ceil(total / limit), stats };
   }
 
   static async getProductById(id: string, businessId: string) {
-    return prisma.product.findFirst({ where: { id, businessId } });
+    const product = await prisma.product.findFirst({ where: { id, businessId } });
+    if (!product) return null;
+    const [productWithCosts] = await CostingService.computeProductAverageCosts([product], businessId);
+    return productWithCosts;
   }
 
   static async createProduct(data: any, session: any) {
@@ -53,12 +59,9 @@ export class InventoryService {
         }
       });
 
-      // ── Create initial inventory layer ──
-      const baseCost = (product.basePurchasePrice || product.purchasePrice) * product.stock;
-      const transportTotal = (product.transportCost || 0) * product.stock;
-      const expenses = transportTotal > 0
-        ? [{ expenseType: 'transport', amount: transportTotal }]
-        : [];
+      // 📦 Create initial inventory layer 📦
+      const baseCost = product.standardCost * product.stock;
+      const expenses: any[] = [];
 
       await createLayerSafe({
         itemId: product.id,
@@ -73,8 +76,8 @@ export class InventoryService {
       });
 
       // Auto-create Accounts Payable for the purchase cost
-      if (product.purchasePrice > 0) {
-        const apAmount = product.stock * product.purchasePrice;
+      if (product.standardCost > 0) {
+        const apAmount = product.stock * product.standardCost;
         const supplierName = product.supplier || product.purchaseFrom || product.name;
         const invoiceRef = product.purchaseInvoiceNo || `PROD-${product.id.slice(0, 8)}`;
 
@@ -155,13 +158,10 @@ export class InventoryService {
           }
         });
 
-        // ── Create new inventory layer for restocking ──
+        // 📦 Create new inventory layer for restocking 📦
         if (stockDiff > 0) {
-          const baseCost = (updated.basePurchasePrice || updated.purchasePrice) * stockDiff;
-          const transportTotal = (updated.transportCost || 0) * stockDiff;
-          const expenses = transportTotal > 0
-            ? [{ expenseType: 'transport', amount: transportTotal }]
-            : [];
+          const baseCost = updated.standardCost * stockDiff;
+          const expenses: any[] = [];
 
           await createLayerSafe({
             itemId: updated.id,
@@ -181,8 +181,8 @@ export class InventoryService {
     });
 
     // Auto-create Accounts Payable for restocking (stock increased)
-    if (stockDiff > 0 && (product.purchasePrice || 0) > 0) {
-      const apAmount = stockDiff * product.purchasePrice;
+    if (stockDiff > 0 && (product.standardCost || 0) > 0) {
+      const apAmount = stockDiff * product.standardCost;
       const supplierName = product.supplier || product.purchaseFrom || product.name;
       const invoiceRef = product.purchaseInvoiceNo || `RESTOCK-${product.id.slice(0, 8)}-${Date.now()}`;
 

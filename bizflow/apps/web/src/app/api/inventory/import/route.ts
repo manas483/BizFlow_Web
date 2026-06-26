@@ -81,9 +81,7 @@ export async function POST(req: NextRequest) {
             stock: Number(p.stock ?? 0),
             minStock: Number(p.minStock ?? intel?.minStock ?? 5),
             unitsPerBag: Number(p.unitsPerBag || intel?.unitsPerBag || 1),
-            basePurchasePrice: Number(p.basePurchasePrice ?? 0),
-            transportCost: Number(p.transportCost ?? 0),
-            purchasePrice: Number(p.purchasePrice ?? 0),
+            standardCost: Number(p.purchasePrice ?? 0),
             sellingPrice: Number(p.sellingPrice ?? 0),
             unit: String(p.unit || intel?.unit || "pcs"),
             supplier: p.supplier ? String(p.supplier) : null,
@@ -125,12 +123,12 @@ export async function POST(req: NextRequest) {
             }
 
             const updateData: any = {
-              ...productData,
               stock: newTotalStock,
-              basePurchasePrice: productData.basePurchasePrice > 0 ? productData.basePurchasePrice : existingProduct?.basePurchasePrice,
-              transportCost: productData.transportCost > 0 ? productData.transportCost : existingProduct?.transportCost,
-              purchasePrice: productData.purchasePrice > 0 ? productData.purchasePrice : existingProduct?.purchasePrice,
+              standardCost: productData.standardCost > 0 ? productData.standardCost : existingProduct?.standardCost,
               sellingPrice: productData.sellingPrice > 0 ? productData.sellingPrice : existingProduct?.sellingPrice,
+              purchaseDate: productData.purchaseDate || undefined,
+              purchaseFrom: productData.purchaseFrom || productData.supplier || undefined,
+              purchaseInvoiceNo: productData.purchaseInvoiceNo || undefined,
             };
             
             await prisma.product.update({ 
@@ -155,8 +153,8 @@ export async function POST(req: NextRequest) {
               await createLayerSafe({
                 itemId: existingId,
                 quantity: incomingQuantity,
-                purchaseCost: productData.basePurchasePrice * incomingQuantity,
-                expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * incomingQuantity }] : [],
+                purchaseCost: p.basePurchasePrice ? (Number(p.basePurchasePrice) * incomingQuantity) : (productData.standardCost * incomingQuantity),
+                expenses: p.transportCost && Number(p.transportCost) > 0 ? [{ expenseType: 'transport', amount: Number(p.transportCost) * incomingQuantity }] : [],
                 receiptNo: productData.purchaseInvoiceNo || undefined,
                 purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
                 receiptDate: productData.purchaseDate || new Date(),
@@ -185,8 +183,8 @@ export async function POST(req: NextRequest) {
               await createLayerSafe({
                 itemId: newProduct.id,
                 quantity: newProduct.stock,
-                purchaseCost: productData.basePurchasePrice * newProduct.stock,
-                expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * newProduct.stock }] : [],
+                purchaseCost: p.basePurchasePrice ? (Number(p.basePurchasePrice) * newProduct.stock) : (productData.standardCost * newProduct.stock),
+                expenses: p.transportCost && Number(p.transportCost) > 0 ? [{ expenseType: 'transport', amount: Number(p.transportCost) * newProduct.stock }] : [],
                 receiptNo: productData.purchaseInvoiceNo || undefined,
                 purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
                 receiptDate: productData.purchaseDate || new Date(),
@@ -442,6 +440,9 @@ export async function POST(req: NextRequest) {
         // Find intelligence properties
         const intel = findProductIntelligence(businessType, name, sku);
 
+        const basePrice = Number(d.basePurchasePrice ?? d.purchasePrice ?? intel?.standardCost ?? 0);
+        const transportCost = Number(d.transportCost ?? 0);
+
         const productData = {
           name,
           sku,
@@ -449,9 +450,7 @@ export async function POST(req: NextRequest) {
           stock: Number(d.stock ?? 0),
           minStock: Number(d.minStock ?? intel?.minStock ?? 5),
           unitsPerBag: Number(d.unitsPerBag || intel?.unitsPerBag || 1),
-          basePurchasePrice: Number(d.basePurchasePrice ?? d.purchasePrice ?? intel?.purchasePrice ?? 0),
-          transportCost: Number(d.transportCost ?? 0),
-          purchasePrice: Number(d.purchasePrice ?? intel?.purchasePrice ?? 0),
+          standardCost: basePrice + transportCost,
           sellingPrice: Number(d.sellingPrice ?? 0),
           unit: String(d.unit || intel?.unit || "pcs"),
           supplier: d.supplier ? String(d.supplier) : null,
@@ -469,9 +468,7 @@ export async function POST(req: NextRequest) {
             
             const updateData: any = {
               ...productData,
-              basePurchasePrice: productData.basePurchasePrice > 0 ? productData.basePurchasePrice : existingProduct?.basePurchasePrice,
-              transportCost: productData.transportCost > 0 ? productData.transportCost : existingProduct?.transportCost,
-              purchasePrice: productData.purchasePrice > 0 ? productData.purchasePrice : existingProduct?.purchasePrice,
+              standardCost: productData.standardCost > 0 ? productData.standardCost : existingProduct?.standardCost,
               sellingPrice: productData.sellingPrice > 0 ? productData.sellingPrice : existingProduct?.sellingPrice,
             };
 
@@ -493,8 +490,8 @@ export async function POST(req: NextRequest) {
               await createLayerSafe({
                 itemId: existingId,
                 quantity: stockDiff,
-                purchaseCost: productData.basePurchasePrice * stockDiff,
-                expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * stockDiff }] : [],
+                purchaseCost: basePrice * stockDiff,
+                expenses: transportCost > 0 ? [{ expenseType: 'transport', amount: transportCost * stockDiff }] : [],
                 receiptNo: productData.purchaseInvoiceNo || undefined,
                 purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
                 receiptDate: new Date(),
@@ -523,8 +520,8 @@ export async function POST(req: NextRequest) {
               await createLayerSafe({
                 itemId: newProduct.id,
                 quantity: newProduct.stock,
-                purchaseCost: productData.basePurchasePrice * newProduct.stock,
-                expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * newProduct.stock }] : [],
+                purchaseCost: basePrice * newProduct.stock,
+                expenses: transportCost > 0 ? [{ expenseType: 'transport', amount: transportCost * newProduct.stock }] : [],
                 receiptNo: productData.purchaseInvoiceNo || undefined,
                 purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
                 receiptDate: new Date(),
@@ -553,8 +550,8 @@ export async function POST(req: NextRequest) {
             await createLayerSafe({
               itemId: newProduct.id,
               quantity: newProduct.stock,
-              purchaseCost: productData.basePurchasePrice * newProduct.stock,
-              expenses: productData.transportCost > 0 ? [{ expenseType: 'transport', amount: productData.transportCost * newProduct.stock }] : [],
+              purchaseCost: basePrice * newProduct.stock,
+              expenses: transportCost > 0 ? [{ expenseType: 'transport', amount: transportCost * newProduct.stock }] : [],
               receiptNo: productData.purchaseInvoiceNo || undefined,
               purchaseInvoiceId: productData.purchaseInvoiceNo || undefined,
               receiptDate: new Date(),

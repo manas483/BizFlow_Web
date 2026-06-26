@@ -84,7 +84,7 @@ async function findOrCreateAccount(
 /**
  * Create a journal entry with balanced lines.
  */
-async function createJournal(params: {
+export async function createJournal(params: {
   businessId: string;
   narration: string;
   reference: string;

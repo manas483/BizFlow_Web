@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 import { resolve } from "path";
 
-const nextConfig: NextConfig = {
+const nextConfig: any = {
   serverExternalPackages: ['@react-pdf/renderer'],
 
   // I-3 FIX: Use absolute path to silence turbopack workspace detection warning

@@ -1,4 +1,6 @@
 
+import { createJournal } from './auto-journal';
+
 export async function reverseJournalEntry(reference: string, tx: any) {
   const journals = await tx.journalEntry.findMany({
     where: { reference, status: 'POSTED' },
@@ -6,7 +8,7 @@ export async function reverseJournalEntry(reference: string, tx: any) {
   });
 
   for (const journal of journals) {
-    const reversedLines = journal.lines.map(line => ({
+    const reversedLines = journal.lines.map((line: any) => ({
       accountCode: line.accountCode, // Not standard Prisma, but let's assume we fetch account details
       accountId: line.accountId,
       debit: line.credit, // SWAP

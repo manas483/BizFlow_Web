@@ -15,9 +15,9 @@ async function main() {
           productId: p.id,
           type: 'IN',
           quantity: p.stock,
-          notes: p.purchaseFrom || p.supplier || 'Initial stock (backfilled)',
-          referenceId: p.purchaseInvoiceNo || null,
-          createdAt: p.purchaseDate || p.createdAt,
+          notes: 'Initial stock (backfilled)',
+          referenceId: null,
+          createdAt: p.createdAt,
           businessId: p.businessId
         }
       });

@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     };
     if (lowStock) where.stock = { lte: prisma.product.fields.minStock };
 
-    const allowedSort = ['name', 'stock', 'sellingPrice', 'purchasePrice', 'createdAt', 'category'];
+    const allowedSort = ['name', 'stock', 'sellingPrice', 'standardCost', 'createdAt', 'category'];
     const orderField  = allowedSort.includes(sortBy) ? sortBy : 'createdAt';
 
     const [data, total] = await Promise.all([
@@ -60,11 +60,9 @@ export async function POST(req: NextRequest) {
     const parsed  = productSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error.issues);
 
-    const { purchaseDate, ...rest } = parsed.data;
     const product = await prisma.product.create({
       data: {
-        ...rest,
-        ...(purchaseDate ? { purchaseDate: new Date(purchaseDate) } : {}),
+        ...parsed.data,
         businessId: session.user.businessId,
       },
     });

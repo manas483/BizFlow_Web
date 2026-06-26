@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       prisma.saleItem.findMany({ where: { sale: { businessId: biz, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } } }, select: { qty: true, purchasePrice: true } }),
       prisma.creditNote.aggregate({ where: { businessId: biz, createdAt: { gte: from, lte: to } }, _sum: { amount: true } }),
       prisma.customer.aggregate({ where: { businessId: biz }, _sum: { dues: true } }),
-      prisma.product.findMany({ where: { businessId: biz }, select: { stock: true, purchasePrice: true } }),
+      prisma.product.findMany({ where: { businessId: biz }, select: { stock: true, standardCost: true } }),
     ]);
 
     const cogs               = cogsItems.reduce((acc, i) => acc + (i.qty * (i.purchasePrice || 0)), 0);
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     const pendingCollection  = customersAgg._sum.dues ?? 0;
     const collectionEff      = totalSales > 0 ? (collectedAmount / totalSales) * 100 : 0;
     const profitMargin       = totalSales > 0 ? (netProfit / totalSales) * 100 : 0;
-    const inventoryValuation = inventoryProducts.reduce((acc, p) => acc + (Math.max(0, p.stock) * p.purchasePrice), 0);
+    const inventoryValuation = inventoryProducts.reduce((acc, p) => acc + (Math.max(0, p.stock) * p.standardCost), 0);
 
     return ok({
       period: { from, to, label: period },

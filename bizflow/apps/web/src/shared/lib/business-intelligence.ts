@@ -18,7 +18,7 @@ export interface SeedProduct {
   category: string;
   sku: string;
   unit: string;
-  purchasePrice: number;
+  standardCost: number;
   sellingPrice: number;
   stock: number;
   minStock: number;
@@ -62,7 +62,7 @@ function detectIntelligentProfile(businessType: string): Partial<BusinessProfile
       primaryUnit: "pcs",
       customerPlaceholder: { name: "Aarti Bakery Shop", email: "orders@aartibakery.com" },
       seedProducts: [
-        { name: "Chocolate Truffle Cake (1kg)", category: "Cakes & Pastries", sku: "CAKE-001", unit: "pcs", purchasePrice: 250, sellingPrice: 500, stock: 5, minStock: 2, hsnCode: "1905", gstRate: 18 }
+        { name: "Chocolate Truffle Cake (1kg)", category: "Cakes & Pastries", sku: "CAKE-001", unit: "pcs", standardCost: 250, sellingPrice: 500, stock: 5, minStock: 2, hsnCode: "1905", gstRate: 18 }
       ]
     };
   }
@@ -75,8 +75,8 @@ function detectIntelligentProfile(businessType: string): Partial<BusinessProfile
       primaryUnit: "service",
       customerPlaceholder: { name: "Priya Sharma", email: "priya.s@example.com" },
       seedProducts: [
-        { name: "Haircut & Styling", category: "Hair Services", sku: "SRV-001", unit: "service", purchasePrice: 0, sellingPrice: 450, stock: 100, minStock: 0, hsnCode: "9997", gstRate: 18 },
-        { name: "L'Oreal Shampoo 250ml", category: "Retail Products", sku: "RET-001", unit: "pcs", purchasePrice: 200, sellingPrice: 350, stock: 20, minStock: 5, hsnCode: "3305", gstRate: 18 }
+        { name: "Haircut & Styling", category: "Hair Services", sku: "SRV-001", unit: "service", standardCost: 0, sellingPrice: 450, stock: 100, minStock: 0, hsnCode: "9997", gstRate: 18 },
+        { name: "L'Oreal Shampoo 250ml", category: "Retail Products", sku: "RET-001", unit: "pcs", standardCost: 200, sellingPrice: 350, stock: 20, minStock: 5, hsnCode: "3305", gstRate: 18 }
       ]
     };
   }
@@ -89,7 +89,7 @@ function detectIntelligentProfile(businessType: string): Partial<BusinessProfile
       primaryUnit: "pcs",
       customerPlaceholder: { name: "Rahul Verma", email: "rahul.v@example.com" },
       seedProducts: [
-        { name: "Cappuccino (Regular)", category: "Hot Beverages", sku: "BEV-001", unit: "pcs", purchasePrice: 30, sellingPrice: 120, stock: 100, minStock: 0, hsnCode: "2101", gstRate: 5 }
+        { name: "Cappuccino (Regular)", category: "Hot Beverages", sku: "BEV-001", unit: "pcs", standardCost: 30, sellingPrice: 120, stock: 100, minStock: 0, hsnCode: "2101", gstRate: 5 }
       ]
     };
   }
@@ -102,8 +102,8 @@ function detectIntelligentProfile(businessType: string): Partial<BusinessProfile
       primaryUnit: "month",
       customerPlaceholder: { name: "Amit Kumar", email: "amit.k@example.com" },
       seedProducts: [
-        { name: "Annual Membership", category: "Memberships", sku: "MEM-001", unit: "month", purchasePrice: 0, sellingPrice: 12000, stock: 100, minStock: 0, hsnCode: "9996", gstRate: 18 },
-        { name: "Whey Protein 1kg", category: "Supplements", sku: "SUP-001", unit: "pcs", purchasePrice: 1800, sellingPrice: 2500, stock: 15, minStock: 3, hsnCode: "2106", gstRate: 18 }
+        { name: "Annual Membership", category: "Memberships", sku: "MEM-001", unit: "month", standardCost: 0, sellingPrice: 12000, stock: 100, minStock: 0, hsnCode: "9996", gstRate: 18 },
+        { name: "Whey Protein 1kg", category: "Supplements", sku: "SUP-001", unit: "pcs", standardCost: 1800, sellingPrice: 2500, stock: 15, minStock: 3, hsnCode: "2106", gstRate: 18 }
       ]
     };
   }
@@ -116,7 +116,7 @@ function detectIntelligentProfile(businessType: string): Partial<BusinessProfile
       primaryUnit: "pcs",
       customerPlaceholder: { name: "Sneha Patel", email: "sneha.p@example.com" },
       seedProducts: [
-        { name: "Cotton Printed T-Shirt", category: "Men's Wear", sku: "TSH-001", unit: "pcs", purchasePrice: 250, sellingPrice: 599, stock: 30, minStock: 5, hsnCode: "6109", gstRate: 5 }
+        { name: "Cotton Printed T-Shirt", category: "Men's Wear", sku: "TSH-001", unit: "pcs", standardCost: 250, sellingPrice: 599, stock: 30, minStock: 5, hsnCode: "6109", gstRate: 5 }
       ]
     };
   }
@@ -151,12 +151,12 @@ const profiles: Record<BusinessTypeKey, BusinessProfile> = {
       "Offer credit to loyal customers with due tracking",
     ],
     seedProducts: [
-      { name: "Basmati Rice (25kg)", category: "Grains & Pulses", sku: "GR-001", unit: "bag", purchasePrice: 1250, sellingPrice: 1450, stock: 50, minStock: 10, hsnCode: "1006", gstRate: 0 },
-      { name: "Toor Dal (1kg)", category: "Grains & Pulses", sku: "PL-001", unit: "kg", purchasePrice: 135, sellingPrice: 160, stock: 40, minStock: 15, hsnCode: "0713", gstRate: 0 },
-      { name: "Sunflower Oil (1L)", category: "Edible Oil", sku: "OL-001", unit: "ltr", purchasePrice: 130, sellingPrice: 155, stock: 60, minStock: 20, hsnCode: "1512", gstRate: 5 },
-      { name: "Sugar (1kg)", category: "Grains & Pulses", sku: "SG-001", unit: "kg", purchasePrice: 42, sellingPrice: 52, stock: 100, minStock: 30, hsnCode: "1701", gstRate: 5 },
-      { name: "Chilli Powder (500g)", category: "Spices", sku: "SP-001", unit: "pkt", purchasePrice: 85, sellingPrice: 115, stock: 30, minStock: 10, hsnCode: "0904", gstRate: 5 },
-      { name: "Aashirvaad Atta (10kg)", category: "Grains & Pulses", sku: "GR-002", unit: "bag", purchasePrice: 355, sellingPrice: 420, stock: 25, minStock: 8, hsnCode: "1101", gstRate: 0 },
+      { name: "Basmati Rice (25kg)", category: "Grains & Pulses", sku: "GR-001", unit: "bag", standardCost: 1250, sellingPrice: 1450, stock: 50, minStock: 10, hsnCode: "1006", gstRate: 0 },
+      { name: "Toor Dal (1kg)", category: "Grains & Pulses", sku: "PL-001", unit: "kg", standardCost: 135, sellingPrice: 160, stock: 40, minStock: 15, hsnCode: "0713", gstRate: 0 },
+      { name: "Sunflower Oil (1L)", category: "Edible Oil", sku: "OL-001", unit: "ltr", standardCost: 130, sellingPrice: 155, stock: 60, minStock: 20, hsnCode: "1512", gstRate: 5 },
+      { name: "Sugar (1kg)", category: "Grains & Pulses", sku: "SG-001", unit: "kg", standardCost: 42, sellingPrice: 52, stock: 100, minStock: 30, hsnCode: "1701", gstRate: 5 },
+      { name: "Chilli Powder (500g)", category: "Spices", sku: "SP-001", unit: "pkt", standardCost: 85, sellingPrice: 115, stock: 30, minStock: 10, hsnCode: "0904", gstRate: 5 },
+      { name: "Aashirvaad Atta (10kg)", category: "Grains & Pulses", sku: "GR-002", unit: "bag", standardCost: 355, sellingPrice: 420, stock: 25, minStock: 8, hsnCode: "1101", gstRate: 0 },
     ],
     customerPlaceholder: { name: "Ramesh Grocery", email: "ramesh@grocery.in" },
   },
@@ -184,11 +184,11 @@ const profiles: Record<BusinessTypeKey, BusinessProfile> = {
       "Bulk orders reduce per-unit cost significantly",
     ],
     seedProducts: [
-      { name: "Parle-G Biscuit (800g)", category: "Snacks & Biscuits", sku: "SN-001", unit: "pkt", purchasePrice: 45, sellingPrice: 50, stock: 100, minStock: 30, hsnCode: "1905", gstRate: 18 },
-      { name: "Colgate MaxFresh (150g)", category: "Personal Care", sku: "PC-001", unit: "pcs", purchasePrice: 65, sellingPrice: 82, stock: 50, minStock: 15, hsnCode: "3306", gstRate: 18 },
-      { name: "Surf Excel (1kg)", category: "Home Care", sku: "HC-001", unit: "pkt", purchasePrice: 120, sellingPrice: 145, stock: 40, minStock: 10, hsnCode: "3402", gstRate: 18 },
-      { name: "Amul Butter (500g)", category: "Dairy", sku: "DY-001", unit: "pkt", purchasePrice: 215, sellingPrice: 250, stock: 20, minStock: 5, hsnCode: "0405", gstRate: 12 },
-      { name: "Coca-Cola (2L)", category: "Beverages", sku: "BV-001", unit: "btl", purchasePrice: 70, sellingPrice: 90, stock: 60, minStock: 20, hsnCode: "2202", gstRate: 28 },
+      { name: "Parle-G Biscuit (800g)", category: "Snacks & Biscuits", sku: "SN-001", unit: "pkt", standardCost: 45, sellingPrice: 50, stock: 100, minStock: 30, hsnCode: "1905", gstRate: 18 },
+      { name: "Colgate MaxFresh (150g)", category: "Personal Care", sku: "PC-001", unit: "pcs", standardCost: 65, sellingPrice: 82, stock: 50, minStock: 15, hsnCode: "3306", gstRate: 18 },
+      { name: "Surf Excel (1kg)", category: "Home Care", sku: "HC-001", unit: "pkt", standardCost: 120, sellingPrice: 145, stock: 40, minStock: 10, hsnCode: "3402", gstRate: 18 },
+      { name: "Amul Butter (500g)", category: "Dairy", sku: "DY-001", unit: "pkt", standardCost: 215, sellingPrice: 250, stock: 20, minStock: 5, hsnCode: "0405", gstRate: 12 },
+      { name: "Coca-Cola (2L)", category: "Beverages", sku: "BV-001", unit: "btl", standardCost: 70, sellingPrice: 90, stock: 60, minStock: 20, hsnCode: "2202", gstRate: 28 },
     ],
     customerPlaceholder: { name: "City Supermarket", email: "purchase@citysuper.com" },
   },
@@ -216,27 +216,27 @@ const profiles: Record<BusinessTypeKey, BusinessProfile> = {
       "Monitor pesticide batch expiry dates regularly",
     ],
     seedProducts: [
-      { name: "Matix Urea 45 Kg", sku: "MTX-UR-45", category: "Fertilizers", stock: 20, unitsPerBag: 1, purchasePrice: 260, sellingPrice: 290, minStock: 10, hsnCode: "31021000", gstRate: 0, unit: "bag" },
-      { name: "GR 28:28:0 50 Kg", sku: "GR-2828-50", category: "Fertilizers", stock: 15, unitsPerBag: 1, purchasePrice: 1890, sellingPrice: 2050, minStock: 8, hsnCode: "31055100", gstRate: 0, unit: "bag" },
-      { name: "IPL DAP 50 Kg", sku: "IPL-DP-50", category: "Fertilizers", stock: 10, unitsPerBag: 1, purchasePrice: 1345, sellingPrice: 1450, minStock: 10, hsnCode: "31053000", gstRate: 0, unit: "bag" },
-      { name: "NR DAP 50 Kg", sku: "NR-DP-50", category: "Fertilizers", stock: 10, unitsPerBag: 1, purchasePrice: 1345, sellingPrice: 1450, minStock: 10, hsnCode: "31053000", gstRate: 0, unit: "bag" },
-      { name: "GR 20:20:0:13 50 Kg", sku: "GR-2020-50", category: "Fertilizers", stock: 20, unitsPerBag: 1, purchasePrice: 1790, sellingPrice: 1920, minStock: 10, hsnCode: "31055100", gstRate: 0, unit: "bag" },
-      { name: "NR 20:20:0:13 50 Kg", sku: "NR-2020-50", category: "Fertilizers", stock: 20, unitsPerBag: 1, purchasePrice: 1790, sellingPrice: 1920, minStock: 10, hsnCode: "31055900", gstRate: 0, unit: "bag" },
-      { name: "IPL MOP 50 Kg", sku: "IPL-MP-50", category: "Fertilizers", stock: 25, unitsPerBag: 1, purchasePrice: 1845, sellingPrice: 1980, minStock: 10, hsnCode: "31042000", gstRate: 0, unit: "bag" },
-      { name: "NR TSP 46% 50 Kg", sku: "NR-TS-50", category: "Fertilizers", stock: 10, unitsPerBag: 1, purchasePrice: 1295, sellingPrice: 1400, minStock: 5, hsnCode: "31031100", gstRate: 0, unit: "bag" },
-      { name: "Trump-162LS", sku: "TRM-162", category: "Seeds", stock: 10, unitsPerBag: 5, purchasePrice: 1000, sellingPrice: 1200, minStock: 5, hsnCode: "1209", gstRate: 0, unit: "pack" },
-      { name: "Yashraj", sku: "YSH-RJ", category: "Seeds", stock: 6, unitsPerBag: 6, purchasePrice: 510, sellingPrice: 620, minStock: 3, hsnCode: "1209", gstRate: 0, unit: "pack" },
-      { name: "Pan 804 (Jamuna)", sku: "PAN-804", category: "Seeds", stock: 12, unitsPerBag: 6, purchasePrice: 730, sellingPrice: 850, minStock: 6, hsnCode: "1209", gstRate: 0, unit: "pack" },
-      { name: "NP-7075", sku: "NP-7075", category: "Seeds", stock: 12, unitsPerBag: 6, purchasePrice: 672, sellingPrice: 780, minStock: 6, hsnCode: "1209", gstRate: 0, unit: "pack" },
-      { name: "Vishal Gaurav", sku: "VSH-GR", category: "Seeds", stock: 12, unitsPerBag: 6, purchasePrice: 600, sellingPrice: 700, minStock: 6, hsnCode: "1209", gstRate: 0, unit: "pack" },
-      { name: "Sindhu", sku: "SND-HU", category: "Seeds", stock: 8, unitsPerBag: 4, purchasePrice: 970, sellingPrice: 1100, minStock: 4, hsnCode: "1209", gstRate: 0, unit: "pack" },
-      { name: "Kalachampa Gold", sku: "KLC-GD", category: "Seeds", stock: 8, unitsPerBag: 4, purchasePrice: 760, sellingPrice: 880, minStock: 4, hsnCode: "1209", gstRate: 0, unit: "pack" },
-      { name: "Chemfree Vamax 4 KG", sku: "CF-VMX-4", category: "Soil Conditioners", stock: 18, unitsPerBag: 1, purchasePrice: 550, sellingPrice: 650, minStock: 5, hsnCode: "3101", gstRate: 0, unit: "pcs" },
-      { name: "Shaktiman Oorja (FCO) 1 KG", sku: "SM-ORJ-1", category: "Soil Conditioners", stock: 25, unitsPerBag: 1, purchasePrice: 90, sellingPrice: 120, minStock: 10, hsnCode: "3101", gstRate: 0, unit: "pcs" },
-      { name: "Matix Zinc Sulphate (33%) 1 KG", sku: "MTX-ZN-1", category: "Soil Conditioners", stock: 20, unitsPerBag: 1, purchasePrice: 190, sellingPrice: 240, minStock: 5, hsnCode: "2833", gstRate: 0, unit: "pcs" },
-      { name: "PROM (Prabhat) 50 KG", sku: "PRM-PB-50", category: "Soil Conditioners", stock: 5, unitsPerBag: 1, purchasePrice: 1250, sellingPrice: 1450, minStock: 2, hsnCode: "3101", gstRate: 0, unit: "pcs" },
-      { name: "Nashak 500 ml", sku: "NSK-500", category: "Pesticides", stock: 20, unitsPerBag: 1, purchasePrice: 275, sellingPrice: 350, minStock: 5, hsnCode: "3808", gstRate: 0, unit: "pcs" },
-      { name: "Nashak 250 ml", sku: "NSK-250", category: "Pesticides", stock: 40, unitsPerBag: 1, purchasePrice: 150, sellingPrice: 200, minStock: 10, hsnCode: "3808", gstRate: 0, unit: "pcs" }
+      { name: "Matix Urea 45 Kg", sku: "MTX-UR-45", category: "Fertilizers", stock: 20, unitsPerBag: 1, standardCost: 260, sellingPrice: 290, minStock: 10, hsnCode: "31021000", gstRate: 0, unit: "bag" },
+      { name: "GR 28:28:0 50 Kg", sku: "GR-2828-50", category: "Fertilizers", stock: 15, unitsPerBag: 1, standardCost: 1890, sellingPrice: 2050, minStock: 8, hsnCode: "31055100", gstRate: 0, unit: "bag" },
+      { name: "IPL DAP 50 Kg", sku: "IPL-DP-50", category: "Fertilizers", stock: 10, unitsPerBag: 1, standardCost: 1345, sellingPrice: 1450, minStock: 10, hsnCode: "31053000", gstRate: 0, unit: "bag" },
+      { name: "NR DAP 50 Kg", sku: "NR-DP-50", category: "Fertilizers", stock: 10, unitsPerBag: 1, standardCost: 1345, sellingPrice: 1450, minStock: 10, hsnCode: "31053000", gstRate: 0, unit: "bag" },
+      { name: "GR 20:20:0:13 50 Kg", sku: "GR-2020-50", category: "Fertilizers", stock: 20, unitsPerBag: 1, standardCost: 1790, sellingPrice: 1920, minStock: 10, hsnCode: "31055100", gstRate: 0, unit: "bag" },
+      { name: "NR 20:20:0:13 50 Kg", sku: "NR-2020-50", category: "Fertilizers", stock: 20, unitsPerBag: 1, standardCost: 1790, sellingPrice: 1920, minStock: 10, hsnCode: "31055900", gstRate: 0, unit: "bag" },
+      { name: "IPL MOP 50 Kg", sku: "IPL-MP-50", category: "Fertilizers", stock: 25, unitsPerBag: 1, standardCost: 1845, sellingPrice: 1980, minStock: 10, hsnCode: "31042000", gstRate: 0, unit: "bag" },
+      { name: "NR TSP 46% 50 Kg", sku: "NR-TS-50", category: "Fertilizers", stock: 10, unitsPerBag: 1, standardCost: 1295, sellingPrice: 1400, minStock: 5, hsnCode: "31031100", gstRate: 0, unit: "bag" },
+      { name: "Trump-162LS", sku: "TRM-162", category: "Seeds", stock: 10, unitsPerBag: 5, standardCost: 1000, sellingPrice: 1200, minStock: 5, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Yashraj", sku: "YSH-RJ", category: "Seeds", stock: 6, unitsPerBag: 6, standardCost: 510, sellingPrice: 620, minStock: 3, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Pan 804 (Jamuna)", sku: "PAN-804", category: "Seeds", stock: 12, unitsPerBag: 6, standardCost: 730, sellingPrice: 850, minStock: 6, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "NP-7075", sku: "NP-7075", category: "Seeds", stock: 12, unitsPerBag: 6, standardCost: 672, sellingPrice: 780, minStock: 6, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Vishal Gaurav", sku: "VSH-GR", category: "Seeds", stock: 12, unitsPerBag: 6, standardCost: 600, sellingPrice: 700, minStock: 6, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Sindhu", sku: "SND-HU", category: "Seeds", stock: 8, unitsPerBag: 4, standardCost: 970, sellingPrice: 1100, minStock: 4, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Kalachampa Gold", sku: "KLC-GD", category: "Seeds", stock: 8, unitsPerBag: 4, standardCost: 760, sellingPrice: 880, minStock: 4, hsnCode: "1209", gstRate: 0, unit: "pack" },
+      { name: "Chemfree Vamax 4 KG", sku: "CF-VMX-4", category: "Soil Conditioners", stock: 18, unitsPerBag: 1, standardCost: 550, sellingPrice: 650, minStock: 5, hsnCode: "3101", gstRate: 0, unit: "pcs" },
+      { name: "Shaktiman Oorja (FCO) 1 KG", sku: "SM-ORJ-1", category: "Soil Conditioners", stock: 25, unitsPerBag: 1, standardCost: 90, sellingPrice: 120, minStock: 10, hsnCode: "3101", gstRate: 0, unit: "pcs" },
+      { name: "Matix Zinc Sulphate (33%) 1 KG", sku: "MTX-ZN-1", category: "Soil Conditioners", stock: 20, unitsPerBag: 1, standardCost: 190, sellingPrice: 240, minStock: 5, hsnCode: "2833", gstRate: 0, unit: "pcs" },
+      { name: "PROM (Prabhat) 50 KG", sku: "PRM-PB-50", category: "Soil Conditioners", stock: 5, unitsPerBag: 1, standardCost: 1250, sellingPrice: 1450, minStock: 2, hsnCode: "3101", gstRate: 0, unit: "pcs" },
+      { name: "Nashak 500 ml", sku: "NSK-500", category: "Pesticides", stock: 20, unitsPerBag: 1, standardCost: 275, sellingPrice: 350, minStock: 5, hsnCode: "3808", gstRate: 0, unit: "pcs" },
+      { name: "Nashak 250 ml", sku: "NSK-250", category: "Pesticides", stock: 40, unitsPerBag: 1, standardCost: 150, sellingPrice: 200, minStock: 10, hsnCode: "3808", gstRate: 0, unit: "pcs" }
     ],
     customerPlaceholder: { name: "Kisan Agro Farm", email: "contact@kisanfarm.in" },
   },
@@ -264,11 +264,11 @@ const profiles: Record<BusinessTypeKey, BusinessProfile> = {
       "Track paint batch numbers for warranty",
     ],
     seedProducts: [
-      { name: "Iron Nails (1kg)", category: "Fasteners", sku: "HW-001", unit: "kg", purchasePrice: 60, sellingPrice: 85, stock: 50, minStock: 10, hsnCode: "7317", gstRate: 18 },
-      { name: "PVC Pipe 1\" (3m)", category: "Plumbing", sku: "PL-001", unit: "pcs", purchasePrice: 120, sellingPrice: 155, stock: 80, minStock: 20, hsnCode: "3917", gstRate: 18 },
-      { name: "MCB 32A Single Pole", category: "Electrical", sku: "EL-001", unit: "pcs", purchasePrice: 180, sellingPrice: 240, stock: 30, minStock: 5, hsnCode: "8536", gstRate: 18 },
-      { name: "Hammer 500g", category: "Hand Tools", sku: "HT-001", unit: "pcs", purchasePrice: 150, sellingPrice: 220, stock: 20, minStock: 5, hsnCode: "8205", gstRate: 18 },
-      { name: "Asian Paints Apex (10L)", category: "Paints", sku: "PT-001", unit: "tin", purchasePrice: 1650, sellingPrice: 2100, stock: 25, minStock: 5, hsnCode: "3209", gstRate: 18 },
+      { name: "Iron Nails (1kg)", category: "Fasteners", sku: "HW-001", unit: "kg", standardCost: 60, sellingPrice: 85, stock: 50, minStock: 10, hsnCode: "7317", gstRate: 18 },
+      { name: "PVC Pipe 1\" (3m)", category: "Plumbing", sku: "PL-001", unit: "pcs", standardCost: 120, sellingPrice: 155, stock: 80, minStock: 20, hsnCode: "3917", gstRate: 18 },
+      { name: "MCB 32A Single Pole", category: "Electrical", sku: "EL-001", unit: "pcs", standardCost: 180, sellingPrice: 240, stock: 30, minStock: 5, hsnCode: "8536", gstRate: 18 },
+      { name: "Hammer 500g", category: "Hand Tools", sku: "HT-001", unit: "pcs", standardCost: 150, sellingPrice: 220, stock: 20, minStock: 5, hsnCode: "8205", gstRate: 18 },
+      { name: "Asian Paints Apex (10L)", category: "Paints", sku: "PT-001", unit: "tin", standardCost: 1650, sellingPrice: 2100, stock: 25, minStock: 5, hsnCode: "3209", gstRate: 18 },
     ],
     customerPlaceholder: { name: "ABC Construction", email: "info@abcbuild.com" },
   },
@@ -296,11 +296,11 @@ const profiles: Record<BusinessTypeKey, BusinessProfile> = {
       "E-Way bill required for materials above ₹50,000",
     ],
     seedProducts: [
-      { name: "UltraTech Cement (50kg)", category: "Cement & Concrete", sku: "CM-001", unit: "bag", purchasePrice: 370, sellingPrice: 420, stock: 500, minStock: 100, hsnCode: "2523", gstRate: 28 },
-      { name: "TMT Steel Bar 10mm (12m)", category: "Steel & Iron", sku: "ST-001", unit: "pcs", purchasePrice: 580, sellingPrice: 680, stock: 200, minStock: 50, hsnCode: "7213", gstRate: 18 },
-      { name: "Red Brick (per 1000)", category: "Bricks & Blocks", sku: "BR-001", unit: "lot", purchasePrice: 5500, sellingPrice: 6500, stock: 20, minStock: 5, hsnCode: "6901", gstRate: 5 },
-      { name: "River Sand (per truck)", category: "Sand & Aggregate", sku: "SA-001", unit: "trip", purchasePrice: 12000, sellingPrice: 15000, stock: 10, minStock: 2, hsnCode: "2505", gstRate: 5 },
-      { name: "Ceramic Tile 2x2 ft (box)", category: "Tiles & Flooring", sku: "TL-001", unit: "box", purchasePrice: 350, sellingPrice: 480, stock: 100, minStock: 20, hsnCode: "6908", gstRate: 28 },
+      { name: "UltraTech Cement (50kg)", category: "Cement & Concrete", sku: "CM-001", unit: "bag", standardCost: 370, sellingPrice: 420, stock: 500, minStock: 100, hsnCode: "2523", gstRate: 28 },
+      { name: "TMT Steel Bar 10mm (12m)", category: "Steel & Iron", sku: "ST-001", unit: "pcs", standardCost: 580, sellingPrice: 680, stock: 200, minStock: 50, hsnCode: "7213", gstRate: 18 },
+      { name: "Red Brick (per 1000)", category: "Bricks & Blocks", sku: "BR-001", unit: "lot", standardCost: 5500, sellingPrice: 6500, stock: 20, minStock: 5, hsnCode: "6901", gstRate: 5 },
+      { name: "River Sand (per truck)", category: "Sand & Aggregate", sku: "SA-001", unit: "trip", standardCost: 12000, sellingPrice: 15000, stock: 10, minStock: 2, hsnCode: "2505", gstRate: 5 },
+      { name: "Ceramic Tile 2x2 ft (box)", category: "Tiles & Flooring", sku: "TL-001", unit: "box", standardCost: 350, sellingPrice: 480, stock: 100, minStock: 20, hsnCode: "6908", gstRate: 28 },
     ],
     customerPlaceholder: { name: "Skyline Developers", email: "procurement@skyline.com" },
   },
@@ -328,12 +328,12 @@ const profiles: Record<BusinessTypeKey, BusinessProfile> = {
       "Maintain Schedule H register for controlled medications",
     ],
     seedProducts: [
-      { name: "Paracetamol 500mg (10s)", category: "OTC Medicines", sku: "MED-001", unit: "strip", purchasePrice: 12, sellingPrice: 18, stock: 200, minStock: 50, hsnCode: "3004", gstRate: 12 },
-      { name: "Azithromycin 500mg (3s)", category: "Prescription Drugs", sku: "MED-002", unit: "strip", purchasePrice: 55, sellingPrice: 80, stock: 50, minStock: 15, hsnCode: "3004", gstRate: 12 },
-      { name: "Cetirizine 10mg (10s)", category: "OTC Medicines", sku: "MED-003", unit: "strip", purchasePrice: 20, sellingPrice: 32, stock: 100, minStock: 25, hsnCode: "3004", gstRate: 12 },
-      { name: "Dolo 650 (15s)", category: "OTC Medicines", sku: "MED-004", unit: "strip", purchasePrice: 22, sellingPrice: 35, stock: 150, minStock: 30, hsnCode: "3004", gstRate: 12 },
-      { name: "Vitamin C 500mg (10s)", category: "Vitamins & Supplements", sku: "VIT-001", unit: "strip", purchasePrice: 45, sellingPrice: 75, stock: 80, minStock: 20, hsnCode: "3004", gstRate: 12 },
-      { name: "Digital Thermometer", category: "Medical Devices", sku: "DEV-001", unit: "pcs", purchasePrice: 180, sellingPrice: 280, stock: 20, minStock: 5, hsnCode: "9025", gstRate: 12 },
+      { name: "Paracetamol 500mg (10s)", category: "OTC Medicines", sku: "MED-001", unit: "strip", standardCost: 12, sellingPrice: 18, stock: 200, minStock: 50, hsnCode: "3004", gstRate: 12 },
+      { name: "Azithromycin 500mg (3s)", category: "Prescription Drugs", sku: "MED-002", unit: "strip", standardCost: 55, sellingPrice: 80, stock: 50, minStock: 15, hsnCode: "3004", gstRate: 12 },
+      { name: "Cetirizine 10mg (10s)", category: "OTC Medicines", sku: "MED-003", unit: "strip", standardCost: 20, sellingPrice: 32, stock: 100, minStock: 25, hsnCode: "3004", gstRate: 12 },
+      { name: "Dolo 650 (15s)", category: "OTC Medicines", sku: "MED-004", unit: "strip", standardCost: 22, sellingPrice: 35, stock: 150, minStock: 30, hsnCode: "3004", gstRate: 12 },
+      { name: "Vitamin C 500mg (10s)", category: "Vitamins & Supplements", sku: "VIT-001", unit: "strip", standardCost: 45, sellingPrice: 75, stock: 80, minStock: 20, hsnCode: "3004", gstRate: 12 },
+      { name: "Digital Thermometer", category: "Medical Devices", sku: "DEV-001", unit: "pcs", standardCost: 180, sellingPrice: 280, stock: 20, minStock: 5, hsnCode: "9025", gstRate: 12 },
     ],
     customerPlaceholder: { name: "Dr. Singh Clinic", email: "dr.singh@clinic.com" },
   },
@@ -361,11 +361,11 @@ const profiles: Record<BusinessTypeKey, BusinessProfile> = {
       "Accessories have 60-80% margins — promote bundles",
     ],
     seedProducts: [
-      { name: "Samsung Galaxy A55 5G", category: "Mobile Phones", sku: "MB-001", unit: "pcs", purchasePrice: 28000, sellingPrice: 34999, stock: 10, minStock: 2, hsnCode: "8517", gstRate: 18 },
-      { name: "Boat Rockerz 255 Pro", category: "Audio", sku: "AU-001", unit: "pcs", purchasePrice: 800, sellingPrice: 1499, stock: 20, minStock: 5, hsnCode: "8518", gstRate: 18 },
-      { name: "Anker 65W Charger", category: "Accessories", sku: "AC-001", unit: "pcs", purchasePrice: 700, sellingPrice: 1299, stock: 30, minStock: 10, hsnCode: "8504", gstRate: 18 },
-      { name: "SanDisk 128GB MicroSD", category: "Accessories", sku: "AC-002", unit: "pcs", purchasePrice: 450, sellingPrice: 799, stock: 40, minStock: 10, hsnCode: "8523", gstRate: 18 },
-      { name: "HP Pavilion 15 (Ryzen 5)", category: "Laptops & Tablets", sku: "LT-001", unit: "pcs", purchasePrice: 45000, sellingPrice: 58999, stock: 5, minStock: 1, hsnCode: "8471", gstRate: 18 },
+      { name: "Samsung Galaxy A55 5G", category: "Mobile Phones", sku: "MB-001", unit: "pcs", standardCost: 28000, sellingPrice: 34999, stock: 10, minStock: 2, hsnCode: "8517", gstRate: 18 },
+      { name: "Boat Rockerz 255 Pro", category: "Audio", sku: "AU-001", unit: "pcs", standardCost: 800, sellingPrice: 1499, stock: 20, minStock: 5, hsnCode: "8518", gstRate: 18 },
+      { name: "Anker 65W Charger", category: "Accessories", sku: "AC-001", unit: "pcs", standardCost: 700, sellingPrice: 1299, stock: 30, minStock: 10, hsnCode: "8504", gstRate: 18 },
+      { name: "SanDisk 128GB MicroSD", category: "Accessories", sku: "AC-002", unit: "pcs", standardCost: 450, sellingPrice: 799, stock: 40, minStock: 10, hsnCode: "8523", gstRate: 18 },
+      { name: "HP Pavilion 15 (Ryzen 5)", category: "Laptops & Tablets", sku: "LT-001", unit: "pcs", standardCost: 45000, sellingPrice: 58999, stock: 5, minStock: 1, hsnCode: "8471", gstRate: 18 },
     ],
     customerPlaceholder: { name: "Tech Solutions IT", email: "purchase@techit.in" },
   },
@@ -393,8 +393,8 @@ const profiles: Record<BusinessTypeKey, BusinessProfile> = {
       "Use customer dues tracking to manage credit",
     ],
     seedProducts: [
-      { name: "Sample Product 1", category: "Category A", sku: "GEN-001", unit: "pcs", purchasePrice: 100, sellingPrice: 150, stock: 50, minStock: 10, hsnCode: "9999", gstRate: 18 },
-      { name: "Sample Product 2", category: "Category B", sku: "GEN-002", unit: "pcs", purchasePrice: 200, sellingPrice: 280, stock: 30, minStock: 5, hsnCode: "9999", gstRate: 18 },
+      { name: "Sample Product 1", category: "Category A", sku: "GEN-001", unit: "pcs", standardCost: 100, sellingPrice: 150, stock: 50, minStock: 10, hsnCode: "9999", gstRate: 18 },
+      { name: "Sample Product 2", category: "Category B", sku: "GEN-002", unit: "pcs", standardCost: 200, sellingPrice: 280, stock: 30, minStock: 5, hsnCode: "9999", gstRate: 18 },
     ],
     customerPlaceholder: { name: "Acme Corp", email: "john@example.com" },
   },

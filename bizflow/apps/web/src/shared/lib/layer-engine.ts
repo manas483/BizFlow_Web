@@ -286,7 +286,7 @@ export async function createLayerSafe(params: CreateLayerParams): Promise<string
  * LIFO: newest layer first (receiptDate DESC, createdAt DESC)
  * WAC:  uses weighted average unit cost, consumes from oldest first
  * SPECIFIC: consumes from a specific layer (params.specificLayerId required)
- * STANDARD: uses standard cost from product.purchasePrice, consumes from oldest first
+ * STANDARD: uses standard cost from product.standardCost, consumes from oldest first
  *
  * Returns consumed layer details for COGS calculation.
  */
@@ -569,7 +569,7 @@ async function consumeSpecific(
 }
 
 /**
- * Standard Cost — uses the product's standard purchasePrice as the cost,
+ * Standard Cost — uses the product's standardCost as the cost,
  * but still physically consumes from oldest layers.
  */
 async function consumeStandard(tx: any, params: ConsumeLayersParams): Promise<LayerConsumptionResult> {
@@ -578,14 +578,14 @@ async function consumeStandard(tx: any, params: ConsumeLayersParams): Promise<La
   // Get standard cost from product
   const product = await tx.product.findFirst({
     where: { id: itemId, businessId },
-    select: { purchasePrice: true },
+    select: { standardCost: true },
   });
 
   if (!product) {
     throw new Error(`Product ${itemId} not found`);
   }
 
-  const standardCost = product.purchasePrice;
+  const standardCost = product.standardCost;
 
   const where: any = {
     itemId,
@@ -949,6 +949,6 @@ export async function recalculateProductWAC(
   const newWAC = await getWeightedAverageCost(itemId, businessId, undefined, tx);
   await tx.product.update({
     where: { id: itemId },
-    data: { purchasePrice: newWAC }
+    data: { standardCost: newWAC }
   });
 }

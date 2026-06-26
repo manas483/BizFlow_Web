@@ -48,7 +48,7 @@ export function InventoryIntegrityWidget() {
           {isHealthy ? <CheckCircle className="h-4 w-4" /> : <AlertOctagon className="h-4 w-4" />}
           Inventory Integrity Health
         </CardTitle>
-        <Badge variant={isHealthy ? 'default' : 'destructive'} className={isHealthy ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : ''}>
+        <Badge variant={isHealthy ? 'default' : 'danger'} className={isHealthy ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : ''}>
           {isHealthy ? 'System Optimal' : 'Action Required'}
         </Badge>
       </CardHeader>
@@ -107,7 +107,7 @@ export function InventoryIntegrityWidget() {
 
         <div className="mt-4 pt-2 border-t border-border/20 flex justify-between items-center">
           <span className="text-[10px] text-muted-foreground">Last Validated:</span>
-          <span className="text-[10px] text-muted-foreground font-mono">{formatDate(new Date(metrics.lastValidationTime), "MMM d, yyyy HH:mm:ss")}</span>
+          <span className="text-[10px] text-muted-foreground font-mono">{formatDate(new Date(metrics.lastValidationTime))}</span>
         </div>
       </CardContent>
     </Card>

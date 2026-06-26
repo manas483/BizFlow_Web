@@ -106,7 +106,7 @@ export async function createStockCount(
       id: true,
       name: true,
       stock: true,
-      purchasePrice: true,
+      standardCost: true,
     },
   });
 
@@ -132,7 +132,7 @@ export async function createStockCount(
 
     // Get weighted average cost for valuation
     const wac = await getWeightedAverageCost(product.id, businessId, warehouseId, tx);
-    const unitCost = wac > 0 ? wac : product.purchasePrice;
+    const unitCost = wac > 0 ? wac : product.standardCost;
 
     items.push({
       productId: product.id,

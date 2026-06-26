@@ -38,7 +38,7 @@ export default function InventoryPage() {
   const categories = ["All", ...(profile ? profile.productCategories : ["Grains", "Pulses", "Edible Oil", "Spices", "Construction"]), "Other"];
   const totalProducts = paged?.total ?? 0;
   const lowStock = paged?.stats?.lowStock ?? products.filter((p: any) => p.stock <= p.minStock).length;
-  const totalValue = paged?.stats?.totalValue ?? products.reduce((s: number, p: any) => s + Math.max(0, p.stock) * p.purchasePrice, 0);
+  const totalValue = paged?.stats?.totalValue ?? products.reduce((s: number, p: any) => s + Math.max(0, p.stock) * p.standardCost, 0);
   const totalSellValue = paged?.stats?.totalSellValue ?? products.reduce((s: number, p: any) => s + Math.max(0, p.stock) * p.sellingPrice, 0);
 
   const handleDelete = async () => {
@@ -59,7 +59,7 @@ export default function InventoryPage() {
       Category: p.category,
       Stock: p.stock,
       "Min Stock": p.minStock,
-      "Purchase Price": p.purchasePrice,
+      "Standard Cost": p.standardCost,
       "Selling Price": p.sellingPrice,
       Supplier: p.supplier || "",
       Status: p.stock <= 0 ? "Out of Stock" : p.stock <= p.minStock ? "Low Stock" : "In Stock"
@@ -111,7 +111,7 @@ export default function InventoryPage() {
           <table className="w-full min-w-[720px]">
             <thead>
               <tr className="border-b border-primary/10">
-                {["SKU", "Product Name", "Category", "Stock", "Purchase Price", "Selling Price", "Margin", "Supplier", "Status", ""].map((h) => (
+                {["SKU", "Product Name", "Category", "Stock", "Standard Cost", "Selling Price", "Margin", "Supplier", "Status", ""].map((h) => (
                   <th key={h} className="text-left px-5 py-3 text-primary/40 text-xs font-medium whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -122,8 +122,8 @@ export default function InventoryPage() {
               ) : products.length === 0 ? (
                 <tr><td colSpan={10} className="text-center py-12 text-primary/40 text-sm">No products found. Click "Add Product" to get started.</td></tr>
               ) : products.map((product: any) => {
-                const margin = product.purchasePrice > 0
-                  ? (((product.sellingPrice - product.purchasePrice) / product.purchasePrice) * 100).toFixed(1)
+                const margin = product.standardCost > 0
+                  ? (((product.sellingPrice - product.standardCost) / product.standardCost) * 100).toFixed(1)
                   : "0.0";
                 const isOut = product.stock <= 0;
                 const isLow = product.stock > 0 && product.stock <= product.minStock;
@@ -143,7 +143,7 @@ export default function InventoryPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-primary/40 text-sm">{formatCurrency(product.purchasePrice)}</td>
+                    <td className="px-5 py-3.5 text-primary/40 text-sm">{formatCurrency(product.standardCost)}</td>
                     <td className="px-5 py-3.5 text-primary text-sm font-medium">{formatCurrency(product.sellingPrice)}</td>
                     <td className="px-5 py-3.5"><span className="text-emerald-400 text-sm font-medium">+{margin}%</span></td>
                     <td className="px-5 py-3.5 text-primary/40 text-xs">{product.supplier || "—"}</td>

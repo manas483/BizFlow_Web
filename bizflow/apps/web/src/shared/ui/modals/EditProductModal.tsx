@@ -8,6 +8,7 @@ import { Package } from "lucide-react";
 import { useUpdateProduct } from "@/shared/hooks/useProducts";
 import { useBusiness } from "@/shared/hooks/useBusiness";
 import { getBusinessProfile } from "@/shared/lib/business-intelligence";
+import { formatCurrency } from "@/shared/lib/utils";
 
 const FALLBACK_CATEGORIES = [
   { value: "Grains", label: "Grains" },
@@ -22,9 +23,10 @@ export default function EditProductModal({ product, onClose }: { product: any; o
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "", sku: "", category: "Other", unit: "pcs", unitsPerBag: "1", stock: "", minStock: "",
-    basePurchasePrice: "", transportCost: "", purchasePrice: "", sellingPrice: "", supplier: "",
+    standardCost: "", sellingPrice: "", supplier: "",
     hsnCode: "", gstRate: "0",
     purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "",
+    purchaseCost: "0", additionalCost: "0", landedCost: "0", activeLayersCount: 0, activeLayerQty: 0
   });
 
   const { data: business } = useBusiness();
@@ -60,9 +62,7 @@ export default function EditProductModal({ product, onClose }: { product: any; o
         unitsPerBag: String(product.unitsPerBag ?? 1),
         stock: String(product.stock ?? 0),
         minStock: String(product.minStock ?? 5),
-        basePurchasePrice: String(product.basePurchasePrice ?? 0),
-        transportCost: String(product.transportCost ?? 0),
-        purchasePrice: String(product.purchasePrice ?? 0),
+        standardCost: String(product.standardCost ?? 0),
         sellingPrice: String(product.sellingPrice ?? 0),
         supplier: product.supplier ?? "",
         hsnCode: product.hsnCode ?? "",
@@ -70,18 +70,16 @@ export default function EditProductModal({ product, onClose }: { product: any; o
         purchaseDate: product.purchaseDate ? new Date(product.purchaseDate).toISOString().split('T')[0] : "",
         purchaseFrom: product.purchaseFrom ?? "",
         purchaseInvoiceNo: product.purchaseInvoiceNo ?? "",
+        purchaseCost: String(product.purchaseCost ?? 0),
+        additionalCost: String(product.additionalCost ?? 0),
+        landedCost: String(product.landedCost ?? 0),
+        activeLayersCount: Number(product.activeLayersCount ?? 0),
+        activeLayerQty: Number(product.activeLayerQty ?? 0),
       });
     }
   }, [product]);
 
-  // Auto-calculate purchase price (After) = basePurchasePrice (Before) + transportCost
-  useEffect(() => {
-    const base = parseFloat(form.basePurchasePrice) || 0;
-    const transport = parseFloat(form.transportCost) || 0;
-    if (base > 0 || transport > 0) {
-      setForm(f => ({ ...f, purchasePrice: (base + transport).toFixed(2) }));
-    }
-  }, [form.basePurchasePrice, form.transportCost]);
+
 
   const updateProduct = useUpdateProduct();
 
@@ -98,9 +96,7 @@ export default function EditProductModal({ product, onClose }: { product: any; o
         unitsPerBag: parseInt(form.unitsPerBag) || 1,
         stock: parseInt(form.stock) || 0,
         minStock: parseInt(form.minStock) || 5,
-        basePurchasePrice: parseFloat(form.basePurchasePrice) || 0,
-        transportCost: parseFloat(form.transportCost) || 0,
-        purchasePrice: parseFloat(form.purchasePrice) || 0,
+        standardCost: parseFloat(form.standardCost) || 0,
         sellingPrice: parseFloat(form.sellingPrice) || 0,
         supplier: form.supplier || null,
         hsnCode: form.hsnCode || null,
@@ -169,34 +165,36 @@ export default function EditProductModal({ product, onClose }: { product: any; o
           </FormField>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-          <FormField label="Purchase Cost (₹/Unit)">
-            <ModalInput type="number" min="0" step="any" value={form.basePurchasePrice}
-              onChange={(e) => {
-                const b = e.target.value;
-                setForm({ ...form, basePurchasePrice: b, purchasePrice: String((Number(b) || 0) + (Number(form.transportCost) || 0)) });
-              }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <FormField label="Current Standard Cost (WAC) (Read Only)">
+            <div className="bg-primary/5 px-3.5 py-2.5 rounded-xl border border-primary/10 text-primary font-semibold text-sm">
+              {formatCurrency(Number(form.standardCost))}
+            </div>
+            <p className="text-[10px] text-primary/30 mt-0.5">Used for valuation fallback only.</p>
           </FormField>
-          <FormField label="Additional Cost (₹/Unit)">
-            <ModalInput type="number" min="0" step="any" value={form.transportCost}
-              onChange={(e) => {
-                const t = e.target.value;
-                setForm({ ...form, transportCost: t, purchasePrice: String((Number(form.basePurchasePrice) || 0) + (Number(t) || 0)) });
-              }} />
-          </FormField>
-          <FormField label="Landed Cost (₹/Unit)">
-            <ModalInput type="number" min="0" step="any" value={form.purchasePrice}
-              onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} />
-            <p className="text-[10px] text-primary/30 mt-0.5">Purchase Cost + Additional Cost</p>
-          </FormField>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4">
           <FormField label="Selling Price (₹/Unit)">
             <ModalInput type="number" min="0" step="any" value={form.sellingPrice}
               onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} />
           </FormField>
         </div>
+
+        {/* Dynamic Averages Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <FormField label="Purchase Cost (Avg)">
+            <ModalInput disabled className="opacity-60 cursor-not-allowed" value={formatCurrency(Number(form.purchaseCost))} onChange={() => {}} />
+          </FormField>
+          <FormField label="Additional Cost (Avg)">
+            <ModalInput disabled className="opacity-60 cursor-not-allowed" value={formatCurrency(Number(form.additionalCost))} onChange={() => {}} />
+          </FormField>
+          <FormField label="Landed Cost (Avg)">
+            <ModalInput disabled className="opacity-60 cursor-not-allowed" value={formatCurrency(Number(form.landedCost))} onChange={() => {}} />
+          </FormField>
+        </div>
+        {Number(form.activeLayersCount) > 0 ? (
+          <p className="text-[11px] text-primary/40 mt-1">
+            Calculated from {form.activeLayersCount} active inventory layer{Number(form.activeLayersCount) > 1 ? 's' : ''} ({form.activeLayerQty} units)
+          </p>
+        ) : null}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="HSN/SAC Code">

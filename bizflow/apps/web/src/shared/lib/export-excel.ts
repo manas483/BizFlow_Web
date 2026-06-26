@@ -160,7 +160,7 @@ function generateStockRegisterData(data: any) {
           const inMov = evs.in[i];
           
           let purchasedQty: any = inMov ? inMov.quantity : '';
-          let purchasedRate: any = inMov ? (p.purchasePrice || '') : '';
+          let purchasedRate: any = inMov ? (p.standardCost || '') : '';
           let fromWhom: any = inMov ? (inMov.notes || 'Supplier') : '';
           let challan: any = inMov ? (inMov.referenceId || '') : '';
           

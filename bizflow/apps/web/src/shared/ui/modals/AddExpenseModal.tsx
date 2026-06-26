@@ -4,7 +4,7 @@ import { CustomSelect } from '@/shared/ui/ui/CustomSelect';
 import { CustomMultiSelect } from '@/shared/ui/ui/CustomMultiSelect';
 import { useProducts } from '@/shared/hooks/useProducts';
 import { useBusiness } from '@/shared/hooks/useBusiness';
-import { useExpenses } from '@/shared/hooks/useExpenses';
+import { useCreateExpense } from '@/shared/hooks/useExpenses';
 import { toast } from 'react-hot-toast';
 import { Receipt } from 'lucide-react';
 import { getBusinessProfile } from '@/shared/lib/business-intelligence';
@@ -20,9 +20,10 @@ const CATEGORIES = [
 ];
 
 export function AddExpenseModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { products } = useProducts();
-  const { business } = useBusiness();
-  const { createExpense } = useExpenses();
+  const productsQuery = useProducts();
+  const products = productsQuery.data?.data ?? [];
+  const { data: business } = useBusiness();
+  const createExpense = useCreateExpense();
 
   const [form, setForm] = useState({
     category: 'Misc',
@@ -53,7 +54,7 @@ export function AddExpenseModal({ open, onClose }: { open: boolean; onClose: () 
     }
   };
 
-  const invoices = Array.from(new Set(products.map(p => p.purchaseInvoiceNo).filter(Boolean))) as string[];
+  const invoices = Array.from(new Set(products.map((p: any) => p.purchaseInvoiceNo).filter(Boolean))) as string[];
   const profile = business ? getBusinessProfile(business.businessType) : null;
   const categoriesList = profile 
     ? Array.from(new Set([...profile.expenseCategories, 'Misc'])).map(c => ({ value: c, label: c }))

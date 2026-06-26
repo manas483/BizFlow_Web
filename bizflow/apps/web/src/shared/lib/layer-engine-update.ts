@@ -1,4 +1,7 @@
 
+import { prisma } from './db';
+import { getWeightedAverageCost } from './layer-engine';
+
 /**
  * Update Product WAC by recalculating from active layers.
  */
@@ -10,7 +13,7 @@ export async function recalculateProductWAC(
   const newWAC = await getWeightedAverageCost(itemId, businessId, undefined, tx);
   await tx.product.update({
     where: { id: itemId },
-    data: { purchasePrice: newWAC }
+    data: { standardCost: newWAC }
   });
 }
 

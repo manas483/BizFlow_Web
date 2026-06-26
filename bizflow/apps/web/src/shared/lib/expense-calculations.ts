@@ -76,7 +76,7 @@ export async function reverseExpenseAllocation(expenseId: string, businessId: st
       layerId: history.layerId,
       expenseType: 'reversal',
       amount: -history.newAmount, // negative amount to reverse
-      remarks: `Reversed from Expense ${expense.id}`,
+      remarks: `Reversed from Expense ${expenseId}`,
       businessId,
       tx
     });

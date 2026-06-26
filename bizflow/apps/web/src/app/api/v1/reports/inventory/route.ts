@@ -20,11 +20,11 @@ export async function GET(req: NextRequest) {
 
     const products = await prisma.product.findMany({
       where:  { businessId: biz },
-      select: { id: true, name: true, sku: true, category: true, stock: true, minStock: true, purchasePrice: true, sellingPrice: true },
+      select: { id: true, name: true, sku: true, category: true, stock: true, minStock: true, standardCost: true, sellingPrice: true },
     });
 
     const lowStockItems      = products.filter((p) => p.stock <= p.minStock).slice(0, maxLow);
-    const inventoryValuation = products.reduce((acc, p) => acc + (Math.max(0, p.stock) * p.purchasePrice), 0);
+    const inventoryValuation = products.reduce((acc, p) => acc + (Math.max(0, p.stock) * p.standardCost), 0);
     const totalStockUnits    = products.reduce((acc, p) => acc + Math.max(0, p.stock), 0);
 
     return ok({

@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { fetcher } from './useDashboard'; // Assume fetcher is exported or standard
+
 
 export interface InventoryHealthMetrics {
   totalLayers: number;

@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
       prisma.inventoryLayer.findMany({ where: { businessId }, select: { id: true } }),
       prisma.product.findMany({
         where: { businessId },
-        select: { id: true, stock: true, purchasePrice: true }
+        select: { id: true, stock: true, standardCost: true }
       })
     ]);
 
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
       const wac = layerSum > 0 ? layerVal / layerSum : 0;
 
       const stockDrift = Math.abs(p.stock - layerSum) > 0.001;
-      const wacDrift = Math.abs(p.purchasePrice - round4(wac)) > 0.001;
+      const wacDrift = Math.abs(p.standardCost - round4(wac)) > 0.001;
 
       if (stockDrift || wacDrift) {
         driftProducts++;

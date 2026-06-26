@@ -134,9 +134,7 @@ model Product {
   minStock          Int                @default(5)
   reorderLevel      Int                @default(0)
   reservedStock     Int                @default(0)
-  purchasePrice     Float
-  basePurchasePrice Float              @default(0)
-  transportCost     Float              @default(0)
+  standardCost      Float              @default(0)
   sellingPrice      Float
   supplier          String?
   preferredSupplier String?

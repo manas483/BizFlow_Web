@@ -22,7 +22,7 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: "", sku: "", category: "Grains", unit: "pcs", noOfBags: "", unitsPerBag: "1", stock: "", minStock: "",
-    basePurchasePrice: "", transportCost: "", purchasePrice: "", sellingPrice: "", supplier: "",
+    standardCost: "", sellingPrice: "", supplier: "",
     hsnCode: "", gstRate: "0",
     purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "",
     reorderLevel: "", preferredSupplier: "",
@@ -59,14 +59,7 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
     }));
   };
 
-  // Auto-calculate purchase price (After) = basePurchasePrice (Before) + transportCost
-  useEffect(() => {
-    const base = parseFloat(form.basePurchasePrice) || 0;
-    const transport = parseFloat(form.transportCost) || 0;
-    if (base > 0 || transport > 0) {
-      setForm(f => ({ ...f, purchasePrice: (base + transport).toFixed(2) }));
-    }
-  }, [form.basePurchasePrice, form.transportCost]);
+
 
   const createProduct = useCreateProduct();
   const { data: business } = useBusiness();
@@ -113,9 +106,7 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
         stock: parseInt(form.stock) || 0,
         minStock: parseInt(form.minStock) || 0,
         unitsPerBag: parseInt(form.unitsPerBag) || 1,
-        basePurchasePrice: parseFloat(form.basePurchasePrice) || 0,
-        transportCost: parseFloat(form.transportCost) || 0,
-        purchasePrice: parseFloat(form.purchasePrice) || 0,
+        standardCost: parseFloat(form.standardCost) || 0,
         sellingPrice: parseFloat(form.sellingPrice) || 0,
         gstRate: parseFloat(form.gstRate) || 0,
         purchaseDate: form.purchaseDate || null,
@@ -124,7 +115,7 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
         reorderLevel: parseInt(form.reorderLevel) || 0,
         preferredSupplier: form.preferredSupplier || null,
       });
-      setForm({ name: "", sku: "", category: "Grains", unit: "pcs", noOfBags: "", unitsPerBag: "1", stock: "", minStock: "", basePurchasePrice: "", transportCost: "", purchasePrice: "", sellingPrice: "", supplier: "", hsnCode: "", gstRate: "0", purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "", reorderLevel: "", preferredSupplier: "" });
+      setForm({ name: "", sku: "", category: "Grains", unit: "pcs", noOfBags: "", unitsPerBag: "1", stock: "", minStock: "", standardCost: "", sellingPrice: "", supplier: "", hsnCode: "", gstRate: "0", purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "", reorderLevel: "", preferredSupplier: "" });
       onClose();
     } catch (error: any) {
       console.error(error);
@@ -210,29 +201,12 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
           </FormField>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
-          <FormField label="Purchase Cost (₹/Unit)">
-            <ModalInput type="number" min="0" step="any" placeholder="0.00" value={form.basePurchasePrice}
-              onChange={(e) => {
-                const b = e.target.value;
-                setForm({ ...form, basePurchasePrice: b, purchasePrice: String((Number(b) || 0) + (Number(form.transportCost) || 0)) });
-              }} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <FormField label="Standard Cost (₹/Unit)">
+            <ModalInput type="number" min="0" step="any" placeholder="0.00" value={form.standardCost}
+              onChange={(e) => setForm({ ...form, standardCost: e.target.value })} />
+            <p className="text-[10px] text-primary/30 mt-0.5">Used for valuation fallback only.</p>
           </FormField>
-          <FormField label="Additional Cost (₹/Unit)">
-            <ModalInput type="number" min="0" step="any" placeholder="0.00" value={form.transportCost}
-              onChange={(e) => {
-                const t = e.target.value;
-                setForm({ ...form, transportCost: t, purchasePrice: String((Number(form.basePurchasePrice) || 0) + (Number(t) || 0)) });
-              }} />
-          </FormField>
-          <FormField label="Landed Cost (₹/Unit)">
-            <ModalInput type="number" min="0" step="any" placeholder="Auto-calculated" value={form.purchasePrice}
-              onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} />
-            <p className="text-[10px] text-primary/30 mt-0.5">Purchase Cost + Additional Cost</p>
-          </FormField>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4">
           <FormField label="Selling Price (₹/Unit)">
             <ModalInput type="number" min="0" step="any" placeholder="0.00" value={form.sellingPrice}
               onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} />
