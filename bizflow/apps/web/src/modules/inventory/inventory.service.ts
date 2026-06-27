@@ -4,13 +4,59 @@ import { createLayerSafe } from '@/shared/lib/layer-engine';
 import { CostingService } from './costing.service';
 
 export class InventoryService {
-  static async getProducts(businessId: string, search?: string | null, category?: string | null, page = 1, limit = 25) {
+  static async getProducts(
+    businessId: string,
+    search?: string | null,
+    category?: string | null,
+    page = 1,
+    limit = 25,
+    isPicker = false
+  ) {
     const skip = (page - 1) * limit;
     const where = {
       businessId,
-      ...(search ? { name: { contains: search, mode: 'insensitive' as const } } : {}),
+      ...(search ? {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { sku: { contains: search, mode: 'insensitive' as const } },
+          { hsnCode: { contains: search, mode: 'insensitive' as const } },
+          { category: { contains: search, mode: 'insensitive' as const } }
+        ]
+      } : {}),
       ...(category ? { category } : {}),
     };
+
+    if (isPicker) {
+      const [products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            sku: true,
+            category: true,
+            stock: true,
+            minStock: true,
+            sellingPrice: true,
+            gstRate: true,
+            hsnCode: true,
+            unit: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.product.count({ where }),
+      ]);
+
+      return {
+        data: products,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
+    }
 
     const [products, total, allFiltered] = await Promise.all([
       prisma.product.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),

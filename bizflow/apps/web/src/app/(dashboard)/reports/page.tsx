@@ -8,7 +8,7 @@ import { Button } from "@/shared/ui/ui/Button";
 import { useReports } from "@/shared/hooks/useReports";
 import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
 import { formatCurrency, exportToCSV } from "@/shared/lib/utils";
-import { BarChart2, TrendingUp, TrendingDown, DollarSign, Package, Users, Percent, Download, FileText, RefreshCw, AlertTriangle, Scale, Sparkles, Brain, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { BarChart2, TrendingUp, TrendingDown, IndianRupee, Package, Users, Percent, Download, FileText, RefreshCw, AlertTriangle, Scale, Sparkles, Brain, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { trackActivity } from "@/shared/hooks/useRecommendations";
 import { useAiForecast } from "@/shared/hooks/useAiForecast";
 import { useAutomationSettings } from "@/shared/hooks/useAutomationSettings";
@@ -273,7 +273,7 @@ export default function ReportsPage() {
             <StatCard
               label="Net Profit"
               value={formatCurrency(summary.netProfit)}
-              icon={<DollarSign size={18} />}
+              icon={<IndianRupee size={18} />}
               color="emerald"
             />
             <StatCard

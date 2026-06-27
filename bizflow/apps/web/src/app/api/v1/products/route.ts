@@ -29,9 +29,11 @@ export async function GET(req: NextRequest) {
     const search   = sp.get('search') ?? '';
     const category = sp.get('category') ?? '';
     const lowStock = sp.get('lowStock') === 'true';
+    const includeInactive = sp.get('includeInactive') === 'true';
 
     const where: any = {
       businessId: session.user.businessId,
+      ...(includeInactive ? {} : { active: true }),
       ...(search   ? { name: { contains: search, mode: 'insensitive' } } : {}),
       ...(category ? { category } : {}),
     };

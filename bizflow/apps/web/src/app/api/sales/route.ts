@@ -8,6 +8,7 @@ import { extractStateCodeFromGST } from '@/shared/lib/gst-engine';
 import { calculateInvoiceTotal } from '@/shared/lib/invoice-engine';
 import { adjustStockWithLayers } from '@/shared/lib/stock-engine';
 import { postSaleJournal } from '@/shared/lib/auto-journal';
+import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
 
 export async function GET(req: NextRequest) {
   try {
@@ -106,6 +107,7 @@ export async function POST(req: NextRequest) {
       for (const item of items) {
         const product = await tx.product.findFirst({ where: { id: item.productId, businessId: session.user.businessId } });
         if (!product) throw new Error(`Product ${item.productId} not found`);
+        if (!product.active) throw new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`);
         productMap[item.productId] = product;
         if (product.stock < item.qty) throw new Error(`Insufficient stock for ${product.name}`);
         invoiceLines.push({
@@ -166,15 +168,19 @@ export async function POST(req: NextRequest) {
           invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
           businessId: session.user.businessId,
           items: {
-              create: items.map((item: any) => ({
+            create: items.map((item: any) => {
+              const product = productMap[item.productId];
+              return {
                 productId: item.productId,
                 qty: item.qty,
                 price: item.price,
                 purchasePrice: 0, // Will be updated after layer consumption
                 discount: parseFloat(item.discount) || 0,
-              hsnCode: item.hsnCode,
-              gstRate: parseFloat(item.gstRate) || 0
-            }))
+                hsnCode: item.hsnCode,
+                gstRate: parseFloat(item.gstRate) || 0,
+                ...buildProductSnapshot(product),
+              };
+            })
           }
         }
       });

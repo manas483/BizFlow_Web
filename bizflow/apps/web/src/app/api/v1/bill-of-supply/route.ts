@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 /**
- * GET  /api/v1/bill-of-supply   — paginated bill of supply list
- * POST /api/v1/bill-of-supply   — create bill of supply
+ * GET  /api/v1/bill-of-supply  — paginated bill of supply list
+ * POST /api/v1/bill-of-supply  — create bill of supply (collision-proof)
  */
 
 import { NextRequest }            from 'next/server';
@@ -9,6 +9,8 @@ import { prisma }                 from '@/shared/lib/db';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { billOfSupplySchema }     from '@/shared/lib/validations';
 import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/shared/lib/response';
+import { z } from 'zod';
+import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,26 +18,27 @@ export async function GET(req: NextRequest) {
     const sp      = new URL(req.url).searchParams;
     const { page, limit, skip, sortBy, sortDir } = parsePagination(sp);
     const search = sp.get('search') ?? '';
-    const status = sp.get('status') ?? '';
-    const from   = sp.get('from');
-    const to     = sp.get('to');
 
     const where: any = {
       businessId: session.user.businessId,
-      ...(search ? { OR: [{ billNo: { contains: search, mode: 'insensitive' as const } }, { customer: { name: { contains: search, mode: 'insensitive' as const } } }] } : {}),
-      ...(status ? { status } : {}),
-      ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59') } : {}) } } : {}),
+      ...(search ? {
+        OR: [
+          { billNo:   { contains: search, mode: 'insensitive' as const } },
+          { customer: { name: { contains: search, mode: 'insensitive' as const } } },
+        ],
+      } : {}),
     };
 
-    const allowedSort = ['billNo', 'total', 'status', 'createdAt'];
+    const allowedSort = ['billNo', 'total', 'createdAt'];
     const orderField  = allowedSort.includes(sortBy) ? sortBy : 'createdAt';
 
     const [data, total] = await Promise.all([
       prisma.billOfSupply.findMany({
         where,
-        include: { customer: true, items: { include: { product: { select: { id: true, name: true, sku: true } } } } },
-        orderBy: { [orderField]: sortDir },
-        skip, take: limit,
+        include:  { customer: true, items: { include: { product: true } } },
+        orderBy:  { [orderField]: sortDir },
+        skip,
+        take: limit,
       }),
       prisma.billOfSupply.count({ where }),
     ]);
@@ -73,8 +76,24 @@ export async function POST(req: NextRequest) {
     const billNo  = `${prefix}${String(nextNum).padStart(3, '0')}`;
 
     const productIds = items.map((i: any) => i.productId);
-    const products   = await prisma.product.findMany({ where: { id: { in: productIds } } });
-    const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
+    const products   = await prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        businessId: session.user.businessId
+      }
+    });
+    const productMap: Record<string, any> = Object.fromEntries(products.map((p) => [p.id, p]));
+
+    // Check if any product is not found or is archived/inactive
+    for (const item of items) {
+      const prod = productMap[item.productId];
+      if (!prod) {
+        throw new Error(`Product ${item.productId} not found or access denied`);
+      }
+      if (!prod.active) {
+        throw new Error(`Product "${prod.name}" is archived and cannot be used in new transactions.`);
+      }
+    }
 
     let total = 0;
     for (const item of items) total += item.qty * item.price;
@@ -86,20 +105,23 @@ export async function POST(req: NextRequest) {
         billNo, customerId, total, paid: paidAmt, status,
         supplyType: supplyType || 'exempt', notes, businessId: session.user.businessId,
         items: {
-          create: items.map((i: any) => ({
-            productId: i.productId, qty: i.qty, price: i.price,
-            purchasePrice: (productMap as any)[i.productId]?.purchasePrice || 0,
-            hsnCode: i.hsnCode || null,
-          })),
+          create: items.map((i: any) => {
+            const product = productMap[i.productId];
+            return {
+              productId: i.productId, qty: i.qty, price: i.price,
+              purchasePrice: product?.purchasePrice || 0,
+              hsnCode: i.hsnCode || null,
+              ...buildProductSnapshot(product),
+            };
+          }),
         },
       },
     });
 
     return created(bill);
-  } catch (e) {
+  } catch (e: any) {
     if (e instanceof AuthError) return e.response;
     console.error(e);
-    return internalError();
+    return internalError(e.message || 'Internal Server Error');
   }
 }
-

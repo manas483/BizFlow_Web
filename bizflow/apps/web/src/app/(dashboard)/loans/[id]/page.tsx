@@ -8,7 +8,7 @@ import { Badge } from "@/shared/ui/ui/Badge";
 import { Button } from "@/shared/ui/ui/Button";
 import { useLoan, useUpdateLoan } from "@/shared/hooks/useLoans";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { Landmark, ArrowLeft, CircleDollarSign, ShieldAlert, CheckCircle2, ListOrdered, Receipt, Scale, FileText } from "lucide-react";
+import { Landmark, ArrowLeft, IndianRupee, ShieldAlert, CheckCircle2, ListOrdered, Receipt, Scale, FileText } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import RecordLoanPaymentModal from "@/shared/ui/modals/RecordLoanPaymentModal";
@@ -102,7 +102,7 @@ export default function LoanDetailPage({ params }: { params: Promise<{ id: strin
         <div className="flex gap-2 items-center">
           {(loan.status === "ACTIVE" || loan.status === "OVERDUE") && (
             <>
-              <Button size="sm" icon={<CircleDollarSign size={14} />} onClick={() => setIsPaymentOpen(true)}>Record Repayment</Button>
+              <Button size="sm" icon={<IndianRupee size={14} />} onClick={() => setIsPaymentOpen(true)}>Record Repayment</Button>
               <Button size="sm" variant="danger" icon={<Landmark size={14} />} onClick={() => setIsForeclosureOpen(true)}>Foreclosure Calc</Button>
             </>
           )}

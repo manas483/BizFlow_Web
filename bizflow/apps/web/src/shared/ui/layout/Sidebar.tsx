@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { hasPermission, Permission } from "@/shared/lib/permissions";
 import {
   LayoutDashboard, Package, ShoppingCart, Users, UserCheck,
-  Receipt, BarChart3, Bell, Settings, LogOut, ChevronLeft, ChevronRight, Store,
+  ReceiptIndianRupee, BarChart3, Bell, Settings, LogOut, ChevronLeft, ChevronRight, Store,
   CalendarCheck, Calculator, Landmark, Shield, FileText, Activity,
 } from "lucide-react";
 import { cn, getInitials } from "@/shared/lib/utils";
@@ -20,7 +20,7 @@ const navItems: { href: string; icon: any; label: string; permission: Permission
   { href: "/sales", icon: ShoppingCart, label: "Sales & Billing", permission: "manage_sales" },
   { href: "/customers", icon: Users, label: "Customers", permission: "manage_customers" },
   { href: "/employees", icon: UserCheck, label: "Employees", permission: "manage_employees", adminOnly: true },
-  { href: "/expenses", icon: Receipt, label: "Expenses", permission: "manage_billing" },
+  { href: "/expenses", icon: ReceiptIndianRupee, label: "Expenses", permission: "manage_billing" },
   { href: "/reports", icon: BarChart3, label: "Reports", permission: "view_reports" },
   { href: "/my-attendance", icon: CalendarCheck, label: "My Attendance", permission: "view_dashboard", adminOnly: false },
   { href: "/accounting", icon: Calculator, label: "Accounting", permission: "manage_accounting" },

@@ -37,7 +37,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── Hardening: Enforce 5MB limit ──
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: "File size exceeds the 5MB limit." }, { status: 400 });
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // ── Hardening: Magic Bytes Check (%PDF) ──
+    if (buffer.length < 4 || buffer[0] !== 0x25 || buffer[1] !== 0x50 || buffer[2] !== 0x44 || buffer[3] !== 0x46) {
+      return NextResponse.json({ error: "Invalid PDF file: Missing %PDF magic bytes." }, { status: 400 });
+    }
 
     // ── Step 1: Train the template ──
     console.log(`[TrainTemplate] Training on: ${file.name}`);

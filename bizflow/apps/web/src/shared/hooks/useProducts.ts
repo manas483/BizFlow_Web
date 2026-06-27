@@ -1,14 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-export function useProducts(search?: string, category?: string, page = 1, limit = 25) {
+export function useProducts(search?: string, category?: string, page = 1, limit = 25, isPicker = false) {
   return useQuery({
-    queryKey: ["products", search, category, page, limit],
+    queryKey: ["products", search, category, page, limit, isPicker],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.append("search", search);
       if (category && category !== "All" && category !== "All Categories") params.append("category", category);
       params.append("page", String(page));
       params.append("limit", String(limit));
+      if (isPicker) params.append("picker", "true");
       const res = await fetch(`/api/inventory/products?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch products");
       return res.json() as Promise<{ data: any[]; total: number; page: number; limit: number; totalPages: number; stats?: { lowStock: number; totalValue: number; totalSellValue: number } }>;

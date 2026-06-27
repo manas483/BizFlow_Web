@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import Modal, { FormField, ModalInput, ModalFooter, ModalSelect } from "@/shared/ui/ui/Modal";
-import { DollarSign } from "lucide-react";
+import { IndianRupee } from "lucide-react";
 import { useCreateCashBookEntry, useAccounts } from "@/shared/hooks/useAccounting";
 
 export default function AddCashBookEntryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -63,7 +63,7 @@ export default function AddCashBookEntryModal({ open, onClose }: { open: boolean
   return (
     <Modal open={open} onClose={onClose}
       title="Add Cash Book Entry" subtitle="Record physical cash receipts or payments"
-      icon={<DollarSign size={18} />} iconColor="bg-violet-500/20 text-violet-400">
+      icon={<IndianRupee size={18} />} iconColor="bg-violet-500/20 text-violet-400">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Entry Date" required>

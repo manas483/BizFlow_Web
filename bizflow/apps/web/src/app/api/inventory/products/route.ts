@@ -11,11 +11,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
     const category = searchParams.get('category');
+    const isPicker = searchParams.get('picker') === 'true' || searchParams.get('purpose') === 'product-picker';
     const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1', 10));
-    const limit = Math.min(100, parseInt(searchParams.get('limit') ?? '25', 10));
-    const skip  = (page - 1) * limit;
+    const limit = Math.min(isPicker ? 5000 : 100, parseInt(searchParams.get('limit') ?? (isPicker ? '5000' : '25'), 10));
 
-    const result = await InventoryService.getProducts(session.user.businessId, search, category, page, limit);
+    const result = await InventoryService.getProducts(session.user.businessId, search, category, page, limit, isPicker);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AuthError) return error.response;
@@ -23,7 +23,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-
 
 export async function POST(req: NextRequest) {
   try {
@@ -42,5 +41,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-
-

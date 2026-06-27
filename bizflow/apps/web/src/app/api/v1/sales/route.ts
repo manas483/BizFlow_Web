@@ -12,6 +12,7 @@ import { ok, created, validationError, businessRule, internalError, parsePaginat
 import { extractStateCodeFromGST } from '@/shared/lib/gst-engine';
 import { calculateInvoiceTotal } from '@/shared/lib/invoice-engine';
 import { z } from 'zod';
+import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
 
 export async function GET(req: NextRequest) {
   try {
@@ -94,6 +95,7 @@ export async function POST(req: NextRequest) {
       for (const item of items) {
         const product = await tx.product.findFirst({ where: { id: item.productId, businessId: biz } });
         if (!product) throw new Error(`Product ${item.productId} not found`);
+        if (!product.active) throw Object.assign(new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`), { code: 'BUSINESS_RULE' });
         if (product.stock < item.qty) throw Object.assign(new Error(`Insufficient stock for "${product.name}"`), { code: 'BUSINESS_RULE' });
         productMap[item.productId] = product;
         invoiceLines.push({
@@ -133,7 +135,21 @@ export async function POST(req: NextRequest) {
           invoiceNo, customerId, total, paid: paidAmt, status: saleStatus,
           placeOfSupply, reverseCharge: reverseCharge === true, notes,
           businessId: biz,
-          items: { create: enriched.map((i: any) => ({ productId: i.productId, qty: i.qty, price: i.price, purchasePrice: i.purchasePrice, discount: parseFloat(i.discount) || 0, hsnCode: i.hsnCode, gstRate: parseFloat(i.gstRate) || 0 })) },
+          items: {
+            create: enriched.map((i: any) => {
+              const product = productMap[i.productId];
+              return {
+                productId: i.productId,
+                qty: i.qty,
+                price: i.price,
+                purchasePrice: i.purchasePrice,
+                discount: parseFloat(i.discount) || 0,
+                hsnCode: i.hsnCode,
+                gstRate: parseFloat(i.gstRate) || 0,
+                ...buildProductSnapshot(product),
+              };
+            })
+          },
         },
         include: { customer: true, items: true },
       });

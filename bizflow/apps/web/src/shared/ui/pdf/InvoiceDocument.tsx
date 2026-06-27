@@ -178,8 +178,8 @@ export const InvoiceDocument = ({ sale, copyLabel = '' }: { sale: any; copyLabel
   sale.items.forEach((item: any) => {
     const disc = item.discount || 0;
     const grossAmt = item.qty * item.price - disc;
-    const rate = item.gstRate || 0;
-    const key = item.hsnCode || String(rate);
+    const rate = item.productGstRate ?? item.gstRate ?? 0;
+    const key = item.productHsnCode || item.hsnCode || String(rate);
     totalQty += item.qty;
 
     // Back-calculate taxable base when prices are GST-inclusive
@@ -332,8 +332,8 @@ export const InvoiceDocument = ({ sale, copyLabel = '' }: { sale: any; copyLabel
             {sale.items.map((item: any, idx: number) => {
               const disc = item.discount || 0;
               const grossAmt = item.qty * item.price - disc;
-              const unit = item.product?.unit || 'PCS';
-              const rate = item.gstRate || 0;
+              const unit = item.productUnit || item.product?.unit || 'PCS';
+              const rate = item.productGstRate ?? item.gstRate ?? 0;
 
               // When GST-inclusive: back-calculate the base (excl. GST) for Rate & Amount columns.
               // We round to 2 decimals so that Rate * Qty matches the displayed Amount.
@@ -350,8 +350,8 @@ export const InvoiceDocument = ({ sale, copyLabel = '' }: { sale: any; copyLabel
               return (
                 <View key={item.id} style={s.tr}>
                   <Text style={[s.td, s.wSl, { textAlign: 'center' }]}>{idx + 1}</Text>
-                  <Text style={[s.td, s.wDesc]}>{item.product?.name}</Text>
-                  <Text style={[s.td, s.wHsn]}>{item.hsnCode || ''}</Text>
+                  <Text style={[s.td, s.wDesc]}>{item.productName || item.product?.name}</Text>
+                  <Text style={[s.td, s.wHsn]}>{item.productHsnCode || item.hsnCode || ''}</Text>
                   <Text style={[s.td, s.wQty]}>{item.qty} {unit}</Text>
                   <Text style={[s.td, s.wRate]}>{baseUnitPrice.toFixed(2)}</Text>
                   <Text style={[s.td, s.wDisc]}>{disc.toFixed(2)}</Text>

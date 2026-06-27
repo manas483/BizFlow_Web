@@ -12,6 +12,8 @@ import { useBusiness } from "@/shared/hooks/useBusiness";
 import { formatCurrency } from "@/shared/lib/utils";
 import AddCustomerModal from "@/shared/ui/modals/AddCustomerModal";
 import AddProductModal from "@/shared/ui/modals/AddProductModal";
+import ProductPickerModal from "@/shared/ui/ProductPicker/ProductPickerModal";
+import { PRODUCT_PICKER_MAX_CACHE } from "@/shared/ui/ProductPicker/constants";
 
 /* ── Indian States for Place of Supply ─────────────────── */
 const INDIAN_STATES = [
@@ -24,97 +26,7 @@ const INDIAN_STATES = [
   "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
 ];
 
-/** Product picker with fixed-position panel — escapes modal overflow:hidden clipping */
-function ProductPicker({
-  value, onChange, products,
-}: {
-  value: string;
-  onChange: (id: string) => void;
-  products: any[];
-}) {
-  const [open, setOpen] = useState(false);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (
-        btnRef.current && !btnRef.current.contains(e.target as Node) &&
-        panelRef.current && !panelRef.current.contains(e.target as Node)
-      ) setOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  const handleOpen = () => {
-    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect());
-    setOpen(o => !o);
-  };
-
-  const selected = products.find((p: any) => p.id === value);
-
-  return (
-    <div className="relative">
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={handleOpen}
-        className="w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm text-left transition-all"
-        style={{
-          background: "var(--input-bg)",
-          border: "1px solid var(--input-border)",
-          color: selected ? "var(--text-primary)" : "var(--text-muted)",
-        }}
-      >
-        <span className="truncate">{selected ? selected.name : "Select product..."}</span>
-        <ChevronDown size={12} className={`flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} style={{ color: "var(--text-muted)" }} />
-      </button>
-
-      {open && rect && (
-        <div
-          ref={panelRef}
-          style={{
-            position: "fixed",
-            top: rect.bottom + 4,
-            left: Math.min(rect.left, typeof window !== 'undefined' ? window.innerWidth - Math.max(rect.width, 220) - 16 : rect.left),
-            width: Math.min(Math.max(rect.width, 220), typeof window !== 'undefined' ? window.innerWidth - 32 : 9999),
-            zIndex: 9999,
-            backgroundColor: "var(--bg-surface-2)",
-            border: "1px solid var(--border)",
-            borderRadius: "0.75rem",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
-            maxHeight: "200px",
-            overflowY: "auto",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => { onChange("NEW_PRODUCT"); setOpen(false); }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left text-violet-400 hover:bg-violet-500/10 transition-colors border-b border-primary/10 font-medium"
-          >
-            <Plus size={12} /> Add New Product
-          </button>
-          
-          {products.length === 0 ? (
-            <p className="px-3 py-2 text-xs" style={{ color: "var(--text-muted)" }}>No products found</p>
-          ) : products.map((p: any) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => { onChange(p.id); setOpen(false); }}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-white/5 transition-colors"
-            >
-              <span style={{ color: p.id === value ? "#a78bfa" : "var(--text-secondary)" }}>{p.name}</span>
-              <span style={{ color: "var(--text-muted)" }}>Stock: {p.stock}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 
 /** Searchable customer picker with filter input */
@@ -256,10 +168,12 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [isProductPickerOpen, setIsProductPickerOpen] = useState(false);
+  const [pickingIndex, setPickingIndex] = useState<number | null>(null);
 
   const { data: customersPaged } = useCustomers(undefined, 1, 100);
   const customers = customersPaged?.data ?? [];
-  const { data: productsPaged } = useProducts(undefined, undefined, 1, 100);
+  const { data: productsPaged } = useProducts(undefined, undefined, 1, PRODUCT_PICKER_MAX_CACHE, true);
   const products = productsPaged?.data ?? [];
   const { data: business } = useBusiness();
   const gstInclusive: boolean = business?.gstInclusive ?? false;
@@ -316,22 +230,50 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
   const handleAddItem = () => setItems([...items, { productId: "", qty: 1, price: 0, discount: 0, hsnCode: "", gstRate: 0 }]);
   const handleRemoveItem = (index: number) => setItems(items.filter((_, i) => i !== index));
 
-  const handleProductChange = (index: number, productId: string) => {
-    if (productId === "NEW_PRODUCT") {
-      setIsAddProductOpen(true);
-      return;
+  const handleAddSelectedProducts = (result: any) => {
+    const selectedList = result.selections;
+    if (selectedList.length === 0) return;
+
+    if (pickingIndex !== null) {
+      // Replacing a single row product
+      const sel = selectedList[0];
+      if (sel) {
+        const newItems = [...items];
+        newItems[pickingIndex] = {
+          productId: sel.product.id,
+          qty: sel.qty,
+          price: sel.resolvedPrice,
+          discount: 0,
+          hsnCode: sel.product.hsnCode || "",
+          gstRate: sel.product.gstRate || 0
+        };
+        setItems(newItems);
+      }
+    } else {
+      // Append multi-selections with duplicate merge checks
+      const activeItems = [...items].filter(i => i.productId !== "");
+      const newItems = [...activeItems];
+
+      selectedList.forEach((sel: any) => {
+        const existingIdx = newItems.findIndex(i => i.productId === sel.product.id);
+        if (existingIdx !== -1) {
+          const currentQty = Number(newItems[existingIdx].qty) || 0;
+          newItems[existingIdx].qty = currentQty + sel.qty;
+          toast.success(`Merged quantity for ${sel.product.name}`);
+        } else {
+          newItems.push({
+            productId: sel.product.id,
+            qty: sel.qty,
+            price: sel.resolvedPrice,
+            discount: 0,
+            hsnCode: sel.product.hsnCode || "",
+            gstRate: sel.product.gstRate || 0
+          });
+        }
+      });
+
+      setItems(newItems.length > 0 ? newItems : [{ productId: "", qty: 1, price: 0, discount: 0, hsnCode: "", gstRate: 0 }]);
     }
-    const product = products.find((p: any) => p.id === productId);
-    const newItems = [...items];
-    newItems[index] = { 
-      ...newItems[index], 
-      productId, 
-      price: product ? product.sellingPrice : 0,
-      discount: 0,
-      hsnCode: product ? (product.hsnCode || "") : "",
-      gstRate: product ? product.gstRate : 0
-    };
-    setItems(newItems);
   };
 
   const handleQtyChange = (index: number, qty: number | string) => {
@@ -503,9 +445,9 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
                 <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 font-medium">GST Inclusive</span>
               )}
             </div>
-            <button type="button" onClick={handleAddItem}
+            <button type="button" onClick={() => { setPickingIndex(null); setIsProductPickerOpen(true); }}
               className="text-xs font-medium text-violet-400 flex items-center gap-1 hover:text-violet-300 transition-colors">
-              <Plus size={14} /> Add Item
+              <Plus size={14} /> Add Items
             </button>
           </div>
 
@@ -537,11 +479,24 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
                   return (
                     <tr key={index}>
                       <td className="p-2">
-                        <ProductPicker
-                          value={item.productId}
-                          onChange={(id) => handleProductChange(index, id)}
-                          products={products}
-                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPickingIndex(index);
+                            setIsProductPickerOpen(true);
+                          }}
+                          className="w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm text-left transition-all"
+                          style={{
+                            background: "var(--input-bg)",
+                            border: "1px solid var(--input-border)",
+                            color: item.productId ? "var(--text-primary)" : "var(--text-muted)",
+                          }}
+                        >
+                          <span className="truncate">
+                            {products.find((p: any) => p.id === item.productId)?.name || "Select product..."}
+                          </span>
+                          <ChevronDown size={12} className="flex-shrink-0" style={{ color: "var(--text-muted)" }} />
+                        </button>
                       </td>
                       <td className="p-2 text-primary/40 text-xs text-center font-mono">{item.hsnCode || '—'}</td>
                       <td className="p-2">
@@ -664,6 +619,18 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
       
       <AddCustomerModal open={isAddCustomerOpen} onClose={() => setIsAddCustomerOpen(false)} />
       <AddProductModal open={isAddProductOpen} onClose={() => setIsAddProductOpen(false)} />
+      <ProductPickerModal
+        open={isProductPickerOpen}
+        onClose={() => {
+          setIsProductPickerOpen(false);
+          setPickingIndex(null);
+        }}
+        onAdd={handleAddSelectedProducts}
+        customer={customers.find((c: any) => c.id === customer)}
+        mode="sale"
+        initialItems={items.map(item => ({ productId: item.productId, qty: Number(item.qty) || 0 }))}
+        singleSelectIndex={pickingIndex}
+      />
     </Modal>
   );
 }

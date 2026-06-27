@@ -10,6 +10,7 @@ import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { quotationSchema }        from '@/shared/lib/validations';
 import { ok, created, validationError, internalError, parsePagination, buildPagination } from '@/shared/lib/response';
 import { z } from 'zod';
+import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
 
 export async function GET(req: NextRequest) {
   try {
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
       for (const item of items) {
         const product = await tx.product.findFirst({ where: { id: item.productId, businessId: session.user.businessId } });
         if (!product) throw new Error(`Product ${item.productId} not found`);
+        if (!product.active) throw new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`);
         productMap[item.productId] = product;
         const amount = (product.sellingPrice * item.qty) - (item.discount || 0);
         const rate   = item.gstRate || product.gstRate || 0;
@@ -92,15 +94,19 @@ export async function POST(req: NextRequest) {
           validUntil:    validUntil ? new Date(validUntil) : null,
           businessId:    session.user.businessId,
           items: {
-            create: items.map((item: any) => ({
-              productId:     item.productId,
-              qty:           item.qty,
-              price:         item.price,
-              purchasePrice: productMap[item.productId]?.purchasePrice || 0,
-              discount:      parseFloat(item.discount) || 0,
-              hsnCode:       item.hsnCode,
-              gstRate:       parseFloat(item.gstRate) || 0,
-            })),
+            create: items.map((item: any) => {
+              const product = productMap[item.productId];
+              return {
+                productId:     item.productId,
+                qty:           item.qty,
+                price:         item.price,
+                purchasePrice: productMap[item.productId]?.purchasePrice || 0,
+                discount:      parseFloat(item.discount) || 0,
+                hsnCode:       item.hsnCode,
+                gstRate:       parseFloat(item.gstRate) || 0,
+                ...buildProductSnapshot(product),
+              };
+            }),
           },
         },
         include: { customer: true, items: true },
@@ -118,4 +124,3 @@ export async function POST(req: NextRequest) {
     return internalError(e.message);
   }
 }
-

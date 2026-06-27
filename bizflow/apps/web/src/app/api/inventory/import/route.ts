@@ -220,18 +220,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
     }
 
+    // ── Hardening: Enforce 5MB limit ──
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: "File size exceeds the 5MB limit." }, { status: 400 });
+    }
+
     /* ── 2a. PDF Invoice Parsing (ML-Trained Template Extraction) ── */
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
       try {
         const buffer = Buffer.from(await file.arrayBuffer());
 
+        // ── Hardening: Magic Bytes Check (%PDF) ──
+        if (buffer.length < 4 || buffer[0] !== 0x25 || buffer[1] !== 0x50 || buffer[2] !== 0x44 || buffer[3] !== 0x46) {
+          return NextResponse.json({ error: "Invalid PDF file: Missing %PDF magic bytes." }, { status: 400 });
+        }
+
         // ML-trained parser — uses templates learned from sample PDFs
         const detectedInvoice = await parseInvoicePdfLocally(buffer, businessId);
 
-
-        if (detectedInvoice.error || !detectedInvoice.products || !Array.isArray(detectedInvoice.products)) {
+        if (detectedInvoice.error || !detectedInvoice.products || !Array.isArray(detectedInvoice.products) || detectedInvoice.products.length === 0) {
           return NextResponse.json({
-            error: detectedInvoice.error || "Could not recognise this invoice PDF or failed to extract products.",
+            error: detectedInvoice.error || "No products could be extracted from this PDF. Please check the template or try a different file.",
           }, { status: 400 });
         }
 

@@ -8,7 +8,7 @@ import { Button } from "@/shared/ui/ui/Button";
 import { Badge } from "@/shared/ui/ui/Badge";
 import { useLoans, useDeleteLoan } from "@/shared/hooks/useLoans";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { Landmark, Plus, Scale, ArrowUpRight, Search, Trash2, Eye, CircleDollarSign, AlertTriangle } from "lucide-react";
+import { Landmark, Plus, Scale, ArrowUpRight, Search, Trash2, Eye, IndianRupee, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import AddLoanModal from "@/shared/ui/modals/AddLoanModal";
@@ -94,7 +94,7 @@ export default function LoansPage() {
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 mb-6 font-medium">
         <StatCard label="Total Disbursed" value={formatCurrency(data.summary.totalDisbursed)} icon={<Landmark size={18} />} color="violet" />
         <StatCard label="Outstanding Balance" value={formatCurrency(data.summary.totalOutstanding)} icon={<Scale size={18} />} color="amber" />
-        <StatCard label="Monthly EMI Due" value={formatCurrency(data.summary.monthlyEmiDue)} icon={<CircleDollarSign size={18} />} color="blue" />
+        <StatCard label="Monthly EMI Due" value={formatCurrency(data.summary.monthlyEmiDue)} icon={<IndianRupee size={18} />} color="blue" />
         <StatCard label="Overdue Amount" value={formatCurrency(data.summary.overdueAmount)} icon={<AlertTriangle size={18} />} color="rose" />
         <StatCard label="Active Loans" value={data.summary.activeLoans} icon={<ArrowUpRight size={18} />} color="emerald" />
         <StatCard label="Next EMI Due" value={data.summary.nextEmiDue ? formatDate(data.summary.nextEmiDue) : "No Upcoming"} icon={<Plus size={18} />} color="violet" />
@@ -196,7 +196,7 @@ export default function LoansPage() {
                                 className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-primary/40 hover:text-emerald-400 transition-colors"
                                 title="Record Payment"
                               >
-                                <CircleDollarSign size={14} />
+                                <IndianRupee size={14} />
                               </button>
                             )}
                             {l._count?.payments === 0 && (
