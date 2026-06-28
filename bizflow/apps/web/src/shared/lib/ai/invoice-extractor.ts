@@ -194,9 +194,23 @@ Definitions:
     const validation = validateGeminiExtraction(geminiData);
     console.log(`[InvoiceExtractor] Gemini parsing took ${duration}ms. Validation: ${validation.passed ? 'PASSED' : 'FAILED'}`);
 
+    let finalSupplier = geminiData.supplier || "";
+    const lowerSupplier = finalSupplier.toLowerCase();
+    if (
+      lowerSupplier.includes("invoice") ||
+      lowerSupplier.includes("bill") ||
+      lowerSupplier.includes("challan") ||
+      lowerSupplier.includes("original") ||
+      lowerSupplier.includes("duplicate") ||
+      lowerSupplier.includes("customer copy") ||
+      lowerSupplier.includes("cash memo")
+    ) {
+      finalSupplier = "";
+    }
+
     return {
       invoiceNumber: geminiData.invoiceNumber || "",
-      supplier: geminiData.supplier || "Unknown Supplier",
+      supplier: finalSupplier || "Unknown Supplier",
       supplierGstin: geminiData.supplierGstin || "",
       supplierConfidence: geminiData.supplierConfidence ?? 1.0,
       purchaseDate: geminiData.purchaseDate || new Date().toISOString(),

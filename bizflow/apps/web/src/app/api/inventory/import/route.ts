@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
         if (!products || products.length === 0) continue;
         
         // ── Distribute invoice-level transport cost by value ──
-        const totalTransport = Number(invoiceInfo.totalTransportCost ?? invoiceTransportCost ?? 0);
+        const totalTransport = Number(invoiceInfo?.totalTransportCost ?? invoiceTransportCost ?? 0);
         if (totalTransport > 0) {
           const totalBaseValue = products.reduce(
             (sum: number, p: any) => sum + (Number(p.basePurchasePrice ?? p.purchasePrice ?? 0) * Number(p.stock ?? 0)),
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
 
         // ── Resolve Supplier ──
         let supplierId: string | null = null;
-        let supplierName = invoiceInfo.supplier;
+        let supplierName = invoiceInfo?.supplier;
         if (supplierName && supplierName !== "Unknown Supplier") {
           let supplier = await prisma.supplier.findFirst({
              where: { businessId, name: { equals: supplierName, mode: 'insensitive' } }
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
 
         // ── Create Purchase Header ──
         let purchaseId: string | null = null;
-        if (invoiceInfo.invoiceNumber && supplierId) {
+        if (invoiceInfo?.invoiceNumber && supplierId) {
            const purchase = await prisma.purchase.create({
               data: {
                  businessId,

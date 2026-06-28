@@ -45,7 +45,7 @@ interface SharedExpense {
   id: string;
   category: string;
   amount: number;
-  applicableFileIds?: string[]; // undefined means all invoices
+  applicableProductIds?: string[]; // undefined means all products
 }
 
 interface UploadedInvoiceFile {
@@ -171,32 +171,35 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     setSharedExpenses(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
   };
 
-  const toggleInvoiceApplicability = (id: string, fileId: string) => {
+  const toggleProductApplicability = (id: string, productId: string) => {
     setSharedExpenses(prev => prev.map(e => {
       if (e.id !== id) return e;
-      const current = e.applicableFileIds || files.map(f => f.id);
-      const updated = current.includes(fileId) ? current.filter(i => i !== fileId) : [...current, fileId];
-      return { ...e, applicableFileIds: updated.length === files.length ? undefined : updated };
+      const allProductIds = files.flatMap(f => (f.invoiceProducts || []).map((_, i) => `${f.id}-${i}`));
+      const current = e.applicableProductIds || allProductIds;
+      const updated = current.includes(productId) ? current.filter(i => i !== productId) : [...current, productId];
+      return { ...e, applicableProductIds: updated.length === allProductIds.length ? undefined : updated };
     }));
   };
 
-  const setInvoiceApplicabilityAll = (id: string, isAll: boolean) => {
+  const setProductApplicabilityAll = (id: string, isAll: boolean) => {
     setSharedExpenses(prev => prev.map(e => {
       if (e.id !== id) return e;
-      return { ...e, applicableFileIds: isAll ? undefined : [] };
+      return { ...e, applicableProductIds: isAll ? undefined : [] };
     }));
   };
 
-  const getProductExpenseShare = (fileId: string, p: InvoiceProduct) => {
+  const getProductExpenseShare = (fileId: string, p: InvoiceProduct, pIdx: number) => {
+    const productId = `${fileId}-${pIdx}`;
     let totalShare = 0;
     for (const exp of sharedExpenses) {
       if (!exp.amount) continue;
-      const appliesTo = exp.applicableFileIds || files.map(f => f.id);
-      if (!appliesTo.includes(fileId)) continue;
+      const allProductIds = files.flatMap(f => (f.invoiceProducts || []).map((_, i) => `${f.id}-${i}`));
+      const appliesTo = exp.applicableProductIds || allProductIds;
+      if (!appliesTo.includes(productId)) continue;
       
       const applicableUnits = files
-        .filter(f => appliesTo.includes(f.id))
-        .flatMap(f => f.invoiceProducts)
+        .flatMap(f => (f.invoiceProducts || []).map((ap, i) => ({ id: `${f.id}-${i}`, stock: ap.stock })))
+        .filter(ap => appliesTo.includes(ap.id))
         .reduce((sum, ap) => sum + (Number(ap.stock) || 0), 0);
       
       if (applicableUnits > 0) {
@@ -208,10 +211,10 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     return Number(totalShare.toFixed(2));
   };
 
-  const getProductPerUnitExpense = (fileId: string, p: InvoiceProduct) => {
+  const getProductPerUnitExpense = (fileId: string, p: InvoiceProduct, pIdx: number) => {
     const qty = Number(p.stock) || 0;
     if (qty <= 0) return 0;
-    return Number((getProductExpenseShare(fileId, p) / qty).toFixed(4));
+    return Number((getProductExpenseShare(fileId, p, pIdx) / qty).toFixed(4));
   };
 
   const totalExpenseAmount = sharedExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
@@ -422,16 +425,18 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
 
     successfulFiles.forEach(fileObj => {
       const currentInvoiceProducts: any[] = [];
-      fileObj.invoiceProducts.forEach((p, idx) => {
-        // Distribute expense items specifically
+      (fileObj.invoiceProducts || []).forEach((p, pIdx) => {
+        const productId = `${fileObj.id}-${pIdx}`;
         const productExpenses: any[] = [];
+
         sharedExpenses.forEach(exp => {
           if (!exp.amount) return;
-          const appliesTo = exp.applicableFileIds || files.map(f => f.id);
-          if (appliesTo.includes(fileObj.id)) {
+          const allProductIds = files.flatMap(f => (f.invoiceProducts || []).map((_, i) => `${f.id}-${i}`));
+          const appliesTo = exp.applicableProductIds || allProductIds;
+          if (appliesTo.includes(productId)) {
             const applicableUnits = files
-              .filter(f => appliesTo.includes(f.id))
-              .flatMap(f => f.invoiceProducts)
+              .flatMap(f => (f.invoiceProducts || []).map((ap, i) => ({ id: `${f.id}-${i}`, stock: ap.stock })))
+              .filter(ap => appliesTo.includes(ap.id))
               .reduce((sum, ap) => sum + (Number(ap.stock) || 0), 0);
             if (applicableUnits > 0) {
               const sharePerUnit = exp.amount / applicableUnits;
@@ -974,7 +979,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                               {(() => {
                                 const gstMultiplier = 1 + (Number(p.gstRate) || 0) / 100;
                                 const baseWithGst = Number(p.basePurchasePrice || 0) * gstMultiplier;
-                                const perUnitExp = getProductPerUnitExpense(activeFile.id, p);
+                                const perUnitExp = getProductPerUnitExpense(activeFile.id, p, idx);
                                 const landed = baseWithGst + perUnitExp;
                                 return (
                                   <span className="text-[11px] font-medium text-emerald-400" title={`Base ₹${(p.basePurchasePrice || 0).toFixed(2)} + GST ₹${(baseWithGst - Number(p.basePurchasePrice || 0)).toFixed(2)} + Exp ₹${perUnitExp.toFixed(2)}`}>
@@ -1056,33 +1061,36 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                             </button>
                           </div>
 
-                          {/* Checkbox invoice checklist for expense eligibility */}
+                          {/* Checkbox product checklist for expense eligibility */}
                           <div className="rounded-lg border border-primary/5 p-2 bg-primary/5">
                             <div className="flex items-center justify-between mb-1.5 text-[10px] text-primary/40 font-medium">
-                              <span>Checked invoices are eligible for this expense:</span>
+                              <span>Checked products are eligible for this expense:</span>
                               <div className="flex gap-2">
-                                <button onClick={() => setInvoiceApplicabilityAll(exp.id, true)}
+                                <button onClick={() => setProductApplicabilityAll(exp.id, true)}
                                   className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">Select All</button>
                                 <span className="text-primary/10">|</span>
-                                <button onClick={() => setInvoiceApplicabilityAll(exp.id, false)}
+                                <button onClick={() => setProductApplicabilityAll(exp.id, false)}
                                   className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">Deselect All</button>
                               </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto custom-scrollbar">
-                              {files.map((f) => {
-                                const isChecked = !exp.applicableFileIds || exp.applicableFileIds.includes(f.id);
+                              {files.flatMap(f => (f.invoiceProducts || []).map((p, pIdx) => {
+                                const productId = `${f.id}-${pIdx}`;
+                                const allProductIds = files.flatMap(file => (file.invoiceProducts || []).map((_, i) => `${file.id}-${i}`));
+                                const appliesTo = exp.applicableProductIds || allProductIds;
+                                const isChecked = appliesTo.includes(productId);
                                 return (
-                                  <label key={f.id} className="flex items-center gap-2 text-[11px] text-primary/75 hover:text-primary cursor-pointer transition-colors select-none py-0.5">
+                                  <label key={productId} className="flex items-center gap-2 text-[11px] text-primary/75 hover:text-primary cursor-pointer transition-colors select-none py-0.5">
                                     <input
                                       type="checkbox"
                                       checked={isChecked}
-                                      onChange={() => toggleInvoiceApplicability(exp.id, f.id)}
+                                      onChange={() => toggleProductApplicability(exp.id, productId)}
                                       className="rounded border-primary/20 text-violet-500 focus:ring-violet-500/40 bg-transparent w-3.5 h-3.5 cursor-pointer"
                                     />
-                                    <span className="truncate" title={f.file.name}>{f.invoiceInfo?.invoiceNumber || f.file.name}</span>
+                                    <span className="truncate" title={p.name}>{p.name || 'Unnamed'} <span className="text-primary/30 ml-1">({f.invoiceInfo?.invoiceNumber || 'Unknown'})</span></span>
                                   </label>
                                 );
-                              })}
+                              }))}
                             </div>
                           </div>
                         </div>
