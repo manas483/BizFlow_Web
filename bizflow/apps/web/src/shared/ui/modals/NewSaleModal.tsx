@@ -728,7 +728,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
             <button 
               type="button" 
               onClick={() => saveSale(true)} 
-              disabled={loading || (workflowState === 'posted')}
+              disabled={loading}
               className="px-5 py-2.5 border border-primary/10 text-primary/60 rounded-xl hover:bg-primary/5 hover:text-primary disabled:opacity-50 text-sm font-medium transition-all"
             >
               {loading ? "Saving..." : "Save Draft"}
@@ -738,7 +738,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
               <button
                 type="button"
                 onClick={() => saveSale(false)}
-                disabled={loading || items.length === 0 || !customer || (workflowState === 'posted')}
+                disabled={loading || items.length === 0 || !customer}
                 className="px-8 py-2.5 rounded-xl text-sm font-semibold text-white transition-all bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-500 hover:to-purple-600 shadow-lg shadow-violet-500/20 disabled:opacity-50 hover:-translate-y-0.5"
               >
                 {workflowState === 'draft' ? "Confirm & Post" : (editSaleId ? "Update Invoice" : "Confirm & Post")}
