@@ -1,10 +1,16 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./db";
 import bcrypt from "bcryptjs";
 import { authRateLimit, emailRateLimit } from "./rate-limit";
 import { ROLE_PERMISSIONS } from "./permissions";
 import { authConfig } from "./auth.config";
+
+class CustomAuthError extends CredentialsSignin {
+  constructor(public code: string) {
+    super();
+  }
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -19,7 +25,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials, req) {
         // ── 1. Basic field check ────────────────────────────────────────────
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("EMAIL_PASSWORD_REQUIRED");
+          throw new CustomAuthError("EMAIL_PASSWORD_REQUIRED");
         }
 
         const email = (credentials.email as string).toLowerCase().trim();
@@ -29,13 +35,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const ip = req?.headers?.get?.("x-forwarded-for") ?? "127.0.0.1";
         const ipResult = await authRateLimit.limit(ip);
         if (!ipResult.success) {
-          throw new Error("RATE_LIMIT_IP");
+          throw new CustomAuthError("RATE_LIMIT_IP");
         }
 
         // ── 3. Per-email rate limiting (catches IP-rotating attackers) ───────
         const emailResult = await emailRateLimit.limit(email);
         if (!emailResult.success) {
-          throw new Error("RATE_LIMIT_EMAIL");
+          throw new CustomAuthError("RATE_LIMIT_EMAIL");
         }
 
         // ── 4. Find user ─────────────────────────────────────────────────────
@@ -55,12 +61,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const isPasswordValid = bcrypt.compareSync(password, hashToCompare);
 
         if (!user || !user.password || !isPasswordValid) {
-          throw new Error("INVALID_CREDENTIALS");
+          throw new CustomAuthError("INVALID_CREDENTIALS");
         }
 
         // ── 5. Block unverified accounts ─────────────────────────────────────
         if (!user.emailVerified) {
-          throw new Error("EMAIL_NOT_VERIFIED");
+          throw new CustomAuthError("EMAIL_NOT_VERIFIED");
         }
 
         // ── 5.5. Check two-factor authentication ──────────────────────────────
@@ -68,11 +74,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const otpToken = credentials.otpToken as string | undefined;
           if (!otpToken) {
             // Throw a custom error that client-side login can check for
-            throw new Error("REQUIRES_2FA");
+            throw new CustomAuthError("REQUIRES_2FA");
           }
 
           if (!user.twoFactorSecret) {
-            throw new Error("INVALID_CREDENTIALS");
+            throw new CustomAuthError("INVALID_CREDENTIALS");
           }
 
           const { decryptSecret, verifyBackupCode, verifyTOTPToken } = require("./two-factor");
@@ -97,7 +103,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
 
           if (!is2faValid) {
-            throw new Error("INVALID_2FA_CODE");
+            throw new CustomAuthError("INVALID_2FA_CODE");
           }
         }
 

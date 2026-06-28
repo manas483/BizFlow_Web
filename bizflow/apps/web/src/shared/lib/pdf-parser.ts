@@ -92,7 +92,7 @@ function extractHeader(texts: RawTextElement[]) {
     let supplierGstin = '';
     let invoiceNumber = '';
     let purchaseDate = '';
-    let supplier = 'Unknown Supplier';
+    let supplier = '';
     
     const fullText = texts.map(t => t.text).join(' ');
     
@@ -134,7 +134,11 @@ function extractHeader(texts: RawTextElement[]) {
          !textLower.includes('erp slip') &&
          !textLower.includes('original') &&
          !textLower.includes('duplicate') &&
-         !textLower.includes('challan')
+         !textLower.includes('challan') &&
+         !textLower.includes('e-way') &&
+         !textLower.includes('bill') &&
+         !textLower.includes('cash memo') &&
+         !textLower.includes('customer copy')
        ) {
          supplier = t.text;
          break;

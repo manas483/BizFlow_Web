@@ -146,8 +146,8 @@ Extract the data into this EXACT JSON structure:
 
 Definitions:
 - 'stock': The exact quantity purchased for the line item.
-- 'basePurchasePrice': The price per unit BEFORE tax.
-- 'purchasePrice': The final price per unit INCLUDING tax.
+- 'basePurchasePrice': The price per unit INCLUSIVE of GST (After Tax). If the invoice only shows exclusive price, you MUST add the GST amount to calculate the final price per unit.
+- 'purchasePrice': The price per unit INCLUSIVE of GST (After Tax).
 - 'lineTotal': The total amount for the line item BEFORE overall invoice taxes are applied.
 - Taxes: Extract total cgst, sgst, igst, and rounding from the invoice summary at the bottom.
 `;
@@ -198,19 +198,21 @@ Definitions:
     const lowerSupplier = finalSupplier.toLowerCase();
     if (
       lowerSupplier.includes("invoice") ||
+      lowerSupplier.includes("e-way") ||
       lowerSupplier.includes("bill") ||
       lowerSupplier.includes("challan") ||
       lowerSupplier.includes("original") ||
       lowerSupplier.includes("duplicate") ||
       lowerSupplier.includes("customer copy") ||
-      lowerSupplier.includes("cash memo")
+      lowerSupplier.includes("cash memo") ||
+      lowerSupplier.includes("unknown")
     ) {
       finalSupplier = "";
     }
 
     return {
       invoiceNumber: geminiData.invoiceNumber || "",
-      supplier: finalSupplier || "Unknown Supplier",
+      supplier: finalSupplier,
       supplierGstin: geminiData.supplierGstin || "",
       supplierConfidence: geminiData.supplierConfidence ?? 1.0,
       purchaseDate: geminiData.purchaseDate || new Date().toISOString(),
@@ -220,13 +222,18 @@ Definitions:
       grandTotal: geminiData.grandTotal || 0,
       validationPassed: validation.passed,
       validationDetails: validation.details,
-      products: (geminiData.products || []).map(p => ({
-        ...p,
-        stock: p.stock ?? 0,
-        basePurchasePrice: p.basePurchasePrice ?? 0,
-        purchasePrice: p.purchasePrice ?? p.basePurchasePrice ?? 0,
-        lineTotal: p.lineTotal ?? 0
-      }))
+      products: (geminiData.products || []).filter(p => p != null).map(p => {
+        const exclusivePrice = p.basePurchasePrice ?? p.purchasePrice ?? 0;
+        
+        return {
+          ...p,
+          stock: p.stock ?? 0,
+          unitsPerBag: p.unitsPerBag ?? 1,
+          basePurchasePrice: exclusivePrice,
+          purchasePrice: exclusivePrice,
+          lineTotal: p.lineTotal ?? 0
+        };
+      })
     };
   } catch (e: any) {
     throw new Error(`Failed to parse structured JSON from Gemini response: ${e.message}`);

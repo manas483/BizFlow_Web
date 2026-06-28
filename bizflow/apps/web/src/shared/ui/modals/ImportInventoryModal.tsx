@@ -13,7 +13,7 @@ import {
 import { useBusiness } from "@/shared/hooks/useBusiness";
 import { getBusinessProfile } from "@/shared/lib/business-intelligence";
 
-type Step = "upload" | "validating" | "review" | "training" | "importing" | "done";
+type Step = "upload" | "validating" | "review" | "expenses" | "summary" | "training" | "importing" | "done";
 
 interface ValidationSummary {
   total: number; valid: number; errors: number; warnings: number; duplicates: number;
@@ -46,6 +46,7 @@ interface SharedExpense {
   category: string;
   amount: number;
   applicableProductIds?: string[]; // undefined means all products
+  isExpanded?: boolean;
 }
 
 interface UploadedInvoiceFile {
@@ -159,7 +160,10 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
 
   // ── Shared Expense helpers ──
   const addExpense = () => {
-    setSharedExpenses(prev => [...prev, { id: crypto.randomUUID(), category: "Transport", amount: 0 }]);
+    setSharedExpenses(prev => [
+      ...prev.map(e => ({ ...e, isExpanded: false })), 
+      { id: crypto.randomUUID(), category: "Transport", amount: 0, isExpanded: true }
+    ]);
     setShowExpenses(true);
   };
 
@@ -197,15 +201,18 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
       const appliesTo = exp.applicableProductIds || allProductIds;
       if (!appliesTo.includes(productId)) continue;
       
-      const applicableUnits = files
-        .flatMap(f => (f.invoiceProducts || []).map((ap, i) => ({ id: `${f.id}-${i}`, stock: ap.stock })))
+      const applicableBags = files
+        .flatMap(f => (f.invoiceProducts || []).map((ap, i) => ({ 
+          id: `${f.id}-${i}`, 
+          bags: (Number(ap.stock) || 0) / (Number(ap.unitsPerBag) || 1) 
+        })))
         .filter(ap => appliesTo.includes(ap.id))
-        .reduce((sum, ap) => sum + (Number(ap.stock) || 0), 0);
+        .reduce((sum, ap) => sum + ap.bags, 0);
       
-      if (applicableUnits > 0) {
-        const units = Number(p.stock) || 0;
-        const expPerUnit = exp.amount / applicableUnits;
-        totalShare += units * expPerUnit;
+      if (applicableBags > 0) {
+        const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
+        const expPerBag = exp.amount / applicableBags;
+        totalShare += bags * expPerBag;
       }
     }
     return Number(totalShare.toFixed(2));
@@ -434,12 +441,20 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
           const allProductIds = files.flatMap(f => (f.invoiceProducts || []).map((_, i) => `${f.id}-${i}`));
           const appliesTo = exp.applicableProductIds || allProductIds;
           if (appliesTo.includes(productId)) {
-            const applicableUnits = files
-              .flatMap(f => (f.invoiceProducts || []).map((ap, i) => ({ id: `${f.id}-${i}`, stock: ap.stock })))
+            const applicableBags = files
+              .flatMap(f => (f.invoiceProducts || []).map((ap, i) => ({ 
+                id: `${f.id}-${i}`, 
+                bags: (Number(ap.stock) || 0) / (Number(ap.unitsPerBag) || 1) 
+              })))
               .filter(ap => appliesTo.includes(ap.id))
-              .reduce((sum, ap) => sum + (Number(ap.stock) || 0), 0);
-            if (applicableUnits > 0) {
-              const sharePerUnit = exp.amount / applicableUnits;
+              .reduce((sum, ap) => sum + ap.bags, 0);
+              
+            if (applicableBags > 0) {
+              const bags = (Number(p.stock) || 0) / (Number(p.unitsPerBag) || 1);
+              const expPerBag = exp.amount / applicableBags;
+              const totalShareForThisProduct = bags * expPerBag;
+              const sharePerUnit = totalShareForThisProduct / (Number(p.stock) || 1);
+              
               productExpenses.push({
                 expenseType: exp.category,
                 amount: Number(sharePerUnit.toFixed(4)),
@@ -450,9 +465,8 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
 
         const perUnitExpensesSum = productExpenses.reduce((sum, e) => sum + e.amount, 0);
         
-        // purchasePrice is Standard Cost (base + gst) + expenses
-        const gstMultiplier = 1 + (Number(p.gstRate) || 0) / 100;
-        const baseWithGst = Number(p.basePurchasePrice || 0) * gstMultiplier;
+        // purchasePrice is Standard Cost (which now already includes GST) + expenses
+        const baseWithGst = Number(p.basePurchasePrice || 0);
 
         currentInvoiceProducts.push({
           ...p,
@@ -509,14 +523,37 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
         }),
       });
       setProgress(80);
-      const data = await res.json();
-      if (!res.ok) { setImportError(data.error ?? "Import failed"); setStep("review"); return; }
+      
+      let data;
+      let rawText = "";
+      try {
+        rawText = await res.text();
+        data = JSON.parse(rawText);
+      } catch (parseErr) {
+        console.error("Non-JSON response received:", rawText);
+        setImportError(`Server Error: ${rawText.slice(0, 100)}...`);
+        toast.error("Server Error: Check console for details");
+        setStep("review");
+        return;
+      }
+      
+      if (!res.ok) { 
+        const errStr = data.error ?? "Import failed";
+        setImportError(errStr); 
+        toast.error(errStr);
+        setStep("review"); 
+        return; 
+      }
       setImportResults(data.results);
       setProgress(100);
       setStep("done");
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
-    } catch { setImportError("Network error during import."); setStep("review"); }
+    } catch (err: any) { 
+      setImportError(`Network error during import: ${err.message}`); 
+      toast.error(`Network error: ${err.message}`);
+      setStep("review"); 
+    }
   };
 
   // Train template then re-parse the PDF
@@ -657,19 +694,21 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
       subtitle="Bulk update inventory from multiple Excel, CSV, or Invoice PDF files simultaneously">
 
       {/* Step Indicator */}
-      <div className="flex items-center gap-1 mb-5">
-        {(["upload", "review", "done"] as const).map((s, i) => {
-          const active = step === s || (step === "validating" && s === "upload") || (step === "importing" && s === "review");
-          const done = (s === "upload" && ["review","training","importing","done"].includes(step)) ||
-                       (s === "review" && step === "done");
+      <div className="flex items-center gap-2 mb-4">
+        {(["upload", "review", "expenses", "summary", "done"] as const).map((s, i) => {
+          const active = step === s || (step === "validating" && s === "upload") || (step === "importing" && s === "summary") || (step === "training" && s === "review");
+          const done = (s === "upload" && ["review","expenses","summary","training","importing","done"].includes(step)) ||
+                       (s === "review" && ["expenses", "summary", "importing", "done"].includes(step)) ||
+                       (s === "expenses" && ["summary", "importing", "done"].includes(step)) ||
+                       (s === "summary" && step === "done");
           return (
-            <div key={s} className="flex items-center gap-1 flex-1">
-              <div className={`flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
-                ${done ? "bg-emerald-500/10 text-emerald-400" : active ? "bg-violet-500/10 text-violet-400" : "bg-primary/5 text-primary/30"}`}>
-                {done ? <CheckCircle2 size={12} /> : <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px]">{i+1}</span>}
-                {s === "upload" ? "Upload Files" : s === "review" ? "Verify & Adjust Expenses" : "Complete"}
+            <div key={s} className="flex items-center gap-2 flex-1">
+              <div className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] font-medium transition-all
+                ${done ? "bg-emerald-500/10 text-emerald-400" : active ? "bg-violet-500/10 text-violet-400" : "text-primary/40"}`}>
+                {done ? <CheckCircle2 size={12} /> : <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center text-[9px] ${active ? "border-violet-400" : "border-primary/30"}`}>{i+1}</span>}
+                {s === "upload" ? "Upload" : s === "review" ? "Verify Items" : s === "expenses" ? "Expenses" : s === "summary" ? "Landed Cost" : "Complete"}
               </div>
-              {i < 2 && <div className={`w-4 h-px ${done ? "bg-emerald-500/40" : "bg-primary/10"}`} />}
+              {i < 4 && <div className={`w-3 h-px ${done ? "bg-emerald-500/40" : "bg-primary/10"}`} />}
             </div>
           );
         })}
@@ -677,53 +716,54 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
 
       {/* ── STEP: UPLOAD ── */}
       {(step === "upload" || step === "validating") && (
-        <div className="space-y-4">
-          {/* Download Template */}
-          <div className="rounded-xl p-4 flex items-center justify-between gap-3"
-            style={{ background: "rgba(139,92,246,0.05)", border: "1px solid rgba(139,92,246,0.15)" }}>
-            <div>
-              <p className="text-sm font-medium text-primary">Download Sample Template</p>
-              <p className="text-xs text-primary/40 mt-0.5">Auto-generated for your store type with example data</p>
+        <div className="space-y-3">
+          {/* Download Template - Compact */}
+          <div className="flex items-center justify-between bg-primary/3 border border-primary/10 rounded-lg px-3 py-2">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet size={13} className="text-violet-400" />
+              <span className="text-[11px] text-primary/60">Need a format? Download a sample template.</span>
             </div>
-            <Button variant="secondary" size="sm" icon={downloadingTemplate ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-              onClick={handleDownloadTemplate} disabled={downloadingTemplate}>
-              {downloadingTemplate ? "Generating..." : "Download"}
-            </Button>
+            <button 
+              onClick={handleDownloadTemplate} 
+              disabled={downloadingTemplate}
+              className="text-[11px] font-medium text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1"
+            >
+              {downloadingTemplate ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+              Template
+            </button>
           </div>
 
-          {/* Drop Zone */}
+          {/* Drop Zone - Compact */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`relative rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all
-              ${dragOver ? "border-violet-500/60 bg-violet-500/5" : "border-primary/10 hover:border-primary/20 hover:bg-primary/3"}`}>
+            className={`relative rounded-xl border border-dashed py-8 px-6 text-center cursor-pointer transition-all
+              ${dragOver ? "border-violet-500/50 bg-violet-500/5" : "border-primary/15 hover:border-primary/25 hover:bg-primary/[0.02]"}`}>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" className="hidden" onChange={handleFileChange} multiple />
             {step === "validating" ? (
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-violet-500/10 flex items-center justify-center">
-                  <Loader2 size={22} className="text-violet-400 animate-spin" />
-                </div>
-                <p className="text-sm font-medium text-primary">
-                  Processing uploaded files…
-                </p>
-                <div className="w-48 h-1.5 bg-primary/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-violet-600 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
-                </div>
-                <p className="text-xs text-primary/40">
-                  Parsing structures and matching items
-                </p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all
-                  ${dragOver ? "bg-violet-500/20" : "bg-primary/5"}`}>
-                  <Upload size={22} className={dragOver ? "text-violet-400" : "text-primary/30"} />
+              <div className="flex flex-col items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                  <Loader2 size={18} className="text-violet-400 animate-spin" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-primary">Drop your invoices or spreadsheet files here</p>
-                  <p className="text-xs text-primary/40 mt-1">or click to browse · select multiple PDF / Excel / CSV files</p>
+                  <p className="text-xs font-medium text-primary">Processing files…</p>
+                  <p className="text-[10px] text-primary/40 mt-0.5">Extracting and matching structures</p>
+                </div>
+                <div className="w-40 h-1 mt-1 bg-primary/10 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-violet-600 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all
+                  ${dragOver ? "bg-violet-500/20" : "bg-primary/5"}`}>
+                  <Upload size={18} className={dragOver ? "text-violet-400" : "text-primary/30"} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-primary">Drop invoices or spreadsheets here</p>
+                  <p className="text-[10px] text-primary/40 mt-0.5">Click to browse • Multiple PDF / Excel / CSV allowed</p>
                 </div>
               </div>
             )}
@@ -795,10 +835,13 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
               <Button variant="secondary" size="sm" icon={<RotateCcw size={13} />} onClick={reset} className="w-full justify-center">
                 Clear & Restart
               </Button>
-              <Button size="sm" onClick={handleInvoiceConfirmImport} className="w-full justify-center group relative"
-                disabled={files.filter(f => f.status === "success" && !f.trainingRequired).length === 0}>
+              <Button size="sm" onClick={() => setStep("expenses")} className="w-full justify-center group relative"
+                disabled={
+                  files.filter(f => f.status === "success" && !f.trainingRequired).length === 0 ||
+                  files.some(f => f.status === "success" && !f.trainingRequired && !f.invoiceInfo?.supplier?.trim())
+                }>
                 <span className="flex items-center gap-1.5">
-                  Import Verified Invoices
+                  Continue to Expenses
                   <span className="text-[9px] font-mono text-primary/40 bg-primary/5 px-1 rounded ml-1 group-hover:text-primary/70 transition-colors">Ctrl+↵</span>
                 </span>
               </Button>
@@ -806,18 +849,18 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
           </div>
 
           {/* Right Panel: Detailed active invoice review */}
-          <div className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto pr-1">
+          <div className="flex-1 h-full min-w-0 overflow-y-auto overscroll-contain scroll-smooth pr-1 custom-scrollbar">
             {!activeFile ? (
-              <div className="flex-1 flex items-center justify-center text-primary/30 text-xs">
+              <div className="h-full flex items-center justify-center text-primary/30 text-xs">
                 Select an invoice from the sidebar to verify
               </div>
             ) : activeFile.status === "processing" ? (
-              <div className="flex-1 flex flex-col items-center justify-center gap-2 py-12">
+              <div className="h-full flex flex-col items-center justify-center gap-2 py-12">
                 <Loader2 size={24} className="text-violet-400 animate-spin" />
                 <p className="text-xs text-primary/40">Validating & extracting data...</p>
               </div>
             ) : activeFile.status === "error" ? (
-              <div className="flex-1 p-6 rounded-2xl bg-rose-500/5 border border-rose-500/25 flex flex-col items-center justify-center text-center">
+              <div className="h-full p-6 rounded-2xl bg-rose-500/5 border border-rose-500/25 flex flex-col items-center justify-center text-center">
                 <XCircle size={36} className="text-rose-400 mb-2" />
                 <h4 className="text-sm font-semibold text-primary">Failed to Process Invoice</h4>
                 <p className="text-xs text-primary/40 mt-1 max-w-md">{activeFile.error || "Unknown validation error occurred"}</p>
@@ -867,7 +910,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
               </div>
             ) : (
               /* Normal verified invoice panel */
-              <div className="space-y-4 flex-1 flex flex-col min-h-0">
+              <div className="space-y-4 pb-4">
                 {/* Active Invoice Header Card */}
                 <div className="rounded-xl p-3 bg-violet-500/5 border border-violet-500/15">
                   <div className="flex items-center justify-between mb-2">
@@ -886,16 +929,26 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                     </div>
                     <div>
                       <span className="text-primary/40">Supplier:</span>{" "}
-                      <span className="text-primary font-medium flex items-center gap-1">
-                        {activeFile.invoiceInfo?.supplier || "Excel Import"}
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <input
+                          className={`w-full bg-transparent border-b ${!activeFile.invoiceInfo?.supplier ? 'border-rose-400 text-rose-400 placeholder:text-rose-400/50' : 'border-dashed border-primary/25 text-primary'} font-medium outline-none transition-colors focus:border-violet-400`}
+                          value={activeFile.invoiceInfo?.supplier || ""}
+                          placeholder="Enter Supplier Name"
+                          onChange={(e) => {
+                            setFiles(prev => prev.map(f => f.id === activeFile.id ? {
+                              ...f,
+                              invoiceInfo: { ...f.invoiceInfo!, supplier: e.target.value }
+                            } : f))
+                          }}
+                        />
                         {activeFile.invoiceInfo?.supplierMatch && (
-                          <span title={`Confidence: ${Math.round(activeFile.invoiceInfo.supplierMatch.score * 100)}%`} className="ml-1 flex items-center">
+                          <span title={`Confidence: ${Math.round(activeFile.invoiceInfo.supplierMatch.score * 100)}%`} className="ml-1 flex items-center shrink-0">
                             {activeFile.invoiceInfo.supplierMatch.matchType === "auto-matched" 
                               ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block shadow-[0_0_8px_rgba(52,211,153,0.5)]" /> 
                               : <span className="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block shadow-[0_0_8px_rgba(251,113,133,0.5)]" />}
                           </span>
                         )}
-                      </span>
+                      </div>
                     </div>
                     <div>
                       <span className="text-primary/40">Date:</span>{" "}
@@ -905,12 +958,12 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                 </div>
 
                 {/* Products Review Table */}
-                <div className="flex-1 min-h-0 flex flex-col border border-primary/10 rounded-xl overflow-hidden bg-primary/3">
+                <div className="border border-primary/10 rounded-xl overflow-hidden bg-primary/3">
                   <div className="px-3 py-2 flex items-center justify-between border-b border-primary/10" style={{ background: "var(--bg-surface-2)" }}>
                     <span className="text-xs font-semibold text-primary">{activeFile.invoiceProducts.length} Extracted Products</span>
                     <span className="text-[10px] text-primary/40">Click Name to edit, or customize inputs</span>
                   </div>
-                  <div className="flex-1 overflow-auto">
+                  <div className="w-full overflow-x-auto custom-scrollbar">
                     <table className="w-full text-[11px]">
                       <thead className="sticky top-0 bg-surface-2 border-b border-primary/10 z-10">
                         <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--bg-surface-2)" }}>
@@ -919,8 +972,9 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                           <th className="px-2.5 py-1.5 text-left text-primary/50 font-medium w-20">HSN/SAC</th>
                           <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-12">GST %</th>
                           <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-14">Stock</th>
-                          <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-14" title="Base Purchase Price">Base ₹</th>
-                          <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-16" title="Landed Cost (Base + GST + Shared Expenses)">Landed ₹</th>
+                          <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-14" title="Number of Bags/Packets for Expenses">Bags</th>
+                          <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-14" title="Base Purchase Price (Incl. GST)">Base ₹</th>
+                          <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-16" title="Landed Cost (Base + Shared Expenses)">Landed ₹</th>
                           <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-14">Selling ₹</th>
                           <th className="px-2.5 py-1.5 text-center text-primary/50 font-medium w-8"></th>
                         </tr>
@@ -972,17 +1026,25 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                                 value={p.stock} onChange={(e) => updateInvoiceProduct(idx, "stock", Number(e.target.value))} min={0} title={isStockWarning ? "Missing Quantity" : ""} />
                             </td>
                             <td className="px-2.5 py-1.5 text-right">
+                              <input type="number" className="w-14 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1 py-0.5 transition-colors"
+                                value={p.stock > 0 ? Number((p.stock / (p.unitsPerBag || 1)).toFixed(2)) : 0} 
+                                onChange={(e) => {
+                                  const bags = Number(e.target.value) || 1;
+                                  const newUnitsPerBag = (p.stock || 0) / bags;
+                                  updateInvoiceProduct(idx, "unitsPerBag", newUnitsPerBag);
+                                }} min={0.01} step="any" title="Edit number of bags to correctly distribute transport/labour expenses" />
+                            </td>
+                            <td className="px-2.5 py-1.5 text-right">
                               <input type="number" className="w-16 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1 py-0.5 transition-colors"
                                 value={p.basePurchasePrice} onChange={(e) => updateInvoiceProduct(idx, "basePurchasePrice", Number(e.target.value))} min={0} step="any" />
                             </td>
                             <td className="px-2.5 py-1.5 text-right">
                               {(() => {
-                                const gstMultiplier = 1 + (Number(p.gstRate) || 0) / 100;
-                                const baseWithGst = Number(p.basePurchasePrice || 0) * gstMultiplier;
+                                const baseWithGst = Number(p.basePurchasePrice || 0);
                                 const perUnitExp = getProductPerUnitExpense(activeFile.id, p, idx);
                                 const landed = baseWithGst + perUnitExp;
                                 return (
-                                  <span className="text-[11px] font-medium text-emerald-400" title={`Base ₹${(p.basePurchasePrice || 0).toFixed(2)} + GST ₹${(baseWithGst - Number(p.basePurchasePrice || 0)).toFixed(2)} + Exp ₹${perUnitExp.toFixed(2)}`}>
+                                  <span className="text-[11px] font-medium text-emerald-400" title={`Base (Incl. GST) ₹${baseWithGst.toFixed(2)} + Exp ₹${perUnitExp.toFixed(2)}`}>
                                     ₹{landed.toFixed(2)}
                                   </span>
                                 );
@@ -1006,127 +1068,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                   </div>
                 </div>
 
-                {/* Shared Session Expenses Checklist section */}
-                <div className="rounded-xl overflow-hidden border border-primary/10 mt-4">
-                  <button
-                    onClick={() => { if (sharedExpenses.length === 0) addExpense(); setShowExpenses(!showExpenses); }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium hover:bg-primary/3 transition-colors bg-surface-2"
-                  >
-                    <span className="flex items-center gap-2 text-primary">
-                      <Truck size={13} className="text-violet-400" />
-                      Shared Session Expenses
-                      {totalExpenseAmount > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px] font-semibold">
-                          ₹{totalExpenseAmount.toLocaleString('en-IN')}
-                        </span>
-                      )}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-primary/30">
-                        {sharedExpenses.length === 0 ? "Add loading, transport, labour bills..." : `${sharedExpenses.length} expense item(s)`}
-                      </span>
-                      {showExpenses ? <ChevronUp size={12} className="text-primary/40" /> : <ChevronDown size={12} className="text-primary/40" />}
-                    </span>
-                  </button>
 
-                  {showExpenses && (
-                    <div className="p-3 space-y-4 border-t border-primary/10 bg-primary/3">
-                      {sharedExpenses.map((exp) => (
-                        <div key={exp.id} className="space-y-2 pb-2 border-b border-dashed border-primary/10">
-                          <div className="flex items-center gap-2">
-                            <select
-                              className="flex-1 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] outline-none px-2 py-1.5 transition-colors focus:border-violet-500/40"
-                              value={exp.category}
-                              onChange={(e) => updateExpense(exp.id, "category", e.target.value)}
-                            >
-                              {EXPENSE_CATEGORIES.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                              ))}
-                            </select>
-                            <div className="relative">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary/30 text-[11px]">₹</span>
-                              <input
-                                type="number"
-                                className="w-28 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] text-right outline-none pl-5 pr-2 py-1.5 transition-colors focus:border-violet-500/40"
-                                value={exp.amount || ""}
-                                onChange={(e) => updateExpense(exp.id, "amount", Number(e.target.value))}
-                                placeholder="0"
-                                min={0}
-                                step="any"
-                              />
-                            </div>
-                            <button onClick={() => removeExpense(exp.id)}
-                              className="text-rose-400/50 hover:text-rose-400 transition-colors p-1">
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-
-                          {/* Checkbox product checklist for expense eligibility */}
-                          <div className="rounded-lg border border-primary/5 p-2 bg-primary/5">
-                            <div className="flex items-center justify-between mb-1.5 text-[10px] text-primary/40 font-medium">
-                              <span>Checked products are eligible for this expense:</span>
-                              <div className="flex gap-2">
-                                <button onClick={() => setProductApplicabilityAll(exp.id, true)}
-                                  className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">Select All</button>
-                                <span className="text-primary/10">|</span>
-                                <button onClick={() => setProductApplicabilityAll(exp.id, false)}
-                                  className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">Deselect All</button>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto custom-scrollbar">
-                              {files.flatMap(f => (f.invoiceProducts || []).map((p, pIdx) => {
-                                const productId = `${f.id}-${pIdx}`;
-                                const allProductIds = files.flatMap(file => (file.invoiceProducts || []).map((_, i) => `${file.id}-${i}`));
-                                const appliesTo = exp.applicableProductIds || allProductIds;
-                                const isChecked = appliesTo.includes(productId);
-                                return (
-                                  <label key={productId} className="flex items-center gap-2 text-[11px] text-primary/75 hover:text-primary cursor-pointer transition-colors select-none py-0.5">
-                                    <input
-                                      type="checkbox"
-                                      checked={isChecked}
-                                      onChange={() => toggleProductApplicability(exp.id, productId)}
-                                      className="rounded border-primary/20 text-violet-500 focus:ring-violet-500/40 bg-transparent w-3.5 h-3.5 cursor-pointer"
-                                    />
-                                    <span className="truncate" title={p.name}>{p.name || 'Unnamed'} <span className="text-primary/30 ml-1">({f.invoiceInfo?.invoiceNumber || 'Unknown'})</span></span>
-                                  </label>
-                                );
-                              }))}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-
-                      <button onClick={addExpense}
-                        className="flex items-center gap-1.5 text-[11px] text-violet-400 hover:text-violet-300 transition-colors py-1">
-                        <Plus size={11} /> Add Expense Item
-                      </button>
-
-                      {/* Distribution Preview */}
-                      {totalExpenseAmount > 0 && activeFile.invoiceProducts.length > 0 && (
-                        <div className="pt-2 border-t border-primary/5 mt-4">
-                          <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview for {activeFile.file.name} (by quantity)</p>
-                          <div className="mt-2 space-y-1.5">
-                            {activeFile.invoiceProducts.map((p, idx) => {
-                              const units = Number(p.stock) || 0;
-                              const perUnit = getProductPerUnitExpense(activeFile.id, p);
-                              const share = getProductExpenseShare(activeFile.id, p);
-                              if (share <= 0) return null;
-                              
-                              return (
-                                <div key={idx} className="flex items-center justify-between text-xs">
-                                  <span className="text-primary/70 truncate w-1/3">{p.name || 'Unnamed Item'}</span>
-                                  <span className="text-primary/30 mx-2">{units.toFixed(1)} qty</span>
-                                  <span className="text-emerald-400 font-medium w-16 text-right">+₹{perUnit.toFixed(2)}/u</span>
-                                  <span className="text-violet-400 font-medium w-16 text-right">₹{share.toFixed(2)}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
 
                 {/* Warnings / Errors Panel for Active File */}
                 {activeFile.errors.length > 0 && (
@@ -1164,6 +1106,186 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP: EXPENSES ── */}
+      {step === "expenses" && files.length > 0 && (
+        <div className="flex flex-col h-[600px] max-w-3xl mx-auto py-4">
+          <div className="text-center mb-6">
+            <h2 className="text-lg font-semibold text-primary">Shared Inbound Expenses</h2>
+            <p className="text-xs text-primary/40 mt-1">Add freight, loading, or transport costs to proportionally distribute landed costs across the imported products.</p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-6 space-y-4">
+             {sharedExpenses.length === 0 ? (
+               <div className="flex flex-col items-center justify-center py-12 border border-dashed border-primary/15 rounded-2xl bg-primary/3 h-full">
+                 <Truck size={32} className="text-primary/20 mb-3" />
+                 <p className="text-sm font-medium text-primary mb-1">No shared expenses added</p>
+                 <p className="text-xs text-primary/40 mb-4 max-w-sm text-center">Do you have additional transport or handling bills that apply to these invoices?</p>
+                 <Button onClick={addExpense} icon={<Plus size={14} />}>Add Expense</Button>
+               </div>
+             ) : (
+                <div className="space-y-4">
+                  {sharedExpenses.map((exp) => (
+                    <div key={exp.id} className="p-4 rounded-xl border border-primary/10 bg-surface-2 space-y-4">
+                      <div className="flex items-start gap-4">
+                        <div className="flex-1">
+                          <label className="text-[10px] text-primary/40 uppercase tracking-wider font-semibold mb-1.5 block">Expense Category</label>
+                          <select
+                            className="w-full bg-primary/5 border border-primary/10 rounded-lg text-primary text-sm outline-none px-3 py-2 transition-colors focus:border-violet-500/40"
+                            value={exp.category}
+                            onChange={(e) => updateExpense(exp.id, "category", e.target.value)}
+                          >
+                            {EXPENSE_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          </select>
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] text-primary/40 uppercase tracking-wider font-semibold mb-1.5 block">Amount (₹)</label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/30">₹</span>
+                            <input
+                              type="number"
+                              className="w-full bg-primary/5 border border-primary/10 rounded-lg text-primary text-sm outline-none pl-7 pr-3 py-2 transition-colors focus:border-violet-500/40"
+                              value={exp.amount || ""}
+                              onChange={(e) => updateExpense(exp.id, "amount", Number(e.target.value))}
+                              placeholder="0.00"
+                              min={0}
+                              step="any"
+                            />
+                          </div>
+                        </div>
+                        <button onClick={() => updateExpense(exp.id, "isExpanded", !(exp.isExpanded ?? true))} className="mt-6 p-2 text-primary/40 hover:text-primary transition-colors" title="Toggle Products">
+                          {(exp.isExpanded ?? true) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                        <button onClick={() => removeExpense(exp.id)} className="mt-6 p-2 text-rose-400/50 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors" title="Delete Expense">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+
+                      {(exp.isExpanded ?? true) && (
+                        <div className="rounded-lg border border-primary/5 bg-primary/5 p-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs text-primary/50 font-medium">Apply expense to these products:</span>
+                            <div className="flex gap-2 text-xs">
+                              <button onClick={() => setProductApplicabilityAll(exp.id, true)} className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">Select All</button>
+                              <span className="text-primary/10">|</span>
+                              <button onClick={() => setProductApplicabilityAll(exp.id, false)} className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">Deselect All</button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-2">
+                            {files.flatMap(f => (f.invoiceProducts || []).map((p, pIdx) => {
+                              const productId = `${f.id}-${pIdx}`;
+                              const allProductIds = files.flatMap(file => (file.invoiceProducts || []).map((_, i) => `${file.id}-${i}`));
+                              const appliesTo = exp.applicableProductIds || allProductIds;
+                              const isChecked = appliesTo.includes(productId);
+                              return (
+                                <label key={productId} className="flex items-center gap-2.5 text-xs text-primary/75 hover:text-primary cursor-pointer transition-colors select-none py-1 px-2 rounded-md hover:bg-primary/5">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleProductApplicability(exp.id, productId)}
+                                    className="rounded border-primary/20 text-violet-500 focus:ring-violet-500/40 bg-transparent w-4 h-4 cursor-pointer"
+                                  />
+                                  <span className="truncate flex-1" title={p.name}>{p.name || 'Unnamed'} <span className="text-primary/30 ml-1 text-[10px]">({f.invoiceInfo?.invoiceNumber || 'Unknown'})</span></span>
+                                </label>
+                              );
+                            }))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={addExpense} className="flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 transition-colors font-medium">
+                    <Plus size={14} /> Add Another Expense
+                  </button>
+                </div>
+             )}
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-primary/10">
+            <Button variant="secondary" onClick={() => setStep("review")}>Back to Products</Button>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-[10px] text-primary/40 uppercase tracking-wider font-semibold">Total Additional Cost</p>
+                <p className="text-sm font-bold text-violet-400">₹{totalExpenseAmount.toLocaleString('en-IN')}</p>
+              </div>
+              <Button onClick={() => setStep("summary")} className="group relative">
+                <span className="flex items-center gap-1.5">
+                  Review Final Summary
+                  <span className="text-[9px] font-mono text-primary/40 bg-primary/5 px-1 rounded ml-1 group-hover:text-primary/70 transition-colors">Ctrl+↵</span>
+                </span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP: SUMMARY ── */}
+      {step === "summary" && files.length > 0 && (
+        <div className="flex flex-col h-[600px] py-4">
+          <div className="text-center mb-6">
+            <h2 className="text-lg font-semibold text-primary">Final Landed Cost Summary</h2>
+            <p className="text-xs text-primary/40 mt-1">Review the final purchase prices including all shared expenses before importing.</p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar border rounded-xl border-primary/10 bg-surface-2 relative">
+            <table className="w-full text-left text-xs text-primary/70">
+              <thead className="bg-primary/5 sticky top-0 backdrop-blur-md z-10 text-[10px] uppercase tracking-wider text-primary/40 font-semibold border-b border-primary/10">
+                <tr>
+                  <th className="py-2.5 px-4 font-medium w-[25%]">Product Name</th>
+                  <th className="py-2.5 px-4 font-medium text-right">Invoice Qty</th>
+                  <th className="py-2.5 px-4 font-medium text-right">Base / Unit (₹)</th>
+                  <th className="py-2.5 px-4 font-medium text-right">Exp / Unit (₹)</th>
+                  <th className="py-2.5 px-4 font-medium text-right text-violet-400">Landed / Unit (₹)</th>
+                  <th className="py-2.5 px-4 font-medium text-right text-emerald-400">Total Landed (₹)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-primary/5">
+                {files.filter(f => f.status === "success" && !f.trainingRequired).flatMap(f => 
+                  (f.invoiceProducts || []).map((p, idx) => {
+                    const units = Number(p.stock) || 0;
+                    const basePrice = Number(p.basePurchasePrice || p.purchasePrice) || 0;
+                    const perUnitExpense = getProductPerUnitExpense(f.id, p, idx);
+                    const landedCostPerUnit = basePrice + perUnitExpense;
+                    const totalLandedCost = landedCostPerUnit * units;
+                    
+                    return (
+                      <tr key={`${f.id}-${idx}`} className="hover:bg-primary/5 transition-colors">
+                        <td className="py-2.5 px-4">
+                          <div className="font-medium text-primary truncate max-w-[200px]" title={p.name}>{p.name}</div>
+                          <div className="text-[10px] text-primary/40 mt-0.5 font-mono">{f.invoiceInfo?.invoiceNumber || "Unknown Inv"}</div>
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-medium">{units.toFixed(1)} {p.unit || 'u'}</td>
+                        <td className="py-2.5 px-4 text-right">₹{basePrice.toFixed(2)}</td>
+                        <td className="py-2.5 px-4 text-right text-rose-400">
+                          {perUnitExpense > 0 ? `+₹${perUnitExpense.toFixed(2)}` : '-'}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-bold text-violet-400">
+                          ₹{landedCostPerUnit.toFixed(2)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-bold text-emerald-400">
+                          ₹{totalLandedCost.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between pt-4 mt-4 border-t border-primary/10">
+            <Button variant="secondary" onClick={() => setStep("expenses")}>Back to Expenses</Button>
+            <div className="flex items-center gap-4">
+              <Button onClick={handleInvoiceConfirmImport} className="group relative shadow-violet-500/20 shadow-lg">
+                <span className="flex items-center gap-1.5">
+                  Confirm & Import to Inventory
+                  <span className="text-[9px] font-mono text-primary/40 bg-primary/5 px-1 rounded ml-1 group-hover:text-primary/70 transition-colors">Ctrl+↵</span>
+                </span>
+              </Button>
+            </div>
           </div>
         </div>
       )}

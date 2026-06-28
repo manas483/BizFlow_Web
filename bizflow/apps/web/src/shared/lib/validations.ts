@@ -25,7 +25,7 @@ export const productSchema = z.object({
 
 export const customerSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
-  phone: z.string().min(1, "Phone is required").max(20),
+  phone: z.string().max(20).optional().nullable().or(z.literal('')),
   email: z.string().email("Invalid email").optional().nullable().or(z.literal('')),
   address: z.string().max(200).optional().nullable(),
   city: z.string().max(50).optional().nullable(),

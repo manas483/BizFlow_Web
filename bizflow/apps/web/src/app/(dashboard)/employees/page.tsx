@@ -88,11 +88,11 @@ export default function EmployeesPage() {
     ? employees
     : employees.filter((e: any) => e.status === statusFilter);
 
-  const totalSalary = employees.reduce((s: number, e: any) => s + e.salary, 0);
+  const totalSalary = employees.reduce((s: number, e: any) => s + (e.salary || 0), 0);
   const active = employees.filter((e: any) => e.status === "active").length;
   const pending = employees.filter((e: any) => e.status === "INVITATION_SENT" || e.status === "PENDING_VERIFICATION").length;
   const avgAttendance = employees.length
-    ? Math.round(employees.reduce((s: number, e: any) => s + e.attendance, 0) / employees.length)
+    ? Math.round(employees.reduce((s: number, e: any) => s + (e.attendance || 0), 0) / employees.length)
     : 0;
 
   const handleDelete = async () => {
@@ -452,8 +452,8 @@ export default function EmployeesPage() {
                     <p className="text-primary/60 text-[11px] font-medium uppercase tracking-wider">{emp.designation}</p>
                   )}
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <Badge variant={roleColors[emp.role] || "default"}>
-                      {emp.role.replace("_", " ")}
+                    <Badge variant={emp.role ? (roleColors[emp.role] || "default") : "default"}>
+                      {emp.role ? emp.role.replace("_", " ") : "Unknown"}
                     </Badge>
                     <span className="text-primary/40 text-xs">{emp.department}</span>
                     <Badge variant={statusColors[emp.status] || "default"} className="ml-auto">

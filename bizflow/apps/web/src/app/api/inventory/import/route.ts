@@ -116,13 +116,15 @@ export async function POST(req: NextRequest) {
         // ── Create Purchase Header ──
         let purchaseId: string | null = null;
         if (invoiceInfo?.invoiceNumber && supplierId) {
+           const parsedInvoiceDate = invoiceInfo.purchaseDate ? new Date(invoiceInfo.purchaseDate) : new Date();
+           const safeInvoiceDate = isNaN(parsedInvoiceDate.getTime()) ? new Date() : parsedInvoiceDate;
            const purchase = await prisma.purchase.create({
               data: {
                  businessId,
                  supplierId: supplierId,
-                 purchaseNo: `PUR-${Date.now()}`,
+                 purchaseNo: `PUR-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
                  invoiceNo: invoiceInfo.invoiceNumber,
-                 purchaseDate: invoiceInfo.purchaseDate ? new Date(invoiceInfo.purchaseDate) : new Date(),
+                 purchaseDate: safeInvoiceDate,
                  status: 'CONFIRMED',
                  totalAmount: Number(invoiceInfo.grandTotal) || 0,
                  notes: 'Imported via API/AI',
@@ -131,15 +133,19 @@ export async function POST(req: NextRequest) {
            purchaseId = purchase.id;
 
            if (invoiceInfo.attachment) {
-             await prisma.purchaseAttachment.create({
-               data: {
-                 purchaseId: purchase.id,
-                 fileUrl: invoiceInfo.attachment.url,
-                 fileName: invoiceInfo.attachment.fileName,
-                 fileSize: invoiceInfo.attachment.fileSize,
-                 mimeType: invoiceInfo.attachment.mimeType,
-               }
-             });
+             try {
+               await prisma.purchaseAttachment.create({
+                 data: {
+                   purchaseId: purchase.id,
+                   fileUrl: invoiceInfo.attachment.url,
+                   fileName: invoiceInfo.attachment.fileName,
+                   fileSize: invoiceInfo.attachment.fileSize,
+                   mimeType: invoiceInfo.attachment.mimeType,
+                 }
+               });
+             } catch (attErr) {
+               console.error("Failed to create purchase attachment record:", attErr);
+             }
            }
         }
 
@@ -158,16 +164,16 @@ export async function POST(req: NextRequest) {
               name,
               sku,
               category: String(p.category || intel?.category || "Other"),
-              stock: Number(p.stock ?? 0),
-              minStock: Number(p.minStock ?? intel?.minStock ?? 5),
-              unitsPerBag: Number(p.unitsPerBag || intel?.unitsPerBag || 1),
+              stock: Math.round(Number(p.stock ?? 0)),
+              minStock: Math.round(Number(p.minStock ?? intel?.minStock ?? 5)),
+              unitsPerBag: Math.round(Number(p.unitsPerBag || intel?.unitsPerBag || 1)),
               standardCost: p.purchasePrice ? Number(p.purchasePrice) : Number(p.basePurchasePrice ?? p.purchasePrice ?? 0) + totalExpensesPerUnit,
               sellingPrice: Number(p.sellingPrice ?? 0),
               unit: String(p.unit || intel?.unit || "pcs"),
               supplier: supplierName ? String(supplierName) : (p.supplier ? String(p.supplier) : null),
               purchaseFrom: supplierName ? String(supplierName) : (p.supplier ? String(p.supplier) : null),
               supplierId: supplierId,
-              purchaseDate: invoiceInfo.purchaseDate ? new Date(invoiceInfo.purchaseDate) : (p.purchaseDate ? new Date(p.purchaseDate) : null),
+              purchaseDate: (p.purchaseDate && !isNaN(new Date(p.purchaseDate).getTime())) ? new Date(p.purchaseDate) : (invoiceInfo.purchaseDate && !isNaN(new Date(invoiceInfo.purchaseDate).getTime()) ? new Date(invoiceInfo.purchaseDate) : null),
               purchaseInvoiceNo: invoiceInfo.invoiceNumber ? String(invoiceInfo.invoiceNumber) : (p.purchaseInvoiceNo ? String(p.purchaseInvoiceNo) : null),
               hsnCode: p.hsnCode || intel?.hsnCode || null,
               gstRate: Number(p.gstRate ?? intel?.gstRate ?? 0),
@@ -456,6 +462,11 @@ export async function POST(req: NextRequest) {
             warnings.push({ row: idx + 1, column: 'stock', message: 'Quantity is 0', severity: 'warning' });
           }
           
+          const finalGstRate = matchedDbProduct?.gstRate || parseNum(p.gstRate) || intel?.gstRate || 0;
+          const exclusivePrice = parseNum(p.basePurchasePrice) || parseNum(p.purchasePrice);
+          const inclusiveBasePrice = Number((exclusivePrice * (1 + finalGstRate / 100)).toFixed(2));
+          const transport = parseNum(p.transportCost);
+
           return {
             rowIndex: idx + 1,
             action: "create" as const,
@@ -467,15 +478,15 @@ export async function POST(req: NextRequest) {
               category: matchedDbProduct?.category || p.category || intel?.category || "Other",
               stock: parseNum(p.quantity ?? p.stock),
               unitsPerBag: matchedDbProduct?.unitsPerBag || parseNum(p.unitsPerBag) || intel?.unitsPerBag || 1,
-              basePurchasePrice: parseNum(p.basePurchasePrice) || parseNum(p.purchasePrice),
-              transportCost: parseNum(p.transportCost),
-              purchasePrice: (parseNum(p.basePurchasePrice) || parseNum(p.purchasePrice)) + parseNum(p.transportCost),
+              basePurchasePrice: inclusiveBasePrice,
+              transportCost: transport,
+              purchasePrice: inclusiveBasePrice + transport,
               sellingPrice: parseNum(p.sellingPrice),
               unit: matchedDbProduct?.unit || p.unit || intel?.unit || "pcs",
               supplier: finalSupplier,
               purchaseInvoiceNo: detectedInvoice.invoiceNumber || "UNKNOWN",
               purchaseDate: detectedInvoice.purchaseDate || new Date().toISOString(),
-              gstRate: matchedDbProduct?.gstRate || parseNum(p.gstRate) || intel?.gstRate || 0,
+              gstRate: finalGstRate,
               hsnCode: String(p.hsnCode || intel?.hsnCode || ""),
               matchScore: bestScore,
               matchType,

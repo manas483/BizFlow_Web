@@ -109,7 +109,7 @@ export default function Modal({ open, onClose, title, subtitle, children, size =
         </div>
 
         {/* Body — scrollable */}
-        <div className="px-4 pt-4 pb-8 sm:p-5 overflow-y-auto flex-1 min-h-0">{children}</div>
+        <div className="px-4 pt-4 pb-8 sm:p-5 overflow-y-auto overscroll-contain scroll-smooth flex-1 min-h-0 custom-scrollbar">{children}</div>
       </div>
     </div>
   );

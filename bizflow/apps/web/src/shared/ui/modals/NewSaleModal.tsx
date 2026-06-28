@@ -446,9 +446,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
     onClose();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const saveSale = async (isDraft: boolean) => {
     const issues = getValidationIssues();
     if (issues.length > 0) {
       // Show first issue as toast for quick feedback
@@ -484,6 +482,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
         isAggregate,
         aggregateDate: isAggregate ? new Date().toISOString().split("T")[0] : undefined,
         invoiceDate: invoiceDate || undefined,
+        workflowState: isDraft ? 'draft' : 'posted',
       };
 
       if (editSaleId) {
@@ -501,6 +500,11 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    saveSale(false);
   };
 
   // ── Keyboard Shortcuts ──
@@ -687,9 +691,8 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
           />
         </div>
 
-        {/* ── Summary + Payment (sticky) ── */}
-        <div className="sticky bottom-[-2rem] sm:bottom-[-1.25rem] z-10 -mx-4 sm:-mx-5 px-4 sm:px-5 pt-4 pb-2"
-          style={{ backgroundColor: "var(--bg-surface)" }}>
+        {/* ── Summary + Payment ── */}
+        <div className="pt-2 pb-2">
           <InvoiceSummary
             totals={totals}
             gstInclusive={gstInclusive}
@@ -707,32 +710,30 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
             maxPayable={totals.grandTotal}
           />
 
-          <div className="flex items-center justify-between mt-4">
-    <div className="flex gap-2">
-      <button 
-        type="button" 
-        onClick={() => saveSale(true)} 
-        disabled={loading || (workflowState === 'posted')}
-        className="px-4 py-2 border border-slate-700 text-slate-300 rounded hover:bg-slate-800 disabled:opacity-50 text-sm font-medium transition-colors"
-      >
-        {loading ? "Saving..." : "Save Draft"}
-      </button>
-    </div>
-    <div className="flex gap-2">
-      <button type="button" onClick={handleClose} disabled={loading} className="px-4 py-2 text-slate-400 hover:text-slate-300">Cancel</button>
-      <button
-        type="button"
-        onClick={() => saveSale(false)}
-        disabled={loading || items.length === 0 || !customer || (workflowState === 'posted')}
-        className="px-6 py-2 bg-primary text-primary-foreground font-semibold rounded hover:bg-primary/90 disabled:opacity-50 shadow-sm transition-all"
-      >
-        {workflowState === 'draft' ? "Confirm & Post" : (editSaleId ? "Update Invoice" : "Confirm & Post")}
-      </button>
-    </div>
-  </div>
+          <div className="flex items-center justify-between mt-8 pt-4 border-t border-primary/10 gap-3">
+            <button 
+              type="button" 
+              onClick={() => saveSale(true)} 
+              disabled={loading || (workflowState === 'posted')}
+              className="px-5 py-2.5 border border-primary/10 text-primary/60 rounded-xl hover:bg-primary/5 hover:text-primary disabled:opacity-50 text-sm font-medium transition-all"
+            >
+              {loading ? "Saving..." : "Save Draft"}
+            </button>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={handleClose} disabled={loading} className="px-4 py-2.5 text-primary/50 hover:text-primary transition-colors text-sm font-medium">Cancel</button>
+              <button
+                type="button"
+                onClick={() => saveSale(false)}
+                disabled={loading || items.length === 0 || !customer || (workflowState === 'posted')}
+                className="px-8 py-2.5 rounded-xl text-sm font-semibold text-white transition-all bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-500 hover:to-purple-600 shadow-lg shadow-violet-500/20 disabled:opacity-50 hover:-translate-y-0.5"
+              >
+                {workflowState === 'draft' ? "Confirm & Post" : (editSaleId ? "Update Invoice" : "Confirm & Post")}
+              </button>
+            </div>
+          </div>
 
           {/* Keyboard hint */}
-          <p className="text-center text-[10px] text-primary/20 mt-2 pb-1">
+          <p className="text-center text-[10px] text-primary/20 mt-3">
             <kbd className="px-1 py-0.5 rounded bg-primary/5 border border-primary/10 text-primary/30">Ctrl+Enter</kbd> Generate Invoice
           </p>
         </div>

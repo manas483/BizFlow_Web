@@ -27,6 +27,9 @@ export function useCreateCustomer() {
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
+        if (errorData.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
+          throw new Error(errorData.details[0].message);
+        }
         throw new Error(errorData.error || "Failed to create customer");
       }
       return res.json();
@@ -46,6 +49,9 @@ export function useUpdateCustomer() {
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
+        if (errorData.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
+          throw new Error(errorData.details[0].message);
+        }
         throw new Error(errorData.error || "Failed to update customer");
       }
       return res.json();

@@ -70,9 +70,11 @@ export async function POST(req: NextRequest) {
   // ── Phase 2: Draft creation path ──
   // Drafts have ZERO financial impact: no stock, no journals, no customer dues.
   // They use DFT-YYYY-NNNNNN numbering and workflowState='draft'.
+  let session: any;
+  let body: any;
   try {
-    const session = await requireAuth();
-    const body = await req.json();
+    session = await requireAuth();
+    body = await req.json();
 
     if (body.isDraft === true) {
       const validated = draftSaleSchema.parse(body);
@@ -211,8 +213,6 @@ export async function POST(req: NextRequest) {
   const MAX_RETRIES = 3;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
   try {
-    const session = await requireAuth();
-    const body = await req.json();
     const validatedData = saleSchema.parse(body);
     const { customerId, items, paid, status, notes, placeOfSupply, reverseCharge, isAggregate, aggregateDate, invoiceDate, paymentTerms, dueDate, payments } = validatedData;
 

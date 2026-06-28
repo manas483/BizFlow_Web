@@ -87,8 +87,8 @@ export default function AddCustomerModal({ open, onClose }: { open: boolean; onC
         </FormField>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="Phone Number" required>
-            <ModalInput required type="tel" placeholder={samplePhone} value={form.phone} onChange={set("phone")} />
+          <FormField label="Phone Number">
+            <ModalInput type="tel" placeholder={samplePhone} value={form.phone} onChange={set("phone")} />
           </FormField>
           <FormField label="Email Address">
             <ModalInput type="email" placeholder={sampleEmail} value={form.email} onChange={set("email")} />

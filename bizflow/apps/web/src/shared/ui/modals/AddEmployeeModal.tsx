@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Modal, { FormField, ModalInput, ModalFooter } from "@/shared/ui/ui/Modal";
 import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
 import { UserCheck, Shield, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
@@ -95,7 +95,7 @@ export default function AddEmployeeModal({ open, onClose }: { open: boolean; onC
     setForm({ ...form, permissions: newPerms });
   };
 
-  const formRef = React.useRef<HTMLFormElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

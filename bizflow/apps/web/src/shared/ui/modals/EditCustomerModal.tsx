@@ -37,7 +37,7 @@ export default function EditCustomerModal({ customer, onClose }: { customer: any
         status: form.status,
       });
       onClose();
-    } catch { toast.error("Failed to update customer"); }
+    } catch (error: any) { toast.error(error.message || "Failed to update customer"); }
     finally { setLoading(false); }
   };
 
@@ -50,8 +50,8 @@ export default function EditCustomerModal({ customer, onClose }: { customer: any
           <ModalInput required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </FormField>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="Phone" required>
-            <ModalInput required type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <FormField label="Phone">
+            <ModalInput type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </FormField>
           <FormField label="Email">
             <ModalInput type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
