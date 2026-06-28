@@ -381,6 +381,10 @@ export async function POST(req: NextRequest) {
         let supplierMatchScore = 0;
         let finalSupplier = detectedInvoice.supplier || "Unknown Supplier";
 
+        if (detectedInvoice.supplierConfidence !== undefined && detectedInvoice.supplierConfidence < 0.7) {
+          finalSupplier = "Unknown Supplier";
+        }
+
         if (finalSupplier !== "Unknown Supplier") {
           for (const s of Array.from(uniqueSuppliers)) {
             const score = computeStringSimilarity(finalSupplier, s);

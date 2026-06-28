@@ -22,6 +22,7 @@ export interface ExtractedInvoice {
   invoiceNumber: string;
   supplier: string;
   supplierGstin: string;
+  supplierConfidence?: number;
   purchaseDate: string;
   eWayBillNo: string;
   format: string;
@@ -36,6 +37,7 @@ export interface GeminiExtractionResult {
   invoiceNumber: string | null;
   supplier: string | null;
   supplierGstin: string | null;
+  supplierConfidence: number | null;
   purchaseDate: string | null;
   eWayBillNo: string | null;
   subtotal: number;
@@ -98,11 +100,23 @@ CRITICAL INSTRUCTIONS:
 - NEVER invent or estimate missing values (like HSN, GST, quantity, or prices). If a value is missing or unreadable, return null or 0 as appropriate.
 - ALWAYS respond with valid JSON ONLY (no markdown, no code blocks, no backticks).
 
+SUPPLIER EXTRACTION PRIORITY:
+Find the supplier/company name based on this priority:
+1. GSTIN owner/company issuing the invoice
+2. "Sold By"
+3. "Supplier"
+4. "Vendor"
+5. "Dealer"
+6. Company logo text
+7. Address block near GSTIN
+NEVER return: "INVOICE", "TAX INVOICE", "GST INVOICE", "ORIGINAL", "DUPLICATE", "CUSTOMER COPY", "CASH MEMO".
+
 Extract the data into this EXACT JSON structure:
 {
   "invoiceNumber": "string | null",
   "supplier": "string | null",
   "supplierGstin": "string | null",
+  "supplierConfidence": 0.0 to 1.0 (float),
   "purchaseDate": "YYYY-MM-DD | null",
   "eWayBillNo": "string | null",
   "subtotal": 0.0,
@@ -184,6 +198,7 @@ Definitions:
       invoiceNumber: geminiData.invoiceNumber || "",
       supplier: geminiData.supplier || "Unknown Supplier",
       supplierGstin: geminiData.supplierGstin || "",
+      supplierConfidence: geminiData.supplierConfidence ?? 1.0,
       purchaseDate: geminiData.purchaseDate || new Date().toISOString(),
       eWayBillNo: geminiData.eWayBillNo || "",
       format: "gemini_vision",
