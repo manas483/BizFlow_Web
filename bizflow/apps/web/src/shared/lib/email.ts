@@ -1,5 +1,14 @@
 import { Resend } from 'resend';
 import React from 'react';
+import { WelcomeEmail } from '@/emails/WelcomeEmail';
+import { OtpEmail } from '@/emails/OtpEmail';
+import { LowStockEmail } from '@/emails/LowStockEmail';
+import { InvoiceEmail } from '@/emails/InvoiceEmail';
+import { PasswordResetEmail } from '@/emails/PasswordResetEmail';
+import { MonthlyReportEmail } from '@/emails/MonthlyReportEmail';
+import { EmployeeInvitationEmail } from '@/emails/EmployeeInvitationEmail';
+import { PaymentReminderEmail } from '@/emails/PaymentReminderEmail';
+import { GstReminderEmail } from '@/emails/GstReminderEmail';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -7,9 +16,6 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const SENDER_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'BizFlow <noreply@bizflow.littleryders.com>';
 
 export async function sendWelcomeEmail(to: string, name: string) {
-  // We will dynamic import the React template to prevent SSR issues or circular dependencies sometimes
-  const { WelcomeEmail } = await import('@/emails/WelcomeEmail');
-  
   try {
     const data = await resend.emails.send({
       from: SENDER_EMAIL,
@@ -25,8 +31,6 @@ export async function sendWelcomeEmail(to: string, name: string) {
 }
 
 export async function sendOtpEmail(to: string, name: string, otp: string) {
-  const { OtpEmail } = await import('@/emails/OtpEmail');
-
   try {
     const data = await resend.emails.send({
       from: SENDER_EMAIL,
@@ -42,8 +46,6 @@ export async function sendOtpEmail(to: string, name: string, otp: string) {
 }
 
 export async function sendLowStockAlert(to: string, productName: string, stock: number) {
-  const { LowStockEmail } = await import('@/emails/LowStockEmail');
-  
   try {
     const data = await resend.emails.send({
       from: SENDER_EMAIL,
@@ -59,8 +61,6 @@ export async function sendLowStockAlert(to: string, productName: string, stock: 
 }
 
 export async function sendInvoiceEmail(to: string, customerName: string, invoiceNo: string, amount: number, pdfBuffer: Uint8Array) {
-  const { InvoiceEmail } = await import('@/emails/InvoiceEmail');
-  
   try {
     const data = await resend.emails.send({
       from: SENDER_EMAIL,
@@ -82,8 +82,6 @@ export async function sendInvoiceEmail(to: string, customerName: string, invoice
 }
 
 export async function sendPasswordResetEmail(to: string, resetLink: string) {
-  const { PasswordResetEmail } = await import('@/emails/PasswordResetEmail');
-  
   try {
     const data = await resend.emails.send({
       from: SENDER_EMAIL,
@@ -99,8 +97,6 @@ export async function sendPasswordResetEmail(to: string, resetLink: string) {
 }
 
 export async function sendMonthlyReportEmail(to: string, businessName: string, month: string, totalSales: number, totalPurchases: number, totalExpenses: number, profitOrLoss: number) {
-  const { MonthlyReportEmail } = await import('@/emails/MonthlyReportEmail');
-  
   try {
     const data = await resend.emails.send({
       from: SENDER_EMAIL,
@@ -116,8 +112,6 @@ export async function sendMonthlyReportEmail(to: string, businessName: string, m
 }
 
 export async function sendEmployeeInvitationEmail(to: string, name: string, role: string, inviteLink: string, businessName?: string) {
-  const { EmployeeInvitationEmail } = await import('@/emails/EmployeeInvitationEmail');
-  
   try {
     const data = await resend.emails.send({
       from: SENDER_EMAIL,
@@ -133,8 +127,6 @@ export async function sendEmployeeInvitationEmail(to: string, name: string, role
 }
 
 export async function sendPaymentReminder(to: string, customerName: string, invoiceRef: string, amount: number, dueDate: string, businessName?: string) {
-  const { PaymentReminderEmail } = await import('@/emails/PaymentReminderEmail');
-  
   try {
     const data = await resend.emails.send({
       from: SENDER_EMAIL,
@@ -150,8 +142,6 @@ export async function sendPaymentReminder(to: string, customerName: string, invo
 }
 
 export async function sendGstReminder(to: string, businessName: string, period: string, returnType: string) {
-  const { GstReminderEmail } = await import('@/emails/GstReminderEmail');
-  
   try {
     const data = await resend.emails.send({
       from: SENDER_EMAIL,

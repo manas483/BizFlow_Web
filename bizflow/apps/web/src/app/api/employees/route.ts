@@ -6,6 +6,7 @@ import { employeeSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
 import { randomBytes } from 'crypto';
 import { sendEmployeeInvitationEmail } from '@/shared/lib/email';
+import { logAudit } from '@/shared/lib/audit';
 
 export async function GET(req: NextRequest) {
   try {
@@ -111,14 +112,18 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    console.log("POST /api/employees: Starting request");
     const session = await requireAuth();
-
+    
     if (session.user.role !== 'SUPER_ADMIN') {
+      console.log("POST /api/employees: Unauthorized role", session.user.role);
       return NextResponse.json({ error: 'Only Super Admins can add employees' }, { status: 403 });
     }
 
     const body = await req.json();
+    console.log("POST /api/employees: Body received", body.email);
     const validatedData = employeeSchema.parse(body);
+    console.log("POST /api/employees: Validation passed");
 
     // Fetch business for name + isolation
     const business = await prisma.business.findUnique({ where: { id: session.user.businessId } });
@@ -241,6 +246,7 @@ export async function POST(req: NextRequest) {
     const host = req.headers.get('host');
     const inviteLink = `${protocol}://${host}/accept-invitation?token=${token}`;
 
+    console.log("POST /api/employees: Employee created, starting email send");
     await sendEmployeeInvitationEmail(
       validatedData.email,
       validatedData.name,
@@ -248,8 +254,8 @@ export async function POST(req: NextRequest) {
       inviteLink,
       businessName
     );
+    console.log("POST /api/employees: Email sent successfully");
 
-    const { logAudit } = await import('@/shared/lib/audit');
     await logAudit({
       session,
       action: 'CREATE',
@@ -257,6 +263,7 @@ export async function POST(req: NextRequest) {
       entityId: employee.id,
       entityLabel: employee.name,
     });
+    console.log("POST /api/employees: Audit logged, returning 201");
 
     return NextResponse.json(employee, { status: 201 });
   } catch (error) {
