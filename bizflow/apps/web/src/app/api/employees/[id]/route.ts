@@ -112,7 +112,22 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
     }
 
-    await prisma.employee.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete the employee record
+      await tx.employee.delete({ where: { id } });
+      
+      // 2. Delete the associated user login account (so the email is completely freed up)
+      if (existing.userId) {
+        await tx.user.delete({ where: { id: existing.userId } }).catch(() => {});
+      }
+      
+      // 3. Delete any pending invitations for this email
+      if (existing.email) {
+        await tx.invitation.deleteMany({ 
+          where: { email: existing.email, businessId: session.user.businessId } 
+        });
+      }
+    });
 
     const { logAudit } = await import('@/shared/lib/audit');
     await logAudit({
