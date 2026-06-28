@@ -47,19 +47,43 @@ export const saleItemSchema = z.object({
   discount: z.coerce.number().min(0).default(0),
   hsnCode: z.string().optional().nullable(),
   gstRate: z.coerce.number().min(0).max(100).default(0),
+  // Phase 2: Price override audit
+  originalPrice: z.coerce.number().min(0).optional().nullable(),
+  priceOverrideReason: z.string().max(100).optional().nullable(),
+});
+
+export const salePaymentSchema = z.object({
+  paymentMethod: z.enum(['cash', 'upi', 'card', 'bank_transfer', 'cheque']),
+  amount: z.coerce.number().min(0.01, "Payment amount must be greater than 0"),
+  reference: z.string().max(200).optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
 });
 
 export const saleSchema = z.object({
   customerId: z.string().min(1, "Customer ID is required"),
   items: z.array(saleItemSchema).min(1, "At least one item is required"),
   paid: z.coerce.number().min(0).default(0),
-  status: z.enum(['paid', 'partial', 'unpaid']).optional(),
+  status: z.enum(['draft', 'paid', 'partial', 'unpaid']).optional(),
   notes: z.string().max(500).optional().nullable(),
   placeOfSupply: z.string().max(50).optional().nullable(),
   reverseCharge: z.boolean().default(false),
   isAggregate: z.boolean().default(false),
   aggregateDate: z.string().optional().nullable(),
   invoiceDate: z.string().optional().nullable(),
+  // Phase 2: Workflow + payment
+  isDraft: z.boolean().optional().default(false),
+  paymentTerms: z.string().max(20).optional().nullable(),
+  dueDate: z.string().optional().nullable(),
+  payments: z.array(salePaymentSchema).optional(),
+  // Phase 3: Approvals
+  approvalReason: z.string().max(250).optional().nullable(),
+  approvedBy: z.string().optional().nullable(),
+  approvedAt: z.string().optional().nullable(),
+});
+
+/** Relaxed schema for draft saves (allows 0 items) */
+export const draftSaleSchema = saleSchema.extend({
+  items: z.array(saleItemSchema).default([]),
 });
 
 export const businessUpdateSchema = z.object({

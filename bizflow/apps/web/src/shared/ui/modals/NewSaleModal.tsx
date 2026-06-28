@@ -1,19 +1,28 @@
 "use client";
 import toast from "react-hot-toast";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import Modal, { FormField, ModalInput, ModalFooter } from "@/shared/ui/ui/Modal";
 import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
-import { ShoppingCart, Plus, Trash2, ChevronDown, AlertTriangle, RefreshCw } from "lucide-react";
+import { ShoppingCart, Plus, ChevronDown, AlertTriangle, RefreshCw } from "lucide-react";
 import { useCustomers } from "@/shared/hooks/useCustomers";
 import { useProducts } from "@/shared/hooks/useProducts";
 import { useCreateSale, useUpdateSale } from "@/shared/hooks/useSales";
 import { useBusiness } from "@/shared/hooks/useBusiness";
+import { useGlobalBarcode } from "@/shared/hooks/useGlobalBarcode";
 import { formatCurrency } from "@/shared/lib/utils";
 import AddCustomerModal from "@/shared/ui/modals/AddCustomerModal";
 import AddProductModal from "@/shared/ui/modals/AddProductModal";
 import ProductPickerModal from "@/shared/ui/ProductPicker/ProductPickerModal";
 import { PRODUCT_PICKER_MAX_CACHE } from "@/shared/ui/ProductPicker/constants";
+// ── Invoice components ──
+import type { LineItem, InvoiceTotals } from "@/shared/ui/invoice/types";
+import { createEmptyLineItem, createLineItemFromProduct, lineItemToPayload, computeFlatDiscount } from "@/shared/ui/invoice/types";
+import LineItemRow from "@/shared/ui/invoice/LineItemRow";
+import InvoiceSummary from "@/shared/ui/invoice/InvoiceSummary";
+import { PaymentTermsSelect } from "@/shared/ui/invoice/PaymentTermsSelect";
+import { SplitPaymentPanel, PaymentEntry } from "@/shared/ui/invoice/SplitPaymentPanel";
 
 /* ── Indian States for Place of Supply ─────────────────── */
 const INDIAN_STATES = [
@@ -159,7 +168,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
   const [loading, setLoading] = useState(false);
   const [isFetchingData, setIsFetchingData] = useState(false);
   const [customer, setCustomer] = useState("");
-  const [items, setItems] = useState([{ productId: "", qty: 1 as number | string, price: 0, discount: 0, hsnCode: "", gstRate: 0 }]);
+  const [items, setItems] = useState<LineItem[]>([createEmptyLineItem()]);
   const [paid, setPaid] = useState("");
   const [placeOfSupply, setPlaceOfSupply] = useState("");
   const [reverseCharge, setReverseCharge] = useState(false);
@@ -170,6 +179,21 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isProductPickerOpen, setIsProductPickerOpen] = useState(false);
   const [pickingIndex, setPickingIndex] = useState<number | null>(null);
+  const [lastAddedIndex, setLastAddedIndex] = useState<number | null>(null);
+  // Invoice-level discount
+  const [invoiceDiscountInput, setInvoiceDiscountInput] = useState("");
+  const [invoiceDiscountType, setInvoiceDiscountType] = useState<"flat" | "percent">("flat");
+  const [paymentTerms, setPaymentTerms] = useState<string>("immediate");
+  const [customDueDate, setCustomDueDate] = useState<string>("");
+  const [payments, setPayments] = useState<PaymentEntry[]>([]);
+  const [deletedItems, setDeletedItems] = useState<{item: LineItem, index: number, timer: any}[]>([]);
+  const [workflowState, setWorkflowState] = useState<"draft" | "posted">("draft");
+
+  // ── Permissions ──
+  const { data: session } = useSession();
+  const permissions = ((session?.user as any)?.permissions ?? []) as string[];
+  const canOverridePrice = permissions.includes("override_selling_price");
+  const canOverrideGst = permissions.includes("override_gst_rate");
 
   const { data: customersPaged } = useCustomers(undefined, 1, 100);
   const customers = customersPaged?.data ?? [];
@@ -182,6 +206,36 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
     : false;
   const createSale = useCreateSale();
   const updateSale = useUpdateSale();
+
+  // ── Phase 3: Barcode-First Workflow ──
+  useGlobalBarcode({
+    onScan: (barcode) => {
+      if (!open) return;
+      const product = products.find((p: any) => p.sku === barcode || p.id === barcode);
+      if (product) {
+        setItems(curr => {
+          const newItems = [...curr];
+          const existingIndex = newItems.findIndex(i => i.productId === product.id);
+          if (existingIndex >= 0) {
+            newItems[existingIndex].qty = String(Number(newItems[existingIndex].qty) + 1);
+          } else {
+            const emptyIndex = newItems.findIndex(i => !i.productId);
+            if (emptyIndex >= 0) {
+              newItems[emptyIndex] = createLineItemFromProduct(product);
+            } else {
+              newItems.push(createLineItemFromProduct(product));
+            }
+          }
+          return newItems;
+        });
+        toast.success(`Scanned: ${product.name}`);
+        // Play beep sound if available
+        try { new Audio('/scan-beep.mp3').play().catch(() => {}); } catch(e) {}
+      } else {
+        toast.error(`Barcode not found: ${barcode}`);
+      }
+    }
+  });
 
   useEffect(() => {
     if (open && editSaleId) {
@@ -196,9 +250,15 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
                 productId: i.productId,
                 qty: i.qty,
                 price: i.price,
+                originalPrice: i.price,
+                priceOverrideReason: "",
                 discount: i.discount || 0,
+                discountType: "flat" as const,
+                discountInput: i.discount || 0,
                 hsnCode: i.hsnCode || "",
-                gstRate: i.gstRate || 0
+                gstRate: i.gstRate || 0,
+                originalGstRate: i.gstRate || 0,
+                unit: i.productUnit || "pcs",
               })));
             }
             setPaid(data.paid > 0 ? String(data.paid) : "");
@@ -207,18 +267,34 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
             setIsAggregate(!!data.isAggregate);
             setNotes(data.notes || "");
             setInvoiceDate(data.invoiceDate ? new Date(data.invoiceDate).toISOString().split("T")[0] : new Date(data.createdAt).toISOString().split("T")[0]);
+            setPaymentTerms(data.paymentTerms || "immediate");
+            if (data.dueDate) setCustomDueDate(new Date(data.dueDate).toISOString().split("T")[0]);
+            if (data.payments) {
+              setPayments(data.payments.map((p: any) => ({
+                id: p.id, paymentMethod: p.paymentMethod, amount: p.amount, reference: p.reference, notes: p.notes
+              })));
+            }
+            setWorkflowState(data.workflowState || "posted");
           }
         })
         .finally(() => setIsFetchingData(false));
     } else if (!open) {
       // Clean up when modal closes
-      setCustomer(""); setItems([{ productId: "", qty: 1, price: 0, discount: 0, hsnCode: "", gstRate: 0 }]);
-      setPaid(""); setPlaceOfSupply(""); setReverseCharge(false); setIsAggregate(false); setNotes("");
-      setInvoiceDate(new Date().toISOString().split("T")[0]);
+      resetForm();
     }
   }, [open, editSaleId]);
 
   const placeOfSupplyOptions = INDIAN_STATES.map(s => ({ value: s, label: s }));
+
+  const resetForm = () => {
+    setCustomer(""); setItems([createEmptyLineItem()]);
+    setPaid(""); setPlaceOfSupply(""); setReverseCharge(false); setIsAggregate(false); setNotes("");
+    setInvoiceDate(new Date().toISOString().split("T")[0]);
+    setInvoiceDiscountInput(""); setInvoiceDiscountType("flat");
+    setLastAddedIndex(null);
+    setPaymentTerms("immediate"); setCustomDueDate(""); setPayments([]); setWorkflowState("draft");
+    deletedItems.forEach(d => clearTimeout(d.timer)); setDeletedItems([]);
+  };
 
   const handleCustomerChange = (val: string) => {
     setCustomer(val);
@@ -227,8 +303,16 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
     if (cust?.state && !placeOfSupply) setPlaceOfSupply(cust.state);
   };
 
-  const handleAddItem = () => setItems([...items, { productId: "", qty: 1, price: 0, discount: 0, hsnCode: "", gstRate: 0 }]);
+  const handleAddItem = () => setItems([...items, createEmptyLineItem()]);
   const handleRemoveItem = (index: number) => setItems(items.filter((_, i) => i !== index));
+
+  const handleUpdateItem = useCallback((index: number, updates: Partial<LineItem>) => {
+    setItems(prev => {
+      const newItems = [...prev];
+      newItems[index] = { ...newItems[index], ...updates };
+      return newItems;
+    });
+  }, []);
 
   const handleAddSelectedProducts = (result: any) => {
     const selectedList = result.selections;
@@ -239,15 +323,9 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
       const sel = selectedList[0];
       if (sel) {
         const newItems = [...items];
-        newItems[pickingIndex] = {
-          productId: sel.product.id,
-          qty: sel.qty,
-          price: sel.resolvedPrice,
-          discount: 0,
-          hsnCode: sel.product.hsnCode || "",
-          gstRate: sel.product.gstRate || 0
-        };
+        newItems[pickingIndex] = createLineItemFromProduct(sel.product, sel.qty, sel.resolvedPrice);
         setItems(newItems);
+        setLastAddedIndex(pickingIndex);
       }
     } else {
       // Append multi-selections with duplicate merge checks
@@ -258,71 +336,148 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
         const existingIdx = newItems.findIndex(i => i.productId === sel.product.id);
         if (existingIdx !== -1) {
           const currentQty = Number(newItems[existingIdx].qty) || 0;
-          newItems[existingIdx].qty = currentQty + sel.qty;
+          newItems[existingIdx] = { ...newItems[existingIdx], qty: currentQty + sel.qty };
           toast.success(`Merged quantity for ${sel.product.name}`);
         } else {
-          newItems.push({
-            productId: sel.product.id,
-            qty: sel.qty,
-            price: sel.resolvedPrice,
-            discount: 0,
-            hsnCode: sel.product.hsnCode || "",
-            gstRate: sel.product.gstRate || 0
-          });
+          newItems.push(createLineItemFromProduct(sel.product, sel.qty, sel.resolvedPrice));
         }
       });
 
-      setItems(newItems.length > 0 ? newItems : [{ productId: "", qty: 1, price: 0, discount: 0, hsnCode: "", gstRate: 0 }]);
+      setItems(newItems.length > 0 ? newItems : [createEmptyLineItem()]);
+      setLastAddedIndex(newItems.length - 1);
     }
   };
 
-  const handleQtyChange = (index: number, qty: number | string) => {
-    const newItems = [...items];
-    newItems[index].qty = qty;
-    setItems(newItems);
-  };
+  // ── Totals ──
+  const computeTotals = (): InvoiceTotals => {
+    let subtotal = 0;
+    let lineDiscountTotal = 0;
+    let totalGst = 0;
+    let totalCgst = 0;
+    let totalSgst = 0;
+    let totalIgst = 0;
+    let totalQty = 0;
+    let itemCount = 0;
 
-  // Totals — handle GST-inclusive pricing
-  let subtotal = 0;
-  let totalGst = 0;
-  items.forEach(item => {
-    const qty = Number(item.qty) || 0;
-    const grossAmt = (qty * item.price) - (item.discount || 0);
-    const rate = item.gstRate || 0;
-    if (gstInclusive && rate > 0) {
-      // price already includes GST — back-calculate
-      const base = grossAmt / (1 + rate / 100);
-      subtotal += base;
-      totalGst += grossAmt - base;
+    items.forEach(item => {
+      if (!item.productId) return;
+      const qty = Number(item.qty) || 0;
+      const lineAmount = qty * item.price;
+      const lineDiscount = item.discount || 0;
+      const grossAmt = lineAmount - lineDiscount;
+      const rate = item.gstRate || 0;
+
+      subtotal += lineAmount;
+      lineDiscountTotal += lineDiscount;
+      totalQty += qty;
+      itemCount++;
+
+      let lineTax: number;
+      if (gstInclusive && rate > 0) {
+        const base = grossAmt / (1 + rate / 100);
+        lineTax = grossAmt - base;
+      } else {
+        lineTax = grossAmt * (rate / 100);
+      }
+
+      totalGst += lineTax;
+      if (isInterState) {
+        totalIgst += lineTax;
+      } else {
+        totalCgst += lineTax / 2;
+        totalSgst += lineTax - (lineTax / 2);
+      }
+    });
+
+    // Invoice-level discount
+    const invoiceDiscountRaw = Number(invoiceDiscountInput) || 0;
+    let invoiceDiscountAmount = 0;
+    if (invoiceDiscountType === "percent") {
+      invoiceDiscountAmount = Math.round((subtotal - lineDiscountTotal) * invoiceDiscountRaw / 100 * 100) / 100;
     } else {
-      subtotal += grossAmt;
-      totalGst += grossAmt * (rate / 100);
+      invoiceDiscountAmount = Math.min(invoiceDiscountRaw, subtotal - lineDiscountTotal);
     }
-  });
-  const total = subtotal + totalGst;
-  const paidAmt = parseFloat(paid) || 0;
-  const balanceDue = Math.max(0, total - paidAmt);
 
-  // GST breakdown per item for display
+    const taxableValue = subtotal - lineDiscountTotal - invoiceDiscountAmount;
+    const preRoundTotal = taxableValue + totalGst;
+
+    // Round-off to nearest rupee
+    const roundedTotal = Math.round(preRoundTotal);
+    const roundOff = Math.round((roundedTotal - preRoundTotal) * 100) / 100;
+
+    const paidAmt = parseFloat(paid) || 0;
+
+    return {
+      itemCount,
+      totalQty,
+      subtotal,
+      lineDiscountTotal,
+      invoiceDiscountAmount,
+      taxableValue,
+      totalCgst,
+      totalSgst,
+      totalIgst,
+      totalGst,
+      roundOff,
+      grandTotal: roundedTotal,
+      paid: paidAmt,
+      balanceDue: Math.max(0, roundedTotal - paidAmt),
+    };
+  };
+
+  const totals = computeTotals();
   const hasGst = items.some(i => (i.gstRate || 0) > 0);
 
+  // ── Validation Panel ──
+  const getValidationIssues = (): string[] => {
+    const issues: string[] = [];
+    if (!customer) issues.push("Select a customer");
+    if (items.every(i => !i.productId)) issues.push("Add at least one product");
+    items.forEach((item, i) => {
+      if (item.productId && (Number(item.qty) || 0) <= 0) issues.push(`Line ${i + 1}: Qty must be > 0`);
+      if (item.price !== item.originalPrice && item.originalPrice > 0 && !item.priceOverrideReason && canOverridePrice)
+        issues.push(`Line ${i + 1}: Price override needs a reason`);
+    });
+    return issues;
+  };
+
   const handleClose = () => {
-    setCustomer(""); setItems([{ productId: "", qty: 1, price: 0, discount: 0, hsnCode: "", gstRate: 0 }]);
-    setPaid(""); setPlaceOfSupply(""); setReverseCharge(false); setIsAggregate(false); setNotes("");
-    setInvoiceDate(new Date().toISOString().split("T")[0]);
+    resetForm();
     onClose();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const issues = getValidationIssues();
+    if (issues.length > 0) {
+      // Show first issue as toast for quick feedback
+      toast.error(issues[0]);
+      return;
+    }
+
     if (!customer) { toast.error("Please select a customer"); return; }
     if (items.some(i => !i.productId)) { toast.error("Please select products for all items"); return; }
+
     setLoading(true);
     try {
+      // Distribute invoice discount across items proportionally
+      const invoiceDisc = totals.invoiceDiscountAmount;
+      const subBeforeInvDisc = totals.subtotal - totals.lineDiscountTotal;
+      const payloadItems = items.filter(i => i.productId).map(item => {
+        const p = lineItemToPayload(item);
+        if (invoiceDisc > 0 && subBeforeInvDisc > 0) {
+          const lineNet = (Number(item.qty) || 0) * item.price - item.discount;
+          const proportion = lineNet / subBeforeInvDisc;
+          p.discount = Math.round((item.discount + invoiceDisc * proportion) * 100) / 100;
+        }
+        return p;
+      });
+
       const payload = {
         customerId: customer,
-        items,
-        paid: paidAmt,
+        items: payloadItems,
+        paid: totals.paid,
         notes: notes || undefined,
         placeOfSupply: placeOfSupply || undefined,
         reverseCharge,
@@ -348,6 +503,21 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
     }
   };
 
+  // ── Keyboard Shortcuts ──
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      // Ctrl+Enter → submit
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const form = document.querySelector("[data-invoice-form]") as HTMLFormElement;
+        if (form) form.requestSubmit();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open]);
+
   return (
     <Modal open={open} onClose={handleClose}
       title={editSaleId ? "Edit GST Invoice" : "Create GST Invoice"} subtitle="GST-compliant tax invoice for goods or services"
@@ -358,7 +528,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
           <p className="text-sm">Loading invoice details...</p>
         </div>
       ) : (
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} data-invoice-form className="space-y-5">
 
         {/* ── Customer + Date ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -452,168 +622,120 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
           </div>
 
           <div className="bg-primary/5 border border-primary/10 rounded-xl overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-            <table className="w-full text-left text-sm min-w-[640px]">
+            <table className="w-full text-left text-sm min-w-[720px]">
               <thead className="bg-primary/5 border-b border-primary/10 text-primary/40 text-xs">
                 <tr>
                   <th className="p-3 font-medium text-left">Product</th>
-                  <th className="p-3 font-medium w-24 min-w-[90px]">HSN/SAC</th>
-                  <th className="p-3 font-medium w-24 min-w-[80px]">Qty</th>
-                  <th className="p-3 font-medium w-32 min-w-[110px]">Rate (₹)</th>
-                  <th className="p-3 font-medium w-28 min-w-[90px]">Disc (₹)</th>
-                  <th className="p-3 font-medium w-20 min-w-[70px]">GST %</th>
-                  <th className="p-3 font-medium w-32 min-w-[120px]">Line Total</th>
+                  <th className="p-3 font-medium w-20 min-w-[70px]">HSN/SAC</th>
+                  <th className="p-3 font-medium w-24 min-w-[85px]">Qty / Unit</th>
+                  <th className="p-3 font-medium w-32 min-w-[120px]">Rate (₹)</th>
+                  <th className="p-3 font-medium w-28 min-w-[100px]">Discount</th>
+                  <th className="p-3 font-medium w-20 min-w-[75px]">GST</th>
+                  <th className="p-3 font-medium w-28 min-w-[110px]">Line Total</th>
                   <th className="p-3 font-medium w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-primary/10">
-                {items.map((item, index) => {
-                  const qty = Number(item.qty) || 0;
-                  const grossAmt = (qty * item.price) - (item.discount || 0);
-                  const rate = item.gstRate || 0;
-                  const taxable = (gstInclusive && rate > 0)
-                    ? grossAmt / (1 + rate / 100)
-                    : grossAmt;
-                  const tax = (gstInclusive && rate > 0)
-                    ? grossAmt - taxable
-                    : grossAmt * (rate / 100);
-                  return (
-                    <tr key={index}>
-                      <td className="p-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPickingIndex(index);
-                            setIsProductPickerOpen(true);
-                          }}
-                          className="w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-sm text-left transition-all"
-                          style={{
-                            background: "var(--input-bg)",
-                            border: "1px solid var(--input-border)",
-                            color: item.productId ? "var(--text-primary)" : "var(--text-muted)",
-                          }}
-                        >
-                          <span className="truncate">
-                            {products.find((p: any) => p.id === item.productId)?.name || "Select product..."}
-                          </span>
-                          <ChevronDown size={12} className="flex-shrink-0" style={{ color: "var(--text-muted)" }} />
-                        </button>
-                      </td>
-                      <td className="p-2 text-primary/40 text-xs text-center font-mono">{item.hsnCode || '—'}</td>
-                      <td className="p-2">
-                        <input type="number" min="1" required
-                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-violet-500/50"
-                          value={item.qty}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => handleQtyChange(index, e.target.value === '' ? '' : parseInt(e.target.value) || 0)} />
-                      </td>
-                      <td className="p-2 text-primary/60 text-sm">{formatCurrency(item.price)}</td>
-                      <td className="p-2">
-                        <input type="number" min="0" step="0.01"
-                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-violet-500/50"
-                          value={item.discount || ''}
-                          placeholder="0"
-                          onChange={(e) => {
-                            const newItems = [...items];
-                            newItems[index].discount = parseFloat(e.target.value) || 0;
-                            setItems(newItems);
-                          }} />
-                      </td>
-                      <td className="p-2">
-                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                          item.gstRate > 0 ? "bg-violet-500/15 text-violet-300" : "text-primary/30"
-                        }`}>
-                          {item.gstRate > 0 ? `${item.gstRate}%` : "Nil"}
-                        </span>
-                      </td>
-                      <td className="p-2">
-                        <div className="text-primary font-medium text-sm">{formatCurrency(taxable + tax)}</div>
-                        {item.gstRate > 0 && (
-                          <div className="text-xs text-violet-400/70">
-                            {gstInclusive ? `(incl. ${formatCurrency(tax)} GST)` : `+${formatCurrency(tax)} GST`}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-2 text-center">
-                        <button type="button" onClick={() => handleRemoveItem(index)}
-                          className="p-1.5 text-primary/40 hover:text-rose-400 hover:bg-rose-400/10 rounded-md transition-colors"
-                          disabled={items.length === 1}>
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {items.map((item, index) => (
+                  <LineItemRow
+                    key={index}
+                    item={item}
+                    index={index}
+                    product={products.find((p: any) => p.id === item.productId)}
+                    gstInclusive={gstInclusive}
+                    canOverridePrice={canOverridePrice}
+                    canOverrideGst={canOverrideGst}
+                    onUpdate={handleUpdateItem}
+                    onRemove={handleRemoveItem}
+                    onOpenPicker={(i) => { setPickingIndex(i); setIsProductPickerOpen(true); }}
+                    isOnly={items.length === 1}
+                    autoFocusQty={index === lastAddedIndex && item.productId !== ""}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
+
+          {/* Validation issues panel */}
+          {(() => {
+            const issues = getValidationIssues();
+            return issues.length > 0 && items.some(i => i.productId) ? (
+              <div className="flex flex-wrap gap-1.5 px-1">
+                {issues.map((issue, i) => (
+                  <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    {issue}
+                  </span>
+                ))}
+              </div>
+            ) : null;
+          })()}
         </div>
 
-        {/* ── Totals + Payment ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-          <div className="space-y-4">
-            <FormField label="Amount Paid (₹)" hint="Leave blank if unpaid">
-              <ModalInput type="number" min="0" max={total} placeholder="0.00"
-                value={paid} onChange={(e) => setPaid(e.target.value)} />
-            </FormField>
-            <FormField label="Notes / Terms">
-              <textarea
-                rows={2}
-                placeholder="Payment terms, bank details, etc."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500/50 resize-none"
-                style={{
-                  background: "var(--input-bg)",
-                  border: "1px solid var(--input-border)",
-                  color: "var(--text-primary)",
-                }}
-              />
-            </FormField>
-          </div>
-
-          <div className="bg-primary/5 rounded-xl p-4 border border-primary/10 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span style={{ color: "var(--text-secondary)" }}>
-                {gstInclusive ? "Taxable Value (excl. GST)" : "Taxable Value"}
-              </span>
-              <span style={{ color: "var(--text-primary)" }}>{formatCurrency(subtotal)}</span>
-            </div>
-            {hasGst && (
-              <>
-                <div className="flex justify-between text-sm">
-                  <span style={{ color: "var(--text-secondary)" }}>Total GST</span>
-                  <span className="text-violet-300">{formatCurrency(totalGst)}</span>
-                </div>
-                {placeOfSupply ? (
-                  <div className="text-xs text-primary/40 pl-0">
-                    {isInterState
-                      ? `IGST: ${formatCurrency(totalGst)}`
-                      : `CGST: ${formatCurrency(totalGst / 2)} + SGST: ${formatCurrency(totalGst - (totalGst / 2))}`}
-                  </div>
-                ) : null}
-              </>
-            )}
-            <div className="h-px bg-primary/10 my-1" />
-            <div className="flex justify-between">
-              <span className="font-semibold text-primary">Grand Total</span>
-              <span className="font-bold text-emerald-400 text-lg">{formatCurrency(total)}</span>
-            </div>
-            {paidAmt > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-emerald-400/80">Amount Paid</span>
-                <span className="text-emerald-400">{formatCurrency(paidAmt)}</span>
-              </div>
-            )}
-            {balanceDue > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-rose-400/80">Balance Due</span>
-                <span className="text-rose-400 font-semibold">{formatCurrency(balanceDue)}</span>
-              </div>
-            )}
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+          <PaymentTermsSelect
+            value={paymentTerms}
+            onChange={setPaymentTerms}
+            customDueDate={customDueDate}
+            onCustomDueDateChange={setCustomDueDate}
+            disabled={workflowState === 'posted'}
+          />
+          <SplitPaymentPanel
+            total={totals.grandTotal}
+            payments={payments}
+            onChange={setPayments}
+            disabled={workflowState === 'posted'}
+          />
         </div>
 
-        <ModalFooter onClose={handleClose} loading={loading} submitLabel={editSaleId ? "Update GST Invoice" : "Generate GST Invoice"} />
+        {/* ── Summary + Payment (sticky) ── */}
+        <div className="sticky bottom-[-2rem] sm:bottom-[-1.25rem] z-10 -mx-4 sm:-mx-5 px-4 sm:px-5 pt-4 pb-2"
+          style={{ backgroundColor: "var(--bg-surface)" }}>
+          <InvoiceSummary
+            totals={totals}
+            gstInclusive={gstInclusive}
+            isInterState={!!isInterState}
+            hasGst={hasGst}
+            placeOfSupply={placeOfSupply}
+            invoiceDiscountInput={invoiceDiscountInput}
+            invoiceDiscountType={invoiceDiscountType}
+            onInvoiceDiscountInputChange={setInvoiceDiscountInput}
+            onInvoiceDiscountTypeChange={setInvoiceDiscountType}
+            paid={paid}
+            onPaidChange={setPaid}
+            notes={notes}
+            onNotesChange={setNotes}
+            maxPayable={totals.grandTotal}
+          />
+
+          <div className="flex items-center justify-between mt-4">
+    <div className="flex gap-2">
+      <button 
+        type="button" 
+        onClick={() => saveSale(true)} 
+        disabled={loading || (workflowState === 'posted')}
+        className="px-4 py-2 border border-slate-700 text-slate-300 rounded hover:bg-slate-800 disabled:opacity-50 text-sm font-medium transition-colors"
+      >
+        {loading ? "Saving..." : "Save Draft"}
+      </button>
+    </div>
+    <div className="flex gap-2">
+      <button type="button" onClick={handleClose} disabled={loading} className="px-4 py-2 text-slate-400 hover:text-slate-300">Cancel</button>
+      <button
+        type="button"
+        onClick={() => saveSale(false)}
+        disabled={loading || items.length === 0 || !customer || (workflowState === 'posted')}
+        className="px-6 py-2 bg-primary text-primary-foreground font-semibold rounded hover:bg-primary/90 disabled:opacity-50 shadow-sm transition-all"
+      >
+        {workflowState === 'draft' ? "Confirm & Post" : (editSaleId ? "Update Invoice" : "Confirm & Post")}
+      </button>
+    </div>
+  </div>
+
+          {/* Keyboard hint */}
+          <p className="text-center text-[10px] text-primary/20 mt-2 pb-1">
+            <kbd className="px-1 py-0.5 rounded bg-primary/5 border border-primary/10 text-primary/30">Ctrl+Enter</kbd> Generate Invoice
+          </p>
+        </div>
       </form>
       )}
       
@@ -625,6 +747,15 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
           setIsProductPickerOpen(false);
           setPickingIndex(null);
         }}
+        headerActions={
+          <button
+            onClick={() => setIsAddProductOpen(true)}
+            className="flex items-center px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Create Product
+          </button>
+        }
         onAdd={handleAddSelectedProducts}
         customer={customers.find((c: any) => c.id === customer)}
         mode="sale"

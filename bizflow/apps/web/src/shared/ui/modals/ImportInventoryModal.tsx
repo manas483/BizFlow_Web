@@ -29,10 +29,16 @@ interface InvoiceProduct {
   unit: string; supplier: string;
   purchaseInvoiceNo: string; purchaseDate: string;
   gstRate: number; hsnCode: string;
+  matchScore?: number;
+  matchType?: "auto-matched" | "needs-review" | "manual";
 }
 
 interface InvoiceInfo {
   invoiceNumber: string; supplier: string; purchaseDate: string;
+  grandTotal?: number; format?: string; templateName?: string;
+  validationPassed?: boolean; validationDetails?: string;
+  supplierMatch?: { matchType: "auto-matched" | "new-supplier"; score: number; originalName: string; };
+  attachment?: { url: string; fileName: string; fileSize: number; mimeType: string; };
 }
 
 interface InvoiceExpense {
@@ -40,6 +46,27 @@ interface InvoiceExpense {
   category: string;
   amount: number;
   applicableProductIndices?: number[]; // undefined means all products
+}
+
+interface UploadedInvoiceFile {
+  id: string;
+  file: File;
+  status: "processing" | "success" | "error";
+  progress: number;
+  error?: string;
+  isInvoicePdf: boolean;
+  invoiceInfo?: InvoiceInfo;
+  invoiceProducts: InvoiceProduct[];
+  invoiceExpenses: InvoiceExpense[];
+  validationSummary?: ValidationSummary;
+  errors: RowError[];
+  warnings: RowError[];
+  columnMapping?: Record<string, string | null>;
+  unmapped?: string[];
+  suggestions?: Record<string, string>;
+  trainingRequired?: boolean;
+  trainingPreview?: any;
+  isTraining?: boolean;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -83,7 +110,7 @@ const CategoryCell = ({ value, options, onChange }: { value: string, options: st
       {open && (
         <div className="absolute z-50 w-40 mt-1 rounded-md shadow-xl max-h-48 overflow-y-auto custom-scrollbar"
           style={{ background: "var(--bg-surface-2)", border: "1px solid var(--border)" }}>
-          {options.map(opt => (
+          {filtered.map(opt => (
             <div key={opt}
               className="px-2 py-1.5 text-[11px] text-primary/80 hover:bg-violet-500/10 hover:text-violet-400 cursor-pointer"
               onClick={() => {
@@ -111,7 +138,10 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>("upload");
   const [dragOver, setDragOver] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<UploadedInvoiceFile[]>([]);
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [showExpenses, setShowExpenses] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
   const { data: business } = useBusiness();
@@ -120,62 +150,82 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     ? [...profile.productCategories, "Other"]
     : ["Grains", "Pulses", "Edible Oil", "Spices", "Construction", "Other"];
 
-  // Validation state (Excel)
-  const [validationSummary, setValidationSummary] = useState<ValidationSummary | null>(null);
-  const [errors, setErrors] = useState<RowError[]>([]);
-  const [warnings, setWarnings] = useState<RowError[]>([]);
-  const [showErrors, setShowErrors] = useState(true);
-  const [showWarnings, setShowWarnings] = useState(false);
-  const [columnMapping, setColumnMapping] = useState<Record<string, string | null>>({});
-  const [unmapped, setUnmapped] = useState<string[]>([]);
-  const [suggestions, setSuggestions] = useState<Record<string, string>>({});
-
-  // PDF Invoice state
-  const [isInvoicePdf, setIsInvoicePdf] = useState(false);
-  const [invoiceInfo, setInvoiceInfo] = useState<InvoiceInfo | null>(null);
-  const [invoiceProducts, setInvoiceProducts] = useState<InvoiceProduct[]>([]);
-  const [editingIdx, setEditingIdx] = useState<number | null>(null);
-
-  // Invoice expenses state (inline expense entry during import)
-  const [invoiceExpenses, setInvoiceExpenses] = useState<InvoiceExpense[]>([]);
-  const [showExpenses, setShowExpenses] = useState(false);
-
-  // Training state
-  const [trainingRequired, setTrainingRequired] = useState(false);
-  const [trainingPreview, setTrainingPreview] = useState<any>(null);
-  const [isTraining, setIsTraining] = useState(false);
-
   // Import state
   const [importResults, setImportResults] = useState<ImportResults | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
 
+  const activeFile = files.find(f => f.id === activeFileId);
+
   // ── Expense helpers ──
   const addExpense = () => {
-    setInvoiceExpenses(prev => [...prev, { id: crypto.randomUUID(), category: "Transport", amount: 0 }]);
+    if (!activeFileId) return;
+    setFiles(prev => prev.map(f => {
+      if (f.id !== activeFileId) return f;
+      return {
+        ...f,
+        invoiceExpenses: [...f.invoiceExpenses, { id: crypto.randomUUID(), category: "Transport", amount: 0 }]
+      };
+    }));
     setShowExpenses(true);
   };
-  const removeExpense = (id: string) => setInvoiceExpenses(prev => prev.filter(e => e.id !== id));
-  const updateExpense = (id: string, field: keyof InvoiceExpense, value: any) => {
-    setInvoiceExpenses(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
-  };
-  const toggleProductApplicability = (id: string, productIdx: number, totalProducts: number) => {
-    setInvoiceExpenses(prev => prev.map(e => {
-      if (e.id !== id) return e;
-      const current = e.applicableProductIndices || Array.from({length: totalProducts}, (_, i) => i);
-      const updated = current.includes(productIdx) ? current.filter(i => i !== productIdx) : [...current, productIdx];
-      return { ...e, applicableProductIndices: updated.length === totalProducts ? undefined : updated };
+
+  const removeExpense = (id: string) => {
+    setFiles(prev => prev.map(f => {
+      if (f.id !== activeFileId) return f;
+      return {
+        ...f,
+        invoiceExpenses: f.invoiceExpenses.filter(e => e.id !== id)
+      };
     }));
   };
 
-  const getProductExpenseShare = (p: InvoiceProduct, pIdx: number) => {
+  const updateExpense = (id: string, field: keyof InvoiceExpense, value: any) => {
+    setFiles(prev => prev.map(f => {
+      if (f.id !== activeFileId) return f;
+      return {
+        ...f,
+        invoiceExpenses: f.invoiceExpenses.map(e => e.id === id ? { ...e, [field]: value } : e)
+      };
+    }));
+  };
+
+  const toggleProductApplicability = (id: string, productIdx: number, totalProducts: number) => {
+    setFiles(prev => prev.map(f => {
+      if (f.id !== activeFileId) return f;
+      return {
+        ...f,
+        invoiceExpenses: f.invoiceExpenses.map(e => {
+          if (e.id !== id) return e;
+          const current = e.applicableProductIndices || Array.from({length: totalProducts}, (_, i) => i);
+          const updated = current.includes(productIdx) ? current.filter(i => i !== productIdx) : [...current, productIdx];
+          return { ...e, applicableProductIndices: updated.length === totalProducts ? undefined : updated };
+        })
+      };
+    }));
+  };
+
+  const setProductApplicabilityAll = (id: string, isAll: boolean, totalProducts: number) => {
+    setFiles(prev => prev.map(f => {
+      if (f.id !== activeFileId) return f;
+      return {
+        ...f,
+        invoiceExpenses: f.invoiceExpenses.map(e => {
+          if (e.id !== id) return e;
+          return { ...e, applicableProductIndices: isAll ? undefined : [] };
+        })
+      };
+    }));
+  };
+
+  const getProductExpenseShare = (file: UploadedInvoiceFile, p: InvoiceProduct, pIdx: number) => {
     let totalShare = 0;
-    for (const exp of invoiceExpenses) {
+    for (const exp of file.invoiceExpenses) {
       if (!exp.amount) continue;
-      const appliesTo = exp.applicableProductIndices || Array.from({length: invoiceProducts.length}, (_, i) => i);
+      const appliesTo = exp.applicableProductIndices || Array.from({length: file.invoiceProducts.length}, (_, i) => i);
       if (!appliesTo.includes(pIdx)) continue;
       
-      const applicableUnits = invoiceProducts
+      const applicableUnits = file.invoiceProducts
         .filter((_, i) => appliesTo.includes(i))
         .reduce((sum, ap) => sum + (Number(ap.stock) || 0), 0);
       
@@ -188,27 +238,38 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     return Number(totalShare.toFixed(2));
   };
 
-  const getProductPerUnitExpense = (p: InvoiceProduct, pIdx: number) => {
+  const getProductPerUnitExpense = (file: UploadedInvoiceFile, p: InvoiceProduct, pIdx: number) => {
     const qty = Number(p.stock) || 0;
     if (qty <= 0) return 0;
-    return Number((getProductExpenseShare(p, pIdx) / qty).toFixed(4));
+    return Number((getProductExpenseShare(file, p, pIdx) / qty).toFixed(4));
   };
 
-  const totalExpenseAmount = invoiceExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  const totalUnits = invoiceProducts.reduce((sum, p) => sum + (Number(p.stock) || 0), 0);
+  const totalExpenseAmount = activeFile?.invoiceExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
+  const totalUnits = activeFile?.invoiceProducts.reduce((sum, p) => sum + (Number(p.stock) || 0), 0) || 0;
 
   const reset = () => {
-    setStep("upload"); setFile(null); setValidationSummary(null);
-    setErrors([]); setWarnings([]); setImportResults(null);
-    setImportError(null); setProgress(0); setColumnMapping({});
-    setUnmapped([]); setSuggestions({});
-    setIsInvoicePdf(false); setInvoiceInfo(null); setInvoiceProducts([]);
-    setEditingIdx(null);
-    setTrainingRequired(false); setTrainingPreview(null); setIsTraining(false);
-    setInvoiceExpenses([]); setShowExpenses(false);
+    setStep("upload"); setFiles([]); setActiveFileId(null);
+    setImportResults(null); setImportError(null); setProgress(0);
+    setEditingIdx(null); setShowExpenses(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (step === "review" && (e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const canImport = files.filter(f => f.status === "success" && !f.trainingRequired).length > 0;
+        if (canImport) {
+          handleInvoiceConfirmImport();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [step, files]);
+
 
   // Download template
   const handleDownloadTemplate = async () => {
@@ -228,70 +289,65 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
     finally { setDownloadingTemplate(false); }
   };
 
-  const processFile = useCallback(async (f: File) => {
-    setFile(f); setStep("validating"); setProgress(20);
-    try {
-      const fd = new FormData();
-      fd.append("file", f); fd.append("mode", "validate");
-      setProgress(50);
-      const res = await fetch("/api/inventory/import", { method: "POST", body: fd });
-      const data = await res.json();
-      setProgress(100);
-      if (!res.ok) { setImportError(data.error ?? "Validation failed"); setStep("upload"); return; }
+  const processFiles = useCallback(async (uploadedFiles: File[]) => {
+    setStep("validating");
+    setProgress(10);
+    setImportError(null);
 
-      // Handle training_required mode (no matching template for this PDF)
-      if (data.mode === "training_required") {
-        setIsInvoicePdf(true);
-        setTrainingRequired(true);
-        setTrainingPreview(data.trainedPreview || null);
-        setStep("review");
-        return;
-      }
+    const fileObjects: UploadedInvoiceFile[] = uploadedFiles.map(f => ({
+      id: crypto.randomUUID(),
+      file: f,
+      status: "processing",
+      progress: 20,
+      isInvoicePdf: f.name.toLowerCase().endsWith(".pdf"),
+      invoiceProducts: [],
+      invoiceExpenses: [],
+      errors: [],
+      warnings: [],
+    }));
 
-      if (data.isInvoicePdf) {
-        // PDF Invoice flow
-        setIsInvoicePdf(true);
-        setTrainingRequired(false);
-        setInvoiceInfo(data.invoiceInfo);
-        const products: InvoiceProduct[] = (data.validation?.processedRows ?? []).map((r: any) => ({
-          name: r.data.name ?? "",
-          sku: r.data.sku ?? "",
-          category: r.data.category ?? "",
-          stock: Number(r.data.stock ?? 0),
-          unitsPerBag: Number(r.data.unitsPerBag ?? 1),
-          basePurchasePrice: Number(r.data.basePurchasePrice ?? 0),
-          transportCost: Number(r.data.transportCost ?? 0),
-          purchasePrice: Number(r.data.purchasePrice ?? 0),
-          sellingPrice: Number(r.data.sellingPrice ?? 0),
-          unit: r.data.unit ?? "pcs",
-          supplier: r.data.supplier ?? "",
-          purchaseInvoiceNo: r.data.purchaseInvoiceNo ?? "",
-          purchaseDate: r.data.purchaseDate ?? "",
-          gstRate: Number(r.data.gstRate ?? 0),
-          hsnCode: r.data.hsnCode ?? "",
-        }));
-        setInvoiceProducts(products);
-        setValidationSummary(data.validation?.summary ?? null);
-        setStep("review");
-      } else {
-        // Excel/CSV flow
-        setIsInvoicePdf(false);
-        setValidationSummary(data.validation?.summary ?? null);
-        setErrors(data.validation?.errors ?? []);
-        setWarnings(data.validation?.warnings ?? []);
-        setColumnMapping(data.columnMapping ?? {});
-        setUnmapped(data.unmappedHeaders ?? []);
-        setSuggestions(data.mappingSuggestions ?? {});
+    setFiles(fileObjects);
 
-        const validProducts: InvoiceProduct[] = (data.validation?.processedRows ?? [])
-          .filter((r: any) => r.errors?.length === 0)
-          .map((r: any) => ({
+    // Process all files in parallel
+    await Promise.all(fileObjects.map(async (fileObj) => {
+      try {
+        const fd = new FormData();
+        fd.append("file", fileObj.file);
+        fd.append("mode", "validate");
+
+        const res = await fetch("/api/inventory/import", { method: "POST", body: fd });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setFiles(prev => prev.map(f => f.id === fileObj.id ? {
+            ...f,
+            status: "error",
+            progress: 100,
+            error: data.error ?? "Validation failed"
+          } : f));
+          return;
+        }
+
+        // Handle training_required mode
+        if (data.mode === "training_required") {
+          setFiles(prev => prev.map(f => f.id === fileObj.id ? {
+            ...f,
+            status: "success",
+            progress: 100,
+            trainingRequired: true,
+            trainingPreview: data.trainedPreview || null,
+          } : f));
+          return;
+        }
+
+        if (data.isInvoicePdf) {
+          const products: InvoiceProduct[] = (data.validation?.processedRows ?? []).map((r: any) => ({
             name: r.data.name ?? "",
             sku: r.data.sku ?? "",
             category: r.data.category ?? "",
             stock: Number(r.data.stock ?? 0),
             unitsPerBag: Number(r.data.unitsPerBag ?? 1),
-            basePurchasePrice: Number(r.data.basePurchasePrice ?? r.data.purchasePrice ?? 0),
+            basePurchasePrice: Number(r.data.basePurchasePrice ?? 0),
             transportCost: Number(r.data.transportCost ?? 0),
             purchasePrice: Number(r.data.purchasePrice ?? 0),
             sellingPrice: Number(r.data.sellingPrice ?? 0),
@@ -301,49 +357,175 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
             purchaseDate: r.data.purchaseDate ?? "",
             gstRate: Number(r.data.gstRate ?? 0),
             hsnCode: r.data.hsnCode ?? "",
+            matchScore: r.data.matchScore,
+            matchType: r.data.matchType,
           }));
-        setInvoiceProducts(validProducts);
-        setStep("review");
+
+          setFiles(prev => prev.map(f => f.id === fileObj.id ? {
+            ...f,
+            status: "success",
+            progress: 100,
+            isInvoicePdf: true,
+            invoiceInfo: data.invoiceInfo,
+            invoiceProducts: products,
+            validationSummary: data.validation?.summary ?? null,
+            errors: data.validation?.errors ?? [],
+            warnings: data.validation?.warnings ?? [],
+          } : f));
+        } else {
+          // Excel/CSV
+          const validProducts: InvoiceProduct[] = (data.validation?.processedRows ?? [])
+            .filter((r: any) => r.errors?.length === 0)
+            .map((r: any) => ({
+              name: r.data.name ?? "",
+              sku: r.data.sku ?? "",
+              category: r.data.category ?? "",
+              stock: Number(r.data.stock ?? 0),
+              unitsPerBag: Number(r.data.unitsPerBag ?? 1),
+              basePurchasePrice: Number(r.data.basePurchasePrice ?? r.data.purchasePrice ?? 0),
+              transportCost: Number(r.data.transportCost ?? 0),
+              purchasePrice: Number(r.data.purchasePrice ?? 0),
+              sellingPrice: Number(r.data.sellingPrice ?? 0),
+              unit: r.data.unit ?? "pcs",
+              supplier: r.data.supplier ?? "",
+              purchaseInvoiceNo: r.data.purchaseInvoiceNo ?? "",
+              purchaseDate: r.data.purchaseDate ?? "",
+              gstRate: Number(r.data.gstRate ?? 0),
+              hsnCode: r.data.hsnCode ?? "",
+            }));
+
+          setFiles(prev => prev.map(f => f.id === fileObj.id ? {
+            ...f,
+            status: "success",
+            progress: 100,
+            isInvoicePdf: false,
+            validationSummary: data.validation?.summary ?? null,
+            errors: data.validation?.errors ?? [],
+            warnings: data.validation?.warnings ?? [],
+            columnMapping: data.columnMapping ?? {},
+            unmapped: data.unmappedHeaders ?? [],
+            suggestions: data.mappingSuggestions ?? {},
+            invoiceProducts: validProducts,
+          } : f));
+        }
+      } catch (err: any) {
+        setFiles(prev => prev.map(f => f.id === fileObj.id ? {
+          ...f,
+          status: "error",
+          progress: 100,
+          error: err.message ?? "Network error during validation"
+        } : f));
       }
-    } catch { setImportError("Network error. Please try again."); setStep("upload"); }
+    }));
+
+    setFiles(prev => {
+      if (prev.length > 0) {
+        setActiveFileId(prev[0].id);
+      }
+      return prev;
+    });
+    setProgress(100);
+    setStep("review");
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
-    const f = e.dataTransfer.files[0];
-    if (f && /\.(xlsx|xls|csv|pdf)$/i.test(f.name)) processFile(f);
-    else toast.error("Please upload an Excel (.xlsx, .xls, .csv) or PDF invoice file.");
-  }, [processFile]);
+    const uploadedFiles = Array.from(e.dataTransfer.files).filter(f => /\.(xlsx|xls|csv|pdf)$/i.test(f.name));
+    if (uploadedFiles.length > 0) processFiles(uploadedFiles);
+    else toast.error("Please upload Excel (.xlsx, .xls, .csv) or PDF invoice files.");
+  }, [processFiles]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f) processFile(f);
+    const uploadedFiles = Array.from(e.target.files ?? []);
+    if (uploadedFiles.length > 0) processFiles(uploadedFiles);
   };
 
-  // Excel import (now unified with JSON flow)
-  // handleImport is no longer needed since Excel uses handleInvoiceConfirmImport
-
-  // Invoice PDF confirmed import
+  // Invoice PDF/Excel confirmed import
   const handleInvoiceConfirmImport = async () => {
-    if (invoiceProducts.length === 0) return;
+    const invoicesToImport: any[] = [];
+
+    const successfulFiles = files.filter(f => f.status === "success" && !f.trainingRequired && f.invoiceProducts.length > 0);
+    if (successfulFiles.length === 0) {
+      toast.error("No valid products to import.");
+      return;
+    }
+
+    successfulFiles.forEach(fileObj => {
+      const currentInvoiceProducts: any[] = [];
+      fileObj.invoiceProducts.forEach((p, idx) => {
+        // Distribute expense items specifically
+        const productExpenses: any[] = [];
+        fileObj.invoiceExpenses.forEach(exp => {
+          if (!exp.amount) return;
+          const appliesTo = exp.applicableProductIndices || Array.from({length: fileObj.invoiceProducts.length}, (_, i) => i);
+          if (appliesTo.includes(idx)) {
+            const applicableUnits = fileObj.invoiceProducts
+              .filter((_, i) => appliesTo.includes(i))
+              .reduce((sum, ap) => sum + (Number(ap.stock) || 0), 0);
+            if (applicableUnits > 0) {
+              const sharePerUnit = exp.amount / applicableUnits;
+              productExpenses.push({
+                expenseType: exp.category,
+                amount: Number(sharePerUnit.toFixed(4)),
+              });
+            }
+          }
+        });
+
+        const perUnitExpensesSum = productExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+        currentInvoiceProducts.push({
+          ...p,
+          expenses: productExpenses,
+          transportCost: Number((p.transportCost || 0) + perUnitExpensesSum),
+          purchasePrice: Number((p.basePurchasePrice || 0) + (p.transportCost || 0) + perUnitExpensesSum),
+        });
+      });
+
+      invoicesToImport.push({
+        invoiceInfo: fileObj.invoiceInfo,
+        products: currentInvoiceProducts,
+      });
+    });
+
     setStep("importing"); setProgress(10);
     try {
-      // Bake inline expenses into each product's transportCost before sending
-      const productsWithExpenses = invoiceProducts.map((p, idx) => {
-        const perUnitExpense = getProductPerUnitExpense(p, idx);
-        return {
-          ...p,
-          transportCost: Number(p.transportCost || 0) + perUnitExpense,
-          purchasePrice: Number(p.basePurchasePrice || 0) + Number(p.transportCost || 0) + perUnitExpense,
-        };
-      });
+      // Upload PDFs to Vercel Blob
+      for (const fileObj of successfulFiles) {
+        if (fileObj.isInvoicePdf && fileObj.file) {
+          try {
+            const formData = new FormData();
+            formData.append("file", fileObj.file);
+            const uploadRes = await fetch(`/api/upload?filename=${encodeURIComponent(fileObj.file.name)}`, {
+              method: "POST",
+              body: fileObj.file,
+            });
+            if (uploadRes.ok) {
+              const uploadData = await uploadRes.json();
+              const targetInvoice = invoicesToImport.find(i => i.invoiceInfo.invoiceNumber === fileObj.invoiceInfo?.invoiceNumber);
+              if (targetInvoice) {
+                targetInvoice.invoiceInfo.attachment = {
+                  url: uploadData.url,
+                  fileName: fileObj.file.name,
+                  fileSize: fileObj.file.size,
+                  mimeType: fileObj.file.type || 'application/pdf',
+                };
+              }
+            } else {
+              console.error("Failed to upload PDF", await uploadRes.text());
+            }
+          } catch (uploadErr) {
+            console.error("Error uploading PDF", uploadErr);
+          }
+        }
+      }
 
       setProgress(40);
       const res = await fetch("/api/inventory/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          products: productsWithExpenses,
+          invoices: invoicesToImport,
         }),
       });
       setProgress(80);
@@ -358,34 +540,30 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
   };
 
   // Train template then re-parse the PDF
-  const handleTrainTemplate = async () => {
-    if (!file) return;
-    setIsTraining(true); setImportError(null); setStep("training"); setProgress(10);
+  const handleTrainTemplate = async (id: string) => {
+    const invFile = files.find(f => f.id === id);
+    if (!invFile) return;
+
+    setFiles(prev => prev.map(f => f.id === id ? { ...f, isTraining: true, status: "processing", progress: 30 } : f));
     try {
       const fd = new FormData();
-      fd.append("file", file);
-      setProgress(30);
+      fd.append("file", invFile.file);
       const trainRes = await fetch("/api/inventory/train-template", { method: "POST", body: fd });
       const trainData = await trainRes.json();
-      setProgress(60);
+
       if (!trainRes.ok) {
-        setImportError(trainData.error ?? "Training failed");
-        setIsTraining(false);
-        setStep("review");
+        setFiles(prev => prev.map(f => f.id === id ? {
+          ...f,
+          isTraining: false,
+          status: "error",
+          error: trainData.error ?? "Training failed"
+        } : f));
         return;
       }
 
       toast.success(`Template "${trainData.template?.name}" trained successfully!`);
 
-      // If the train endpoint returned extraction results directly, use them
       if (trainData.extraction && trainData.extraction.products?.length > 0) {
-        setTrainingRequired(false);
-        setIsInvoicePdf(true);
-        setInvoiceInfo({
-          invoiceNumber: trainData.extraction.invoiceNumber || "Unknown",
-          supplier: trainData.extraction.supplier || "Unknown Supplier",
-          purchaseDate: trainData.extraction.purchaseDate || new Date().toISOString(),
-        });
         const products: InvoiceProduct[] = trainData.extraction.products.map((p: any) => ({
           name: p.name ?? "", sku: p.sku ?? "", category: p.category ?? "",
           stock: Number(p.quantity ?? p.stock ?? 0),
@@ -401,33 +579,40 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
           gstRate: Number(p.gstRate ?? 0),
           hsnCode: p.hsnCode ?? "",
         }));
-        setInvoiceProducts(products);
-        setValidationSummary({ total: products.length, valid: products.length, errors: 0, warnings: 0, duplicates: 0 });
-        setProgress(100);
-        setIsTraining(false);
-        setStep("review");
+
+        setFiles(prev => prev.map(f => f.id === id ? {
+          ...f,
+          status: "success",
+          progress: 100,
+          isTraining: false,
+          trainingRequired: false,
+          isInvoicePdf: true,
+          invoiceInfo: {
+            invoiceNumber: trainData.extraction.invoiceNumber || "Unknown",
+            supplier: trainData.extraction.supplier || "Unknown Supplier",
+            purchaseDate: trainData.extraction.purchaseDate || new Date().toISOString(),
+          },
+          invoiceProducts: products,
+          validationSummary: { total: products.length, valid: products.length, errors: 0, warnings: 0, duplicates: 0 },
+        } : f));
         return;
       }
 
-      // Fallback: Re-parse the file now that the template is trained
-      setProgress(80);
       const fd2 = new FormData();
-      fd2.append("file", file); fd2.append("mode", "validate");
+      fd2.append("file", invFile.file); fd2.append("mode", "validate");
       const parseRes = await fetch("/api/inventory/import", { method: "POST", body: fd2 });
       const parseData = await parseRes.json();
-      setProgress(100);
 
       if (!parseRes.ok || parseData.mode === "training_required") {
-        setImportError(parseData.error ?? "Still could not parse this invoice after training. Please try again.");
-        setIsTraining(false);
-        setStep("review");
+        setFiles(prev => prev.map(f => f.id === id ? {
+          ...f,
+          isTraining: false,
+          status: "error",
+          error: parseData.error ?? "Still could not parse after template training"
+        } : f));
         return;
       }
 
-      // Success — populate the review step
-      setTrainingRequired(false);
-      setIsInvoicePdf(true);
-      setInvoiceInfo(parseData.invoiceInfo);
       const products: InvoiceProduct[] = (parseData.validation?.processedRows ?? []).map((r: any) => ({
         name: r.data.name ?? "", sku: r.data.sku ?? "", category: r.data.category ?? "",
         stock: Number(r.data.stock ?? 0), unitsPerBag: Number(r.data.unitsPerBag ?? 1),
@@ -437,49 +622,63 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
         purchaseInvoiceNo: r.data.purchaseInvoiceNo ?? "", purchaseDate: r.data.purchaseDate ?? "",
         gstRate: Number(r.data.gstRate ?? 0), hsnCode: r.data.hsnCode ?? "",
       }));
-      setInvoiceProducts(products);
-      setValidationSummary(parseData.validation?.summary ?? null);
-      setIsTraining(false);
-      setStep("review");
+
+      setFiles(prev => prev.map(f => f.id === id ? {
+        ...f,
+        status: "success",
+        progress: 100,
+        isTraining: false,
+        trainingRequired: false,
+        isInvoicePdf: true,
+        invoiceInfo: parseData.invoiceInfo,
+        invoiceProducts: products,
+        validationSummary: parseData.validation?.summary ?? null,
+      } : f));
     } catch {
-      setImportError("Network error during training. Please try again.");
-      setIsTraining(false);
-      setStep("review");
+      setFiles(prev => prev.map(f => f.id === id ? {
+        ...f,
+        isTraining: false,
+        status: "error",
+        error: "Network error during training setup"
+      } : f));
     }
   };
 
   // Edit invoice product inline
   const updateInvoiceProduct = (idx: number, field: keyof InvoiceProduct, value: string | number) => {
-    setInvoiceProducts(prev => {
-      const updated = [...prev];
-      const p = { ...updated[idx], [field]: value };
-      // Auto-recalc landed cost when purchase cost changes
+    setFiles(prev => prev.map(f => {
+      if (f.id !== activeFileId) return f;
+      const updatedProducts = [...f.invoiceProducts];
+      const p = { ...updatedProducts[idx], [field]: value };
       if (field === "basePurchasePrice" || field === "transportCost") {
         p.purchasePrice = Number(p.basePurchasePrice) + Number(p.transportCost);
       }
-      updated[idx] = p;
-      return updated;
-    });
+      updatedProducts[idx] = p;
+      return { ...f, invoiceProducts: updatedProducts };
+    }));
   };
 
   const removeInvoiceProduct = (idx: number) => {
-    setInvoiceProducts(prev => prev.filter((_, i) => i !== idx));
+    setFiles(prev => prev.map(f => {
+      if (f.id !== activeFileId) return f;
+      return { ...f, invoiceProducts: f.invoiceProducts.filter((_, i) => i !== idx) };
+    }));
   };
 
-  const hasErrors = (validationSummary?.errors ?? 0) > 0;
-  const mappedCount = Object.values(columnMapping).filter(Boolean).length;
-
-  const isPdf = file?.name.toLowerCase().endsWith(".pdf");
+  const hasErrors = activeFile?.errors && activeFile.errors.length > 0;
+  const mappedCount = activeFile?.columnMapping 
+    ? Object.values(activeFile.columnMapping).filter(Boolean).length 
+    : 0;
 
   return (
-    <Modal open={open} onClose={handleClose} title="Import Inventory" size="2xl"
+    <Modal open={open} onClose={handleClose} title="Import Multiple Invoices" size="5xl"
       icon={<FileSpreadsheet size={16} />} iconColor="bg-emerald-500/20 text-emerald-400"
-      subtitle={isInvoicePdf ? "Import from PDF Invoice" : "Bulk update inventory from Excel, CSV, or Invoice PDF"}>
+      subtitle="Bulk update inventory from multiple Excel, CSV, or Invoice PDF files simultaneously">
 
       {/* Step Indicator */}
       <div className="flex items-center gap-1 mb-5">
         {(["upload", "review", "done"] as const).map((s, i) => {
-          const active = step === s || (step === "validating" && s === "upload") || (step === "importing" && s === "review") || (step === "training" && s === "review");
+          const active = step === s || (step === "validating" && s === "upload") || (step === "importing" && s === "review");
           const done = (s === "upload" && ["review","training","importing","done"].includes(step)) ||
                        (s === "review" && step === "done");
           return (
@@ -487,7 +686,7 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
               <div className={`flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all
                 ${done ? "bg-emerald-500/10 text-emerald-400" : active ? "bg-violet-500/10 text-violet-400" : "bg-primary/5 text-primary/30"}`}>
                 {done ? <CheckCircle2 size={12} /> : <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px]">{i+1}</span>}
-                {s === "upload" ? "Upload" : s === "review" ? "Verify" : "Complete"}
+                {s === "upload" ? "Upload Files" : s === "review" ? "Verify & Adjust Expenses" : "Complete"}
               </div>
               {i < 2 && <div className={`w-4 h-px ${done ? "bg-emerald-500/40" : "bg-primary/10"}`} />}
             </div>
@@ -519,20 +718,20 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
             onClick={() => fileInputRef.current?.click()}
             className={`relative rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all
               ${dragOver ? "border-violet-500/60 bg-violet-500/5" : "border-primary/10 hover:border-primary/20 hover:bg-primary/3"}`}>
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" className="hidden" onChange={handleFileChange} />
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv,.pdf" className="hidden" onChange={handleFileChange} multiple />
             {step === "validating" ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-violet-500/10 flex items-center justify-center">
                   <Loader2 size={22} className="text-violet-400 animate-spin" />
                 </div>
                 <p className="text-sm font-medium text-primary">
-                  {isPdf ? "Extracting invoice data…" : "Analysing your file…"}
+                  Processing uploaded files…
                 </p>
                 <div className="w-48 h-1.5 bg-primary/10 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-violet-600 to-purple-500 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
                 </div>
                 <p className="text-xs text-primary/40">
-                  {isPdf ? "Reading invoice items" : "Smart validation in progress"}
+                  Parsing structures and matching items
                 </p>
               </div>
             ) : (
@@ -542,8 +741,8 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
                   <Upload size={22} className={dragOver ? "text-violet-400" : "text-primary/30"} />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-primary">Drop your file here</p>
-                  <p className="text-xs text-primary/40 mt-1">or click to browse · .xlsx, .xls, .csv, <span className="text-violet-400 font-medium">.pdf invoice</span> supported</p>
+                  <p className="text-sm font-medium text-primary">Drop your invoices or spreadsheet files here</p>
+                  <p className="text-xs text-primary/40 mt-1">or click to browse · select multiple PDF / Excel / CSV files</p>
                 </div>
               </div>
             )}
@@ -558,555 +757,414 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
         </div>
       )}
 
-      {/* ── STEP: TRAINING (learning new PDF format) ── */}
-      {step === "training" && (
-        <div className="flex flex-col items-center gap-5 py-8">
-          <div className="w-16 h-16 rounded-2xl bg-violet-500/10 flex items-center justify-center">
-            <Loader2 size={28} className="text-violet-400 animate-spin" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-semibold text-primary">Learning invoice format…</p>
-            <p className="text-xs text-primary/40 mt-1">Analyzing column positions, table structure & labels</p>
-          </div>
-          <div className="w-64 h-2 bg-primary/10 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-violet-600 to-purple-500 rounded-full transition-all duration-700"
-              style={{ width: `${progress}%` }} />
-          </div>
-          <p className="text-xs text-primary/30">{progress}% complete</p>
-        </div>
-      )}
+      {/* ── STEP: REVIEW (Layout with Sidebar & Panel) ── */}
+      {step === "review" && files.length > 0 && (
+        <div className="flex flex-col md:flex-row gap-4 h-[600px]">
+          {/* Left Sidebar: Invoices list */}
+          <div className="w-full md:w-64 border-r border-primary/10 pr-3 flex flex-col h-full">
+            <h3 className="text-xs font-semibold text-primary/50 uppercase tracking-wider mb-2.5">Uploaded Invoices</h3>
+            <div className="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
+              {files.map((fileObj) => {
+                const isActive = fileObj.id === activeFileId;
+                const isSuccess = fileObj.status === "success" && !fileObj.trainingRequired;
+                const needsTrain = fileObj.trainingRequired;
+                const isError = fileObj.status === "error";
 
-      {/* ── STEP: REVIEW (Training Required — new PDF format) ── */}
-      {step === "review" && isInvoicePdf && trainingRequired && (
-        <div className="space-y-4">
-          <div className="rounded-xl p-5 text-center" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}>
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-3">
-              <AlertTriangle size={24} className="text-amber-400" />
-            </div>
-            <p className="text-sm font-semibold text-primary">New Invoice Format Detected</p>
-            <p className="text-xs text-primary/40 mt-1 max-w-sm mx-auto">
-              This invoice format hasn&apos;t been seen before. BizFlow needs to learn it once so future uploads are instant.
-            </p>
-          </div>
-
-          {trainingPreview && (
-            <div className="rounded-xl p-3" style={{ background: "var(--bg-surface-2)", border: "1px solid var(--border)" }}>
-              <p className="text-xs font-semibold text-primary mb-2">📋 Auto-Detected Structure</p>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                {trainingPreview.formatName && (
-                  <div>
-                    <span className="text-primary/40">Format:</span>{" "}
-                    <span className="text-primary font-medium">{trainingPreview.formatName}</span>
-                  </div>
-                )}
-                {trainingPreview.columnCount > 0 && (
-                  <div>
-                    <span className="text-primary/40">Columns:</span>{" "}
-                    <span className="text-primary font-medium">{trainingPreview.columnCount}</span>
-                  </div>
-                )}
-                {trainingPreview.productRowCount > 0 && (
-                  <div>
-                    <span className="text-primary/40">Products found:</span>{" "}
-                    <span className="text-primary font-medium">{trainingPreview.productRowCount}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {importError && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
-              <XCircle size={14} className="text-rose-400 flex-shrink-0" />
-              <p className="text-xs text-rose-400">{importError}</p>
-            </div>
-          )}
-
-          <div className="flex gap-2 pt-1">
-            <Button variant="secondary" size="sm" icon={<RotateCcw size={13} />} onClick={reset} className="flex-1">
-              Re-upload
-            </Button>
-            <Button size="sm" className="flex-1" onClick={handleTrainTemplate} disabled={isTraining}>
-              {isTraining ? "Training…" : "Train & Import"}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* ── STEP: REVIEW (Invoice PDF) ── */}
-      {step === "review" && isInvoicePdf && !trainingRequired && invoiceInfo && (
-        <div className="space-y-4">
-          {/* Invoice Header */}
-          <div className="rounded-xl p-4" style={{ background: "rgba(139,92,246,0.06)", border: "1px solid rgba(139,92,246,0.15)" }}>
-            <div className="flex items-center gap-2 mb-2">
-              <FileText size={16} className="text-violet-400" />
-              <p className="text-sm font-semibold text-primary">Invoice Detected</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <p className="text-[10px] text-primary/40 uppercase tracking-wider">Invoice No.</p>
-                <p className="text-xs font-medium text-primary mt-0.5">{invoiceInfo.invoiceNumber}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-primary/40 uppercase tracking-wider">Supplier</p>
-                <p className="text-xs font-medium text-primary mt-0.5">{invoiceInfo.supplier}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-primary/40 uppercase tracking-wider">Date</p>
-                <p className="text-xs font-medium text-primary mt-0.5">{invoiceInfo.purchaseDate}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Editable Products Table */}
-          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-            <div className="px-3 py-2 flex items-center justify-between" style={{ background: "var(--bg-surface-2)" }}>
-              <p className="text-xs font-semibold text-primary">
-                {invoiceProducts.length} Products — Review & Edit
-              </p>
-              <p className="text-[10px] text-primary/40">Click any value to edit</p>
-            </div>
-            <div className="max-h-[320px] overflow-y-auto">
-              <table className="w-full text-[11px]">
-                <thead>
-                  <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--bg-surface-2)" }}>
-                    <th className="px-2 py-1.5 text-left text-primary/50 font-medium">Item Name</th>
-                    <th className="px-2 py-1.5 text-left text-primary/50 font-medium">Category</th>
-                    <th className="px-2 py-1.5 text-left text-primary/50 font-medium w-20">HSN/SAC</th>
-                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium w-16">GST %</th>
-                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium">Stock</th>
-                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium">Pack Size</th>
-                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium">Purchase ₹</th>
-                    <th className="px-2 py-1.5 text-right text-primary/50 font-medium">Selling ₹</th>
-                    <th className="px-2 py-1.5 text-center text-primary/50 font-medium w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoiceProducts.map((p, idx) => (
-                    <tr key={idx} className="border-b hover:bg-primary/3 transition-colors group"
-                      style={{ borderColor: "var(--border)" }}>
-                      <td className="px-2 py-1.5">
-                        {editingIdx === idx ? (
-                          <input className="w-full bg-primary/5 border border-violet-500/40 text-primary text-[11px] outline-none px-1.5 py-0.5 rounded"
-                            value={p.name} onChange={(e) => updateInvoiceProduct(idx, "name", e.target.value)}
-                            onBlur={() => setEditingIdx(null)} autoFocus />
-                        ) : (
-                          <span className="text-primary cursor-pointer hover:text-violet-400 transition-colors border-b border-dashed border-primary/25 pb-0.5"
-                            onClick={() => setEditingIdx(idx)}>{p.name}</span>
+                return (
+                  <button
+                    key={fileObj.id}
+                    onClick={() => { setActiveFileId(fileObj.id); setEditingIdx(null); }}
+                    className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-start gap-2.5 ${isActive ? 'bg-violet-500/10 border-violet-500/35 text-violet-300' : 'bg-primary/3 border-primary/5 hover:bg-primary/5 hover:border-primary/10 text-primary/80'}`}
+                  >
+                    <div className="mt-0.5">
+                      {fileObj.isInvoicePdf ? <FileText size={15} className="text-violet-400" /> : <FileSpreadsheet size={15} className="text-emerald-400" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate" title={fileObj.file.name}>{fileObj.file.name}</p>
+                      <div className="flex items-center gap-1 mt-1 text-[9px]">
+                        {isSuccess && (
+                          <span className="text-emerald-400 flex items-center gap-0.5">
+                            <CheckCircle2 size={8} /> {fileObj.invoiceProducts.length} items
+                          </span>
                         )}
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <CategoryCell 
-                          value={p.category} 
-                          options={categoriesList} 
-                          onChange={(val) => updateInvoiceProduct(idx, "category", val)} 
-                        />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input className="w-20 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] outline-none px-1.5 py-0.5 transition-colors"
-                          value={p.hsnCode || ""} onChange={(e) => updateInvoiceProduct(idx, "hsnCode", e.target.value)} />
-                      </td>
-                      <td className="px-2 py-1.5 text-right">
-                        <input type="number" className="w-12 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
-                          value={p.gstRate} onChange={(e) => updateInvoiceProduct(idx, "gstRate", Number(e.target.value))} min={0} max={100} />
-                      </td>
-                      <td className="px-2 py-1.5 text-right">
-                        <input type="number" className="w-14 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
-                          value={p.stock} onChange={(e) => updateInvoiceProduct(idx, "stock", Number(e.target.value))} min={0} />
-                      </td>
-                      <td className="px-2 py-1.5 text-right">
-                        <input type="number" className="w-12 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
-                          value={p.unitsPerBag} onChange={(e) => updateInvoiceProduct(idx, "unitsPerBag", Number(e.target.value))} min={1} />
-                      </td>
-                      <td className="px-2 py-1.5 text-right">
-                        <input type="number" className="w-16 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
-                          value={p.basePurchasePrice} onChange={(e) => updateInvoiceProduct(idx, "basePurchasePrice", Number(e.target.value))} min={0} step="any" />
-                      </td>
-                      <td className="px-2 py-1.5 text-right">
-                        <input type="number" className="w-16 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1.5 py-0.5 transition-colors"
-                          value={p.sellingPrice} onChange={(e) => updateInvoiceProduct(idx, "sellingPrice", Number(e.target.value))} min={0} step="any" />
-                      </td>
-                      <td className="px-2 py-1.5 text-center">
-                        <button onClick={() => removeInvoiceProduct(idx)}
-                          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-rose-400/60 hover:text-rose-400 transition-all" title="Remove">
-                          <Trash2 size={12} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        {needsTrain && (
+                          <span className="text-amber-400 flex items-center gap-0.5">
+                            <AlertTriangle size={8} /> Needs training
+                          </span>
+                        )}
+                        {isError && (
+                          <span className="text-rose-400 flex items-center gap-0.5">
+                            <XCircle size={8} /> Error
+                          </span>
+                        )}
+                        {fileObj.status === "processing" && (
+                          <span className="text-violet-400 flex items-center gap-0.5">
+                            <Loader2 size={8} className="animate-spin" /> Processing
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            
+            {/* Global Actions */}
+            <div className="pt-3 border-t border-primary/10 mt-3 space-y-2">
+              <Button variant="secondary" size="sm" icon={<RotateCcw size={13} />} onClick={reset} className="w-full justify-center">
+                Clear & Restart
+              </Button>
+              <Button size="sm" onClick={handleInvoiceConfirmImport} className="w-full justify-center group relative"
+                disabled={files.filter(f => f.status === "success" && !f.trainingRequired).length === 0}>
+                <span className="flex items-center gap-1.5">
+                  Import Verified Invoices
+                  <span className="text-[9px] font-mono text-primary/40 bg-primary/5 px-1 rounded ml-1 group-hover:text-primary/70 transition-colors">Ctrl+↵</span>
+                </span>
+              </Button>
             </div>
           </div>
 
-          {/* ── Additional Expenses Section ── */}
-          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-            <button
-              onClick={() => { if (invoiceExpenses.length === 0) addExpense(); setShowExpenses(!showExpenses); }}
-              className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium hover:bg-primary/3 transition-colors"
-              style={{ background: "var(--bg-surface-2)" }}
-            >
-              <span className="flex items-center gap-2 text-primary">
-                <Truck size={13} className="text-violet-400" />
-                Additional Expenses
-                {totalExpenseAmount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px] font-semibold">
-                    ₹{totalExpenseAmount.toLocaleString('en-IN')}
-                  </span>
-                )}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="text-[10px] text-primary/30">
-                  {invoiceExpenses.length === 0 ? "Add transport, labour, loading..." : `${invoiceExpenses.length} expense${invoiceExpenses.length !== 1 ? 's' : ''}`}
-                </span>
-                {showExpenses ? <ChevronUp size={12} className="text-primary/40" /> : <ChevronDown size={12} className="text-primary/40" />}
-              </span>
-            </button>
+          {/* Right Panel: Detailed active invoice review */}
+          <div className="flex-1 flex flex-col h-full min-w-0 overflow-y-auto pr-1">
+            {!activeFile ? (
+              <div className="flex-1 flex items-center justify-center text-primary/30 text-xs">
+                Select an invoice from the sidebar to verify
+              </div>
+            ) : activeFile.status === "processing" ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-2 py-12">
+                <Loader2 size={24} className="text-violet-400 animate-spin" />
+                <p className="text-xs text-primary/40">Validating & extracting data...</p>
+              </div>
+            ) : activeFile.status === "error" ? (
+              <div className="flex-1 p-6 rounded-2xl bg-rose-500/5 border border-rose-500/25 flex flex-col items-center justify-center text-center">
+                <XCircle size={36} className="text-rose-400 mb-2" />
+                <h4 className="text-sm font-semibold text-primary">Failed to Process Invoice</h4>
+                <p className="text-xs text-primary/40 mt-1 max-w-md">{activeFile.error || "Unknown validation error occurred"}</p>
+                <Button variant="secondary" size="sm" className="mt-4" onClick={() => {
+                  setFiles(prev => prev.filter(f => f.id !== activeFile.id));
+                  if (files.length > 1) {
+                    setActiveFileId(files.find(f => f.id !== activeFile.id)?.id || null);
+                  } else {
+                    reset();
+                  }
+                }}>Remove File</Button>
+              </div>
+            ) : activeFile.trainingRequired ? (
+              /* Training Panel */
+              <div className="space-y-4 p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+                <div className="text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto mb-3">
+                    <AlertTriangle size={22} className="text-amber-400" />
+                  </div>
+                  <p className="text-sm font-semibold text-primary">New Invoice Template Learner Needed</p>
+                  <p className="text-xs text-primary/40 mt-1 max-w-sm mx-auto">
+                    The format for <strong>{activeFile.file.name}</strong> hasn't been learned yet. Learn it now.
+                  </p>
+                </div>
 
-            {showExpenses && (
-              <div className="p-3 space-y-4 border-t" style={{ borderColor: "var(--border)" }}>
-                {invoiceExpenses.map((exp) => (
-                  <div key={exp.id} className="space-y-1.5 pb-2 border-b border-dashed" style={{ borderColor: "var(--border)" }}>
-                    <div className="flex items-center gap-2">
-                      <select
-                        className="flex-1 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] outline-none px-2 py-1.5 transition-colors focus:border-violet-500/40"
-                        value={exp.category}
-                        onChange={(e) => updateExpense(exp.id, "category", e.target.value)}
-                      >
-                        {EXPENSE_CATEGORIES.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                      <div className="relative">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary/30 text-[11px]">₹</span>
-                        <input
-                          type="number"
-                          className="w-28 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] text-right outline-none pl-5 pr-2 py-1.5 transition-colors focus:border-violet-500/40"
-                          value={exp.amount || ""}
-                          onChange={(e) => updateExpense(exp.id, "amount", Number(e.target.value))}
-                          placeholder="0"
-                          min={0}
-                          step="any"
-                        />
+                {activeFile.trainingPreview && (
+                  <div className="rounded-xl p-3" style={{ background: "var(--bg-surface-2)", border: "1px solid var(--border)" }}>
+                    <p className="text-xs font-semibold text-primary mb-2">📋 Detected Structure</p>
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-primary/40">Format:</span>{" "}
+                        <span className="text-primary font-medium">{activeFile.trainingPreview.formatName || "Standard PDF"}</span>
                       </div>
-                      <button onClick={() => removeExpense(exp.id)}
-                        className="text-rose-400/50 hover:text-rose-400 transition-colors p-1">
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                    {/* Product selection chips */}
-                    <div className="flex flex-wrap gap-1">
-                      {invoiceProducts.map((p, idx) => {
-                        const isSelected = !exp.applicableProductIndices || exp.applicableProductIndices.includes(idx);
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => toggleProductApplicability(exp.id, idx, invoiceProducts.length)}
-                            className={`text-[9px] px-1.5 py-0.5 rounded transition-colors border ${isSelected ? 'bg-violet-500/10 text-violet-400 border-violet-500/30 font-medium' : 'bg-primary/5 text-primary/40 border-primary/10'}`}
-                          >
-                            {p.name}
-                          </button>
-                        );
-                      })}
+                      <div>
+                        <span className="text-primary/40">Detected Rows:</span>{" "}
+                        <span className="text-primary font-medium">{activeFile.trainingPreview.productRowCount || 0}</span>
+                      </div>
                     </div>
                   </div>
-                ))}
+                )}
 
-                <button onClick={addExpense}
-                  className="flex items-center gap-1.5 text-[11px] text-violet-400 hover:text-violet-300 transition-colors py-1">
-                  <Plus size={11} /> Add Expense
-                </button>
-
-                {/* Distribution Preview */}
-                {totalExpenseAmount > 0 && invoiceProducts.length > 0 && (
-                  <div className="pt-2 border-t border-primary/5 mt-4">
-                    <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview (by quantity)</p>
-                    <div className="mt-2 space-y-1.5">
-                      {invoiceProducts.map((p, idx) => {
-                        const units = Number(p.stock) || 0;
-                        const perUnit = getProductPerUnitExpense(p, idx);
-                        const share = getProductExpenseShare(p, idx);
-                        // Only show products that received some expense share
-                        if (share <= 0) return null;
-                        
-                        return (
-                          <div key={idx} className="flex items-center justify-between text-xs">
-                            <span className="text-primary/70 truncate w-1/3">{p.name || 'Unnamed Item'}</span>
-                            <span className="text-primary/30 mx-2">{units.toFixed(1)} qty</span>
-                            <span className="text-emerald-400 font-medium w-16 text-right">+₹{perUnit.toFixed(2)}/u</span>
-                            <span className="text-violet-400 font-medium w-16 text-right">₹{share.toFixed(2)}</span>
-                          </div>
-                        );
-                      })}
+                <div className="flex gap-2 justify-center">
+                  <Button size="sm" onClick={() => handleTrainTemplate(activeFile.id)} disabled={activeFile.isTraining}>
+                    {activeFile.isTraining ? "Training AI Learner…" : "Train Format & Extract"}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              /* Normal verified invoice panel */
+              <div className="space-y-4 flex-1 flex flex-col min-h-0">
+                {/* Active Invoice Header Card */}
+                <div className="rounded-xl p-3 bg-violet-500/5 border border-violet-500/15">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <FileText size={15} className="text-violet-400" />
+                      <p className="text-xs font-semibold text-primary">Invoice Information</p>
                     </div>
-                    <div className="flex items-center justify-between text-xs font-medium pt-2 mt-2 border-t border-primary/5">
-                      <span className="text-primary/80">Total</span>
-                      <span className="text-primary/30">{totalUnits.toFixed(1)} qty</span>
-                      <span className="text-violet-400 font-semibold flex-1 text-right">
-                        ₹{totalExpenseAmount.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 2})}
+                    {activeFile.invoiceInfo?.grandTotal && (
+                      <span className="text-[11px] font-semibold text-emerald-400">Total: ₹{activeFile.invoiceInfo.grandTotal}</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-primary/40">Invoice:</span>{" "}
+                      <span className="text-primary font-medium">{activeFile.invoiceInfo?.invoiceNumber || activeFile.file.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-primary/40">Supplier:</span>{" "}
+                      <span className="text-primary font-medium flex items-center gap-1">
+                        {activeFile.invoiceInfo?.supplier || "Excel Import"}
+                        {activeFile.invoiceInfo?.supplierMatch && (
+                          <span title={`Confidence: ${Math.round(activeFile.invoiceInfo.supplierMatch.score * 100)}%`} className="ml-1 flex items-center">
+                            {activeFile.invoiceInfo.supplierMatch.matchType === "auto-matched" 
+                              ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block shadow-[0_0_8px_rgba(52,211,153,0.5)]" /> 
+                              : <span className="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block shadow-[0_0_8px_rgba(251,113,133,0.5)]" />}
+                          </span>
+                        )}
                       </span>
                     </div>
+                    <div>
+                      <span className="text-primary/40">Date:</span>{" "}
+                      <span className="text-primary font-medium">{activeFile.invoiceInfo?.purchaseDate || "Today"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Products Review Table */}
+                <div className="flex-1 min-h-0 flex flex-col border border-primary/10 rounded-xl overflow-hidden bg-primary/3">
+                  <div className="px-3 py-2 flex items-center justify-between border-b border-primary/10" style={{ background: "var(--bg-surface-2)" }}>
+                    <span className="text-xs font-semibold text-primary">{activeFile.invoiceProducts.length} Extracted Products</span>
+                    <span className="text-[10px] text-primary/40">Click Name to edit, or customize inputs</span>
+                  </div>
+                  <div className="flex-1 overflow-auto">
+                    <table className="w-full text-[11px]">
+                      <thead className="sticky top-0 bg-surface-2 border-b border-primary/10 z-10">
+                        <tr className="border-b" style={{ borderColor: "var(--border)", background: "var(--bg-surface-2)" }}>
+                          <th className="px-2.5 py-1.5 text-left text-primary/50 font-medium">Item Name</th>
+                          <th className="px-2.5 py-1.5 text-left text-primary/50 font-medium">Category</th>
+                          <th className="px-2.5 py-1.5 text-left text-primary/50 font-medium w-20">HSN/SAC</th>
+                          <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-12">GST %</th>
+                          <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-14">Stock</th>
+                          <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-14">Purchase ₹</th>
+                          <th className="px-2.5 py-1.5 text-right text-primary/50 font-medium w-14">Selling ₹</th>
+                          <th className="px-2.5 py-1.5 text-center text-primary/50 font-medium w-8"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-primary/5">
+                        {activeFile.invoiceProducts.map((p, idx) => {
+                          const isGstWarning = activeFile.warnings.some(w => w.row === idx + 1 && w.column === 'gstRate');
+                          const isHsnWarning = activeFile.warnings.some(w => w.row === idx + 1 && w.column === 'hsnCode');
+                          const isStockWarning = activeFile.warnings.some(w => w.row === idx + 1 && w.column === 'stock');
+                          
+                          return (
+                          <tr key={idx} className="hover:bg-primary/5 transition-colors group">
+                            <td className="px-2.5 py-1.5">
+                              {editingIdx === idx ? (
+                                <input className="w-full bg-primary/5 border border-violet-500/40 text-primary text-[11px] outline-none px-1 py-0.5 rounded"
+                                  value={p.name} onChange={(e) => updateInvoiceProduct(idx, "name", e.target.value)}
+                                  onBlur={() => setEditingIdx(null)} autoFocus />
+                              ) : (
+                                <span className="text-primary cursor-pointer hover:text-violet-400 transition-colors border-b border-dashed border-primary/25 pb-0.5 flex items-center gap-1.5"
+                                  onClick={() => setEditingIdx(idx)}>
+                                  {p.matchType && (
+                                    <span title={`Confidence: ${Math.round((p.matchScore || 0) * 100)}%`} className="flex-shrink-0">
+                                      {p.matchType === "auto-matched" && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block shadow-[0_0_8px_rgba(52,211,153,0.5)]" />}
+                                      {p.matchType === "needs-review" && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block shadow-[0_0_8px_rgba(251,191,36,0.5)]" />}
+                                      {p.matchType === "manual" && <span className="w-1.5 h-1.5 rounded-full bg-rose-400 inline-block shadow-[0_0_8px_rgba(251,113,133,0.5)]" />}
+                                    </span>
+                                  )}
+                                  <span className="truncate">{p.name}</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-2.5 py-1.5">
+                              <CategoryCell 
+                                value={p.category} 
+                                options={categoriesList} 
+                                onChange={(val) => updateInvoiceProduct(idx, "category", val)} 
+                              />
+                            </td>
+                            <td className="px-2.5 py-1.5">
+                              <input className={`w-20 ${isHsnWarning ? 'bg-amber-500/10 border-amber-500/50' : 'bg-primary/5 border-primary/10'} border rounded focus:border-violet-500/40 text-primary text-[11px] outline-none px-1 py-0.5 transition-colors`}
+                                value={p.hsnCode || ""} onChange={(e) => updateInvoiceProduct(idx, "hsnCode", e.target.value)} title={isHsnWarning ? "Missing HSN Code" : ""} />
+                            </td>
+                            <td className="px-2.5 py-1.5 text-right">
+                              <input type="number" className={`w-12 ${isGstWarning ? 'bg-amber-500/10 border-amber-500/50' : 'bg-primary/5 border-primary/10'} border rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1 py-0.5 transition-colors`}
+                                value={p.gstRate} onChange={(e) => updateInvoiceProduct(idx, "gstRate", Number(e.target.value))} min={0} max={100} title={isGstWarning ? "Missing GST Rate" : ""} />
+                            </td>
+                            <td className="px-2.5 py-1.5 text-right">
+                              <input type="number" className={`w-14 ${isStockWarning ? 'bg-amber-500/10 border-amber-500/50' : 'bg-primary/5 border-primary/10'} border rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1 py-0.5 transition-colors`}
+                                value={p.stock} onChange={(e) => updateInvoiceProduct(idx, "stock", Number(e.target.value))} min={0} title={isStockWarning ? "Missing Quantity" : ""} />
+                            </td>
+                            <td className="px-2.5 py-1.5 text-right">
+                              <input type="number" className="w-16 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1 py-0.5 transition-colors"
+                                value={p.basePurchasePrice} onChange={(e) => updateInvoiceProduct(idx, "basePurchasePrice", Number(e.target.value))} min={0} step="any" />
+                            </td>
+                            <td className="px-2.5 py-1.5 text-right">
+                              <input type="number" className="w-16 bg-primary/5 border border-primary/10 rounded focus:border-violet-500/40 text-primary text-[11px] text-right outline-none px-1 py-0.5 transition-colors"
+                                value={p.sellingPrice} onChange={(e) => updateInvoiceProduct(idx, "sellingPrice", Number(e.target.value))} min={0} step="any" />
+                            </td>
+                            <td className="px-2.5 py-1.5 text-center">
+                              <button onClick={() => removeInvoiceProduct(idx)}
+                                className="text-rose-400/60 hover:text-rose-400 transition-all" title="Remove">
+                                <Trash2 size={12} />
+                              </button>
+                            </td>
+                          </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Additional Expenses Checklist section */}
+                <div className="rounded-xl overflow-hidden border border-primary/10">
+                  <button
+                    onClick={() => { if (activeFile.invoiceExpenses.length === 0) addExpense(); setShowExpenses(!showExpenses); }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium hover:bg-primary/3 transition-colors bg-surface-2"
+                  >
+                    <span className="flex items-center gap-2 text-primary">
+                      <Truck size={13} className="text-violet-400" />
+                      Invoice Additional Expenses
+                      {totalExpenseAmount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px] font-semibold">
+                          ₹{totalExpenseAmount.toLocaleString('en-IN')}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-primary/30">
+                        {activeFile.invoiceExpenses.length === 0 ? "Add loading, transport, labour bills..." : `${activeFile.invoiceExpenses.length} expense item(s)`}
+                      </span>
+                      {showExpenses ? <ChevronUp size={12} className="text-primary/40" /> : <ChevronDown size={12} className="text-primary/40" />}
+                    </span>
+                  </button>
+
+                  {showExpenses && (
+                    <div className="p-3 space-y-4 border-t border-primary/10 bg-primary/3">
+                      {activeFile.invoiceExpenses.map((exp) => (
+                        <div key={exp.id} className="space-y-2 pb-2 border-b border-dashed border-primary/10">
+                          <div className="flex items-center gap-2">
+                            <select
+                              className="flex-1 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] outline-none px-2 py-1.5 transition-colors focus:border-violet-500/40"
+                              value={exp.category}
+                              onChange={(e) => updateExpense(exp.id, "category", e.target.value)}
+                            >
+                              {EXPENSE_CATEGORIES.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary/30 text-[11px]">₹</span>
+                              <input
+                                type="number"
+                                className="w-28 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] text-right outline-none pl-5 pr-2 py-1.5 transition-colors focus:border-violet-500/40"
+                                value={exp.amount || ""}
+                                onChange={(e) => updateExpense(exp.id, "amount", Number(e.target.value))}
+                                placeholder="0"
+                                min={0}
+                                step="any"
+                              />
+                            </div>
+                            <button onClick={() => removeExpense(exp.id)}
+                              className="text-rose-400/50 hover:text-rose-400 transition-colors p-1">
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+
+                          {/* Checkbox product checklist for expense eligibility */}
+                          <div className="rounded-lg border border-primary/5 p-2 bg-primary/5">
+                            <div className="flex items-center justify-between mb-1.5 text-[10px] text-primary/40 font-medium">
+                              <span>Checked products are eligible for this expense:</span>
+                              <div className="flex gap-2">
+                                <button onClick={() => setProductApplicabilityAll(exp.id, true, activeFile.invoiceProducts.length)}
+                                  className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">Select All</button>
+                                <span className="text-primary/10">|</span>
+                                <button onClick={() => setProductApplicabilityAll(exp.id, false, activeFile.invoiceProducts.length)}
+                                  className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">Deselect All</button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto custom-scrollbar">
+                              {activeFile.invoiceProducts.map((p, idx) => {
+                                const isChecked = !exp.applicableProductIndices || exp.applicableProductIndices.includes(idx);
+                                return (
+                                  <label key={idx} className="flex items-center gap-2 text-[11px] text-primary/75 hover:text-primary cursor-pointer transition-colors select-none py-0.5">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => toggleProductApplicability(exp.id, idx, activeFile.invoiceProducts.length)}
+                                      className="rounded border-primary/20 text-violet-500 focus:ring-violet-500/40 bg-transparent w-3.5 h-3.5 cursor-pointer"
+                                    />
+                                    <span className="truncate" title={p.name}>{p.name || 'Unnamed Item'}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button onClick={addExpense}
+                        className="flex items-center gap-1.5 text-[11px] text-violet-400 hover:text-violet-300 transition-colors py-1">
+                        <Plus size={11} /> Add Expense Item
+                      </button>
+
+                      {/* Distribution Preview */}
+                      {totalExpenseAmount > 0 && activeFile.invoiceProducts.length > 0 && (
+                        <div className="pt-2 border-t border-primary/5 mt-4">
+                          <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview (by quantity)</p>
+                          <div className="mt-2 space-y-1.5">
+                            {activeFile.invoiceProducts.map((p, idx) => {
+                              const units = Number(p.stock) || 0;
+                              const perUnit = getProductPerUnitExpense(activeFile, p, idx);
+                              const share = getProductExpenseShare(activeFile, p, idx);
+                              if (share <= 0) return null;
+                              
+                              return (
+                                <div key={idx} className="flex items-center justify-between text-xs">
+                                  <span className="text-primary/70 truncate w-1/3">{p.name || 'Unnamed Item'}</span>
+                                  <span className="text-primary/30 mx-2">{units.toFixed(1)} qty</span>
+                                  <span className="text-emerald-400 font-medium w-16 text-right">+₹{perUnit.toFixed(2)}/u</span>
+                                  <span className="text-violet-400 font-medium w-16 text-right">₹{share.toFixed(2)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Warnings / Errors Panel for Active File */}
+                {activeFile.errors.length > 0 && (
+                  <div className="rounded-xl overflow-hidden border border-rose-500/20 bg-rose-500/5">
+                    <div className="px-3 py-2 text-xs font-medium text-rose-400 flex items-center gap-1.5">
+                      <XCircle size={12} /> {activeFile.errors.length} Critical Validation Errors (must fix before import)
+                    </div>
+                    <div className="max-h-28 overflow-y-auto divide-y divide-rose-500/10 border-t border-rose-500/10">
+                      {activeFile.errors.map((e, i) => (
+                        <div key={i} className="flex items-start gap-2 px-3 py-1.5 text-[11px]">
+                          <span className="text-primary/30 font-mono w-12">Row {e.row}</span>
+                          <span className="text-rose-300/80 font-medium w-28 truncate">{e.column}</span>
+                          <span className="text-primary/50">{e.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeFile.warnings.length > 0 && (
+                  <div className="rounded-xl overflow-hidden border border-amber-500/20 bg-amber-500/5">
+                    <div className="px-3 py-2 text-xs font-medium text-amber-400 flex items-center gap-1.5">
+                      <AlertTriangle size={12} /> {activeFile.warnings.length} Warnings (review; will still import)
+                    </div>
+                    <div className="max-h-24 overflow-y-auto divide-y divide-amber-500/10 border-t border-amber-500/10">
+                      {activeFile.warnings.map((w, i) => (
+                        <div key={i} className="flex items-start gap-2 px-3 py-1.5 text-[11px]">
+                          <span className="text-primary/30 font-mono w-12">Row {w.row}</span>
+                          <span className="text-amber-300/80 font-medium w-28 truncate">{w.column}</span>
+                          <span className="text-primary/50">{w.message}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Summary */}
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-            <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
-            <p className="text-xs text-emerald-400">
-              {invoiceProducts.length > 0 
-                ? <> ₹{totalExpenseAmount.toLocaleString('en-IN')} in expenses will be distributed across {totalUnits.toFixed(1)} items.</>
-                : <> Extracting product information...</>}
-            </p>
-          </div>
-
-          {importError && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
-              <XCircle size={14} className="text-rose-400 flex-shrink-0" />
-              <p className="text-xs text-rose-400">{importError}</p>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-2 pt-1">
-            <Button variant="secondary" size="sm" icon={<RotateCcw size={13} />} onClick={reset} className="flex-1">
-              Re-upload
-            </Button>
-            <Button size="sm" className="flex-1" onClick={handleInvoiceConfirmImport}
-              disabled={invoiceProducts.length === 0}>
-              Confirm & Import {invoiceProducts.length} Products
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* ── STEP: REVIEW (Excel/CSV — existing flow) ── */}
-      {step === "review" && !isInvoicePdf && validationSummary && (
-        <div className="space-y-4">
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { label: "Total Rows", value: validationSummary.total, color: "text-primary" },
-              { label: "Valid", value: validationSummary.valid, color: "text-emerald-400" },
-              { label: "Errors", value: validationSummary.errors, color: "text-rose-400" },
-              { label: "Warnings", value: validationSummary.warnings, color: "text-amber-400" },
-            ].map((s) => (
-              <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: "var(--bg-surface-2)" }}>
-                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-[10px] text-primary/40 mt-0.5">{s.label}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Column Mapping Summary */}
-          <div className="rounded-xl p-3" style={{ background: "var(--bg-surface-2)", border: "1px solid var(--border)" }}>
-            <p className="text-xs font-semibold text-primary mb-2">
-              🔗 Column Mapping — {mappedCount} of {Object.keys(columnMapping).length} matched
-            </p>
-            <div className="grid grid-cols-2 gap-1 max-h-24 overflow-y-auto">
-              {Object.entries(columnMapping).map(([template, uploaded]) => (
-                <div key={template} className="flex items-center gap-1.5 text-[10px]">
-                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${uploaded ? "bg-emerald-400" : "bg-rose-400"}`} />
-                  <span className="text-primary/60 truncate">{template.replace(/\b\w/g, c => c.toUpperCase())}</span>
-                  {uploaded && <span className="text-primary/30">→ {uploaded}</span>}
-                </div>
-              ))}
-            </div>
-            {unmapped.length > 0 && (
-              <p className="text-[10px] text-amber-400 mt-2">⚠️ Unrecognised columns: {unmapped.join(", ")}</p>
-            )}
-          </div>
-
-          {/* Errors Panel */}
-          {errors.length > 0 && (
-            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(239,68,68,0.2)" }}>
-              <button onClick={() => setShowErrors(!showErrors)}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-rose-400 bg-rose-500/5 hover:bg-rose-500/10 transition-colors">
-                <span className="flex items-center gap-1.5"><XCircle size={12} /> {errors.length} Error{errors.length !== 1 ? "s" : ""} — must fix before import</span>
-                {showErrors ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              </button>
-              {showErrors && (
-                <div className="max-h-40 overflow-y-auto">
-                  {errors.map((e, i) => (
-                    <div key={i} className="flex items-start gap-2 px-3 py-2 border-t text-[11px]" style={{ borderColor: "rgba(239,68,68,0.1)" }}>
-                      <span className="text-primary/30 font-mono w-12 flex-shrink-0">Row {e.row}</span>
-                      <span className="text-rose-300/80 font-medium w-28 flex-shrink-0 truncate">{e.column}</span>
-                      <span className="text-primary/50">{e.message}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Warnings Panel */}
-          {warnings.length > 0 && (
-            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid rgba(245,158,11,0.2)" }}>
-              <button onClick={() => setShowWarnings(!showWarnings)}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-amber-400 bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
-                <span className="flex items-center gap-1.5"><AlertTriangle size={12} /> {warnings.length} Warning{warnings.length !== 1 ? "s" : ""} — review before import</span>
-                {showWarnings ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              </button>
-              {showWarnings && (
-                <div className="max-h-32 overflow-y-auto">
-                  {warnings.map((w, i) => (
-                    <div key={i} className="flex items-start gap-2 px-3 py-2 border-t text-[11px]" style={{ borderColor: "rgba(245,158,11,0.1)" }}>
-                      <span className="text-primary/30 font-mono w-12 flex-shrink-0">Row {w.row}</span>
-                      <span className="text-amber-300/80 font-medium w-28 flex-shrink-0 truncate">{w.column}</span>
-                      <span className="text-primary/50">{w.message}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Additional Expenses Section (Excel) ── */}
-          {!hasErrors && invoiceProducts.length > 0 && (
-            <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-              <button
-                onClick={() => { if (invoiceExpenses.length === 0) addExpense(); setShowExpenses(!showExpenses); }}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium hover:bg-primary/3 transition-colors"
-                style={{ background: "var(--bg-surface-2)" }}
-              >
-                <span className="flex items-center gap-2 text-primary">
-                  <Truck size={13} className="text-violet-400" />
-                  Additional Expenses
-                  {totalExpenseAmount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px] font-semibold">
-                      ₹{totalExpenseAmount.toLocaleString('en-IN')}
-                    </span>
-                  )}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-primary/30">
-                    {invoiceExpenses.length === 0 ? "Add transport, labour, loading..." : `${invoiceExpenses.length} expense${invoiceExpenses.length !== 1 ? 's' : ''}`}
-                  </span>
-                  {showExpenses ? <ChevronUp size={12} className="text-primary/40" /> : <ChevronDown size={12} className="text-primary/40" />}
-                </span>
-              </button>
-
-              {showExpenses && (
-                <div className="p-3 space-y-4 border-t" style={{ borderColor: "var(--border)" }}>
-                  {invoiceExpenses.map((exp) => (
-                    <div key={exp.id} className="space-y-1.5 pb-2 border-b border-dashed" style={{ borderColor: "var(--border)" }}>
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="flex-1 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] outline-none px-2 py-1.5 transition-colors focus:border-violet-500/40"
-                          value={exp.category}
-                          onChange={(e) => updateExpense(exp.id, "category", e.target.value)}
-                        >
-                          {EXPENSE_CATEGORIES.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-                        <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-primary/30 text-[11px]">₹</span>
-                          <input
-                            type="number"
-                            className="w-28 bg-primary/5 border border-primary/10 rounded text-primary text-[11px] text-right outline-none pl-5 pr-2 py-1.5 transition-colors focus:border-violet-500/40"
-                            value={exp.amount || ""}
-                            onChange={(e) => updateExpense(exp.id, "amount", Number(e.target.value))}
-                            placeholder="0"
-                            min={0}
-                            step="any"
-                          />
-                        </div>
-                        <button onClick={() => removeExpense(exp.id)}
-                          className="text-rose-400/50 hover:text-rose-400 transition-colors p-1">
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                      {/* Product selection chips */}
-                      <div className="flex flex-wrap gap-1">
-                        {invoiceProducts.map((p, idx) => {
-                          const isSelected = !exp.applicableProductIndices || exp.applicableProductIndices.includes(idx);
-                          return (
-                            <button
-                              key={idx}
-                              onClick={() => toggleProductApplicability(exp.id, idx, invoiceProducts.length)}
-                              className={`text-[9px] px-1.5 py-0.5 rounded transition-colors border ${isSelected ? 'bg-violet-500/10 text-violet-400 border-violet-500/30 font-medium' : 'bg-primary/5 text-primary/40 border-primary/10'}`}
-                            >
-                              {p.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-
-                  <button onClick={addExpense}
-                    className="flex items-center gap-1.5 text-[11px] text-violet-400 hover:text-violet-300 transition-colors py-1">
-                    <Plus size={11} /> Add Expense
-                  </button>
-
-                  {/* Distribution Preview */}
-                  {totalExpenseAmount > 0 && invoiceProducts.length > 0 && (
-                    <div className="pt-2 border-t border-primary/5 mt-4">
-                      <p className="text-[10px] text-primary/40 font-medium uppercase tracking-wider">Distribution Preview (by quantity)</p>
-                      <div className="mt-2 space-y-1.5">
-                        {invoiceProducts.map((p, idx) => {
-                          const units = Number(p.stock) || 0;
-                          const perUnit = getProductPerUnitExpense(p, idx);
-                          const share = getProductExpenseShare(p, idx);
-                          if (share <= 0) return null;
-                          return (
-                            <div key={idx} className="flex items-center justify-between text-xs">
-                              <span className="text-primary/70 truncate w-1/3">{p.name || 'Unnamed Item'}</span>
-                              <span className="text-primary/30 mx-2">{units.toFixed(1)} qty</span>
-                              <span className="text-emerald-400 font-medium w-16 text-right">+₹{perUnit.toFixed(2)}/u</span>
-                              <span className="text-violet-400 font-medium w-16 text-right">₹{share.toFixed(2)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="flex items-center justify-between text-xs font-medium pt-2 mt-2 border-t border-primary/5">
-                        <span className="text-primary/80">Total</span>
-                        <span className="text-primary/30">{totalUnits.toFixed(1)} qty</span>
-                        <span className="text-violet-400 font-semibold flex-1 text-right">
-                          ₹{totalExpenseAmount.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 2})}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Success note */}
-          {!hasErrors && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-              <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
-              <p className="text-xs text-emerald-400">
-                All {validationSummary.valid} rows validated. Ready to import.
-                {warnings.length > 0 && ` (${warnings.length} warnings — import will proceed)`}
-              </p>
-            </div>
-          )}
-
-          {importError && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
-              <XCircle size={14} className="text-rose-400 flex-shrink-0" />
-              <p className="text-xs text-rose-400">{importError}</p>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex gap-2 pt-1">
-            <Button variant="secondary" size="sm" icon={<RotateCcw size={13} />} onClick={reset} className="flex-1">
-              Re-upload
-            </Button>
-            {hasErrors ? (
-              <Button variant="danger" size="sm" className="flex-1" disabled>
-                Fix {validationSummary.errors} Error{validationSummary.errors !== 1 ? "s" : ""} First
-              </Button>
-            ) : (
-              <Button size="sm" className="flex-1" onClick={handleInvoiceConfirmImport}>
-                Import {validationSummary.valid} Products
-              </Button>
             )}
           </div>
         </div>
@@ -1119,32 +1177,27 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
             <Loader2 size={28} className="text-violet-400 animate-spin" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-semibold text-primary">
-              {isInvoicePdf ? "Importing invoice products…" : "Importing products…"}
-            </p>
-            <p className="text-xs text-primary/40 mt-1">Please do not close this window</p>
+            <p className="text-sm font-semibold text-primary">Importing all products from successful invoices…</p>
+            <p className="text-xs text-primary/40 mt-1">Please do not close this modal</p>
           </div>
           <div className="w-64 h-2 bg-primary/10 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-violet-600 to-purple-500 rounded-full transition-all duration-700"
               style={{ width: `${progress}%` }} />
           </div>
-          <p className="text-xs text-primary/30">{progress}% complete</p>
         </div>
       )}
 
       {/* ── STEP: DONE ── */}
       {step === "done" && importResults && (
-        <div className="space-y-4">
+        <div className="space-y-4 max-w-lg mx-auto">
           <div className="flex flex-col items-center gap-3 py-4">
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
               <CheckCircle2 size={28} className="text-emerald-400" />
             </div>
             <div className="text-center">
-              <p className="text-base font-bold text-primary">Import Complete!</p>
+              <p className="text-base font-bold text-primary">Batch Import Complete!</p>
               <p className="text-xs text-primary/40 mt-1">
-                {isInvoicePdf && invoiceInfo
-                  ? `Invoice ${invoiceInfo.invoiceNumber} has been imported successfully.`
-                  : "Your inventory has been updated successfully."}
+                Your inventory levels, layers, and landing expenses have been saved.
               </p>
             </div>
           </div>
@@ -1152,22 +1205,22 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
           {/* Result cards */}
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: "Created", value: importResults.created, color: "text-emerald-400", bg: "bg-emerald-500/5 border-emerald-500/15" },
-              { label: "Updated", value: importResults.updated, color: "text-violet-400", bg: "bg-violet-500/5 border-violet-500/15" },
-              { label: "Skipped", value: importResults.skipped, color: "text-amber-400", bg: "bg-amber-500/5 border-amber-500/15" },
-              { label: "Failed", value: importResults.failed, color: "text-rose-400", bg: "bg-rose-500/5 border-rose-500/15" },
+              { label: "Created New Products", value: importResults.created, color: "text-emerald-400", bg: "bg-emerald-500/5 border-emerald-500/15" },
+              { label: "Updated Existing Products", value: importResults.updated, color: "text-violet-400", bg: "bg-violet-500/5 border-violet-500/15" },
+              { label: "Skipped / Ignored", value: importResults.skipped, color: "text-amber-400", bg: "bg-amber-500/5 border-amber-500/15" },
+              { label: "Failed Items", value: importResults.failed, color: "text-rose-400", bg: "bg-rose-500/5 border-rose-500/15" },
             ].map((s) => (
-              <div key={s.label} className={`rounded-xl p-4 text-center border ${s.bg}`}>
-                <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-                <p className="text-[11px] text-primary/40 mt-0.5">{s.label}</p>
+              <div key={s.label} className={`rounded-xl p-3 text-center border ${s.bg}`}>
+                <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                <p className="text-[10px] text-primary/40 mt-0.5">{s.label}</p>
               </div>
             ))}
           </div>
 
-          <div className="flex gap-2 pt-1">
-            <Button variant="secondary" size="sm" className="flex-1" onClick={reset}
-              icon={<Upload size={13} />}>Import More</Button>
-            <Button size="sm" className="flex-1" onClick={handleClose}>Done</Button>
+          <div className="flex gap-2 pt-2">
+            <Button variant="secondary" size="sm" className="flex-1 justify-center" onClick={reset}
+              icon={<Upload size={13} />}>Import More Invoices</Button>
+            <Button size="sm" className="flex-1 justify-center" onClick={handleClose}>Done</Button>
           </div>
         </div>
       )}

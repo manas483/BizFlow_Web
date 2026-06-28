@@ -72,7 +72,9 @@ export async function GET(req: NextRequest) {
       customersAgg,
       inventoryProducts,
       creditNotesAgg,
-      expensesByDate
+      expensesByDate,
+      salesByPaymentMethod,
+      topOverriddenProducts
     ] = await Promise.all([
       // Total revenue & count (excluding CANCELLED)
       prisma.sale.aggregate({
@@ -155,6 +157,25 @@ export async function GET(req: NextRequest) {
         by: ['date'],
         where: { businessId, date: { gte: from, lte: to } },
         _sum: { amount: true },
+      }),
+
+      // Sales by Payment Method
+      prisma.salePayment.groupBy({
+        by: ['paymentMethod'],
+        where: { sale: { businessId, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } } },
+        _sum: { amount: true },
+      }),
+
+      // Top Overridden Products
+      prisma.saleItem.groupBy({
+        by: ['productId'],
+        where: { 
+          sale: { businessId, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } },
+          originalPrice: { not: null } 
+        },
+        _sum: { qty: true, price: true },
+        orderBy: { _sum: { qty: 'desc' } },
+        take: 5,
       })
     ]);
 
@@ -241,9 +262,28 @@ export async function GET(req: NextRequest) {
       .filter((p: any) => p.stock <= p.minStock)
       .slice(0, 10);
 
+    // Enrich top overridden products
+    const overriddenProductIds = topOverriddenProducts.map((p: any) => p.productId);
+    const overriddenProductsInfo = await prisma.product.findMany({
+      where: { id: { in: overriddenProductIds }, businessId },
+      select: { id: true, name: true, category: true },
+    });
+    const overriddenProductMap = Object.fromEntries(overriddenProductsInfo.map((p: any) => [p.id, p]));
+
     const mappedExpenses = expensesByCategory.map((e: any) => ({
       category: e.category,
       amount: e._sum.amount ?? 0,
+    }));
+
+    const mappedPaymentMethods = salesByPaymentMethod.map((s: any) => ({
+      method: s.paymentMethod,
+      amount: s._sum.amount ?? 0,
+    }));
+
+    const mappedOverridden = topOverriddenProducts.map((p: any) => ({
+      ...p,
+      productName: overriddenProductMap[p.productId]?.name || 'Unknown',
+      qty: p._sum.qty ?? 0,
     }));
 
     return NextResponse.json({
@@ -279,9 +319,11 @@ export async function GET(req: NextRequest) {
       })),
       topCustomers: topCustomers.map((tc: any) => ({
         customer: customerMap[tc.customerId],
-        total: tc._sum.total ?? 0
+        total: tc._sum.total ?? 0,
       })),
       lowStockItems: filteredLowStock,
+      salesByPaymentMethod: mappedPaymentMethods,
+      topOverriddenProducts: mappedOverridden
     });
   } catch (error) {
     if (error instanceof AuthError) return error.response;

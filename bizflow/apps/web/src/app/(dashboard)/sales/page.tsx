@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import toast from "react-hot-toast";
 import DashboardLayout from "@/shared/ui/layout/DashboardLayout";
 
@@ -64,7 +65,7 @@ import { useSales } from "@/shared/hooks/useSales";
 import { useQuotations } from "@/shared/hooks/useQuotations";
 import { useCreditNotes, useDebitNotes, useBillsOfSupply } from "@/shared/hooks/useInvoiceDocs";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { Search, FileText, Download, TrendingUp, Clock, CheckCircle, AlertCircle, Plus, FileDown, FileUp, FileMinus, Trash2, RefreshCw, MessageSquare, Pencil, CreditCard } from "lucide-react";
+import { Search, FileText, Download, TrendingUp, Clock, CheckCircle, AlertCircle, Plus, FileDown, FileUp, FileMinus, Trash2, RefreshCw, MessageSquare, Pencil, CreditCard, XCircle } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import NewSaleModal from "@/shared/ui/modals/NewSaleModal";
 import NewCreditNoteModal from "@/shared/ui/modals/NewCreditNoteModal";
@@ -84,6 +85,9 @@ function pctChange(cur: number, prev: number) {
 }
 
 export default function SalesPage() {
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === 'SUPER_ADMIN' || (session?.user as any)?.role === 'ADMIN';
+
   const [activeTab, setActiveTab] = useState("invoices");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -126,19 +130,20 @@ export default function SalesPage() {
   const isThisMonth = (d: string) => new Date(d) >= thisMonthStart;
   const isLastMonth = (d: string) => { const dt = new Date(d); return dt >= lastMonthStart && dt <= lastMonthEnd; };
 
-  const totalRevenue   = allSales.reduce((s: number, sale: any) => s + sale.paid, 0);
-  const totalDues      = allSales.reduce((s: number, sale: any) => s + (sale.total - sale.paid), 0);
-  const paidCount      = allSales.filter((s: any) => s.status === "paid").length;
-  const unpaidCount    = allSales.filter((s: any) => s.status !== "paid").length;
+  const validSales = allSales.filter((s: any) => s.workflowState !== "draft");
+  const totalRevenue   = validSales.reduce((s: number, sale: any) => s + sale.paid, 0);
+  const totalDues      = validSales.reduce((s: number, sale: any) => s + (sale.total - sale.paid), 0);
+  const paidCount      = validSales.filter((s: any) => s.status === "paid").length;
+  const unpaidCount    = validSales.filter((s: any) => s.status !== "paid").length;
 
-  const revThis  = allSales.filter((s: any) => isThisMonth(s.createdAt)).reduce((a: number, s: any) => a + s.paid, 0);
-  const revLast  = allSales.filter((s: any) => isLastMonth(s.createdAt)).reduce((a: number, s: any) => a + s.paid, 0);
-  const dueThis  = allSales.filter((s: any) => isThisMonth(s.createdAt)).reduce((a: number, s: any) => a + (s.total - s.paid), 0);
-  const dueLast  = allSales.filter((s: any) => isLastMonth(s.createdAt)).reduce((a: number, s: any) => a + (s.total - s.paid), 0);
-  const paidThis = allSales.filter((s: any) => isThisMonth(s.createdAt) && s.status === "paid").length;
-  const paidLast = allSales.filter((s: any) => isLastMonth(s.createdAt) && s.status === "paid").length;
-  const unpaidThis = allSales.filter((s: any) => isThisMonth(s.createdAt) && s.status !== "paid").length;
-  const unpaidLast = allSales.filter((s: any) => isLastMonth(s.createdAt) && s.status !== "paid").length;
+  const revThis  = validSales.filter((s: any) => isThisMonth(s.createdAt)).reduce((a: number, s: any) => a + s.paid, 0);
+  const revLast  = validSales.filter((s: any) => isLastMonth(s.createdAt)).reduce((a: number, s: any) => a + s.paid, 0);
+  const dueThis  = validSales.filter((s: any) => isThisMonth(s.createdAt)).reduce((a: number, s: any) => a + (s.total - s.paid), 0);
+  const dueLast  = validSales.filter((s: any) => isLastMonth(s.createdAt)).reduce((a: number, s: any) => a + (s.total - s.paid), 0);
+  const paidThis = validSales.filter((s: any) => isThisMonth(s.createdAt) && s.status === "paid").length;
+  const paidLast = validSales.filter((s: any) => isLastMonth(s.createdAt) && s.status === "paid").length;
+  const unpaidThis = validSales.filter((s: any) => isThisMonth(s.createdAt) && s.status !== "paid").length;
+  const unpaidLast = validSales.filter((s: any) => isLastMonth(s.createdAt) && s.status !== "paid").length;
 
   const revChange    = pctChange(revThis, revLast);
   const dueChange    = pctChange(dueThis, dueLast);
@@ -204,6 +209,24 @@ export default function SalesPage() {
     }
   };
 
+  const handleApprovalAction = async (saleId: string, action: 'approve' | 'reject') => {
+    try {
+      const res = await fetch(`/api/sales/${saleId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || `Failed to ${action} sale`);
+      }
+      toast.success(`Sale ${action}d successfully`);
+      await queryClient.invalidateQueries({ queryKey: ['sales'] });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
   return (
     <DashboardLayout title="Sales & Billing">
       {/* Header */}
@@ -262,7 +285,7 @@ export default function SalesPage() {
                   <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search invoices..." className="w-full bg-primary/5 border border-primary/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-primary placeholder:text-primary/40 focus:outline-none focus:border-violet-500/50" />
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
-                  {["all", "paid", "partial", "unpaid"].map((f) => (
+                  {["all", "paid", "partial", "unpaid", "draft", "awaiting_approval"].map((f) => (
                     <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all flex-shrink-0 ${filter === f ? "bg-violet-600 text-primary" : "bg-primary/5 text-primary/40 hover:text-primary hover:bg-primary/10"}`}>
                       {f}
                     </button>
@@ -298,17 +321,37 @@ export default function SalesPage() {
                           {due > 0 ? <span className="text-rose-400">{formatCurrency(due)}</span> : <span className="text-primary/40">—</span>}
                         </td>
                         <td className="px-4 py-3.5">
-                          <Badge variant={sale.status === "paid" ? "success" : sale.status === "partial" ? "warning" : "danger"}>{sale.status}</Badge>
+                          {sale.workflowState === "awaiting_approval" ? (
+                            <Badge variant="warning">Pending Approval</Badge>
+                          ) : sale.workflowState === "rejected" ? (
+                            <Badge variant="danger">Rejected</Badge>
+                          ) : (
+                            <Badge variant={sale.status === "paid" ? "success" : sale.status === "partial" ? "warning" : "danger"}>{sale.status}</Badge>
+                          )}
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex gap-1 items-center">
+                            {/* Approvals (Admins only) */}
+                            {isAdmin && sale.workflowState === "awaiting_approval" && (
+                              <>
+                                <button onClick={() => handleApprovalAction(sale.id, 'approve')} aria-label="Approve sale" className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-primary/40 hover:text-emerald-400 transition-all" title="Approve">
+                                  <CheckCircle size={14} />
+                                </button>
+                                <button onClick={() => handleApprovalAction(sale.id, 'reject')} aria-label="Reject sale" className="p-1.5 rounded-lg hover:bg-rose-500/15 text-primary/40 hover:text-rose-400 transition-all" title="Reject">
+                                  <XCircle size={14} />
+                                </button>
+                              </>
+                            )}
+
                             {/* Edit Invoice */}
-                            <button onClick={() => { setEditSaleId(sale.id); setSaleModalOpen(true); }} aria-label="Edit invoice" className="p-1.5 rounded-lg hover:bg-blue-500/15 text-primary/40 hover:text-blue-400 transition-all" title="Edit Invoice">
-                              <Pencil size={14} />
-                            </button>
+                            {sale.workflowState !== "rejected" && (
+                              <button onClick={() => { setEditSaleId(sale.id); setSaleModalOpen(true); }} aria-label="Edit invoice" className="p-1.5 rounded-lg hover:bg-blue-500/15 text-primary/40 hover:text-blue-400 transition-all" title="Edit Invoice">
+                                <Pencil size={14} />
+                              </button>
+                            )}
                             
                             {/* Pay Icon */}
-                            {sale.status !== "paid" && (
+                            {sale.status !== "paid" && sale.workflowState === "posted" && (
                               <button
                                 onClick={() => { setSalePayTarget({ id: sale.id, total: sale.total, paid: sale.paid, invoiceNo: sale.invoiceNo }); setSalePayInput(String(sale.paid)); }}
                                 className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-primary/40 hover:text-emerald-400 transition-all"
@@ -319,13 +362,14 @@ export default function SalesPage() {
                             )}
 
                             {/* Download Dropdown */}
-                            <DropdownMenu.Root>
-                              <DropdownMenu.Trigger asChild>
-                                <button className="p-1.5 rounded-lg hover:bg-violet-500/15 text-primary/40 hover:text-violet-400 transition-all" title="Download Invoice">
-                                  <Download size={14} />
-                                </button>
-                              </DropdownMenu.Trigger>
-                              <DropdownMenu.Portal>
+                            {sale.workflowState === "posted" && (
+                              <DropdownMenu.Root>
+                                <DropdownMenu.Trigger asChild>
+                                  <button className="p-1.5 rounded-lg hover:bg-violet-500/15 text-primary/40 hover:text-violet-400 transition-all" title="Download Invoice">
+                                    <Download size={14} />
+                                  </button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Portal>
                                 <DropdownMenu.Content
                                   align="end"
                                   className="z-[9999] min-w-[160px] max-w-[calc(100vw-2rem)] bg-surface-2 border border-primary/10 rounded-xl p-1 shadow-xl text-sm"
@@ -352,6 +396,7 @@ export default function SalesPage() {
                                 </DropdownMenu.Content>
                               </DropdownMenu.Portal>
                             </DropdownMenu.Root>
+                            )}
 
                             {/* Delete invoice */}
                             <button onClick={() => setDeleteInvoiceTarget({ id: sale.id, invoiceNo: sale.invoiceNo })} aria-label={`Delete invoice ${sale.invoiceNo}`} className="p-1.5 rounded-lg hover:bg-rose-500/15 text-primary/40 hover:text-rose-400 transition-all" title="Delete Invoice"><Trash2 size={14} /></button>

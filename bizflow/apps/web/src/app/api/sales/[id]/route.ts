@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/shared/lib/db';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
-import { saleSchema } from '@/shared/lib/validations';
+import { saleSchema, draftSaleSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
+import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
+import { computeDueDate } from '../route'; // Import from parent route
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,7 +15,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       where: { id, businessId: session.user.businessId },
       include: {
         customer: true,
-        items: { include: { product: true } }
+        items: { include: { product: true } },
+        payments: true,
       }
     });
 
@@ -37,15 +40,342 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const existing = await prisma.sale.findFirst({
       where: { id, businessId: session.user.businessId },
-      include: { items: true }
+      include: { items: true, payments: true }
     });
     if (!existing) {
       return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
     }
 
-    // If items are provided, this is a full edit. Otherwise, just a partial update (e.g. payment)
-    const isFullEdit = Array.isArray(body.items);
+    const business = await prisma.business.findUnique({ where: { id: session.user.businessId } });
+    const gstInclusive = business?.gstInclusive ?? false;
 
+    // ── CASE 1: Editing a Draft (No accounting impact) ──
+    if (existing.workflowState === 'draft' && body.isDraft === true) {
+      const validatedData = draftSaleSchema.parse(body);
+      const computedDueDate = computeDueDate(validatedData.invoiceDate, validatedData.paymentTerms, validatedData.dueDate);
+      
+      let newTotal = 0;
+      validatedData.items.forEach(item => {
+        const grossAmt = (item.qty * item.price) - (item.discount || 0);
+        const rate = item.gstRate || 0;
+        if (gstInclusive && rate > 0) newTotal += grossAmt;
+        else newTotal += grossAmt + (grossAmt * (rate / 100));
+      });
+
+      const updated = await prisma.$transaction(async (tx: any) => {
+        // Delete old items and payments
+        await tx.saleItem.deleteMany({ where: { saleId: id } });
+        await tx.salePayment.deleteMany({ where: { saleId: id } });
+
+        // Update sale and insert new ones
+        return tx.sale.update({
+          where: { id },
+          data: {
+            customerId: validatedData.customerId,
+            total: Math.round(newTotal * 100) / 100,
+            notes: validatedData.notes,
+            placeOfSupply: validatedData.placeOfSupply,
+            reverseCharge: validatedData.reverseCharge,
+            isAggregate: validatedData.isAggregate,
+            aggregateDate: validatedData.aggregateDate ? new Date(validatedData.aggregateDate) : null,
+            invoiceDate: validatedData.invoiceDate ? new Date(validatedData.invoiceDate) : null,
+            paymentTerms: validatedData.paymentTerms,
+            dueDate: computedDueDate,
+            draftSavedAt: new Date(),
+            items: {
+              create: validatedData.items.map(item => ({
+                productId: item.productId,
+                qty: item.qty,
+                price: item.price,
+                purchasePrice: 0,
+                discount: item.discount,
+                hsnCode: item.hsnCode,
+                gstRate: item.gstRate,
+                originalPrice: item.originalPrice ?? null,
+                priceOverrideReason: item.priceOverrideReason || null,
+              }))
+            },
+            ...(validatedData.payments && validatedData.payments.length > 0 ? {
+              payments: {
+                create: validatedData.payments.map((p: any) => ({
+                  paymentMethod: p.paymentMethod,
+                  amount: p.amount,
+                  reference: p.reference || null,
+                  notes: p.notes || null,
+                  createdBy: session.user.id,
+                }))
+              }
+            } : {})
+          },
+          include: { customer: true, items: { include: { product: true } }, payments: true }
+        });
+      });
+      return NextResponse.json(updated);
+    }
+
+    // ── CASE 2: Confirming a Draft (Full accounting impact) ──
+    if (existing.workflowState === 'draft' && body.isDraft === false) {
+      const validatedData = saleSchema.parse(body);
+      const computedDueDate = computeDueDate(validatedData.invoiceDate, validatedData.paymentTerms, validatedData.dueDate);
+      
+      let newSubtotal = 0;
+      let newTotalGst = 0;
+      validatedData.items.forEach(item => {
+        const grossAmt = (item.qty * item.price) - (item.discount || 0);
+        const rate = item.gstRate || 0;
+        if (gstInclusive && rate > 0) {
+          const base = grossAmt / (1 + rate / 100);
+          newSubtotal += base;
+          newTotalGst += grossAmt - base;
+        } else {
+          newSubtotal += grossAmt;
+          newTotalGst += grossAmt * (rate / 100);
+        }
+      });
+      const newTotal = newSubtotal + newTotalGst;
+
+      const { extractStateCodeFromGST } = await import('@/shared/lib/gst-engine');
+      const { calculateInvoiceTotal } = await import('@/shared/lib/invoice-engine');
+      const { adjustStockWithLayers } = await import('@/shared/lib/stock-engine');
+
+      const businessStateCode = business?.stateCode || extractStateCodeFromGST(business?.gstNumber) || null;
+      const invoiceLines = validatedData.items.map(item => ({
+        qty: item.qty,
+        price: item.price,
+        discount: item.discount || 0,
+        gstRate: item.gstRate || 0,
+      }));
+      const invoiceResult = calculateInvoiceTotal(
+        invoiceLines,
+        businessStateCode,
+        validatedData.placeOfSupply || null,
+        business?.gstInclusive ?? false,
+      );
+
+      // Check layer engine availability
+      let layerEngineEnabled = true;
+      try {
+        await prisma.inventoryLayer.count();
+      } catch (e) {
+        layerEngineEnabled = false;
+      }
+
+      const confirmedSale = await prisma.$transaction(async (tx: any) => {
+        // Generate new official invoice number
+        const year = new Date().getFullYear();
+        const prefix = `INV-${year}-`;
+        const lastSale = await tx.sale.findFirst({
+          where: { businessId: session.user.businessId, invoiceNo: { startsWith: prefix } },
+          orderBy: { invoiceNo: 'desc' },
+          select: { invoiceNo: true }
+        });
+        let nextNum = 1;
+        if (lastSale) {
+          const parts = lastSale.invoiceNo.split('-');
+          const lastNum = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(lastNum)) nextNum = lastNum + 1;
+        }
+        const newInvoiceNo = `${prefix}${String(nextNum).padStart(3, "0")}`;
+
+        // Calculate paid amount from payments array if present, else body.paid
+        let computedPaid = validatedData.paid || 0;
+        if (validatedData.payments && validatedData.payments.length > 0) {
+          computedPaid = validatedData.payments.reduce((sum, p) => sum + p.amount, 0);
+        }
+
+        // Determine status
+        let status = 'unpaid';
+        if (computedPaid >= newTotal) status = 'paid';
+        else if (computedPaid > 0) status = 'partial';
+
+        // Delete old draft items and payments
+        await tx.saleItem.deleteMany({ where: { saleId: id } });
+        await tx.salePayment.deleteMany({ where: { saleId: id } });
+
+        // Build product maps
+        const productMap: Record<string, any> = {};
+        for (const item of validatedData.items) {
+          const product = await tx.product.findFirst({ where: { id: item.productId, businessId: session.user.businessId } });
+          if (!product) throw new Error(`Product ${item.productId} not found`);
+          productMap[item.productId] = product;
+        }
+
+        let finalWorkflowState = 'posted';
+        let approvalReason = null;
+        
+        for (const item of validatedData.items) {
+          if (item.originalPrice != null && item.originalPrice > 0) {
+            const overridePercent = ((item.originalPrice - item.price) / item.originalPrice) * 100;
+            if (overridePercent > 10) {
+              finalWorkflowState = 'awaiting_approval';
+              approvalReason = `Price override > 10% on ${productMap[item.productId]?.name || 'item'}`;
+              break;
+            }
+          }
+          if (item.discount > 10) {
+            finalWorkflowState = 'awaiting_approval';
+            approvalReason = `Discount > 10% on ${productMap[item.productId]?.name || 'item'}`;
+            break;
+          }
+        }
+
+        const sale = await tx.sale.update({
+          where: { id },
+          data: {
+            invoiceNo: newInvoiceNo,
+            customerId: validatedData.customerId,
+            total: newTotal,
+            paid: computedPaid,
+            status,
+            workflowState: finalWorkflowState,
+            approvalReason: approvalReason,
+            confirmedAt: finalWorkflowState === 'posted' ? new Date() : null,
+            confirmedBy: finalWorkflowState === 'posted' ? session.user.id : null,
+            notes: validatedData.notes,
+            placeOfSupply: validatedData.placeOfSupply,
+            reverseCharge: validatedData.reverseCharge,
+            isAggregate: validatedData.isAggregate,
+            aggregateDate: validatedData.aggregateDate ? new Date(validatedData.aggregateDate) : null,
+            invoiceDate: validatedData.invoiceDate ? new Date(validatedData.invoiceDate) : null,
+            paymentTerms: validatedData.paymentTerms,
+            dueDate: computedDueDate,
+            items: {
+              create: validatedData.items.map(item => {
+                const product = productMap[item.productId];
+                return {
+                  productId: item.productId,
+                  qty: item.qty,
+                  price: item.price,
+                  purchasePrice: 0, // Will update below
+                  discount: item.discount,
+                  hsnCode: item.hsnCode,
+                  gstRate: item.gstRate,
+                  originalPrice: item.originalPrice ?? null,
+                  priceOverrideReason: item.priceOverrideReason || null,
+                  ...buildProductSnapshot(product),
+                };
+              })
+            },
+            ...(validatedData.payments && validatedData.payments.length > 0 ? {
+              payments: {
+                create: validatedData.payments.map((p: any) => ({
+                  paymentMethod: p.paymentMethod,
+                  amount: p.amount,
+                  reference: p.reference || null,
+                  notes: p.notes || null,
+                  createdBy: session.user.id,
+                }))
+              }
+            } : {})
+          },
+          include: { customer: true, items: { include: { product: true } }, payments: true }
+        });
+
+        if (finalWorkflowState === 'posted') {
+          // Deduct stock for all items
+          let totalSaleCOGS = 0;
+          for (const item of sale.items) {
+            if (layerEngineEnabled) {
+              const consumption = await adjustStockWithLayers(tx, item.productId, session.user.businessId, -item.qty, `SALE:${sale.id}`);
+              const cogs = consumption.totalCost;
+              totalSaleCOGS += cogs;
+            await tx.saleItem.update({
+              where: { id: item.id },
+              data: { purchasePrice: item.qty > 0 ? cogs / item.qty : 0 },
+            });
+          } else {
+            // Basic stock deduction
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: { decrement: item.qty } }
+            });
+          }
+        }
+
+        // Add Customer Dues
+        await tx.customer.update({
+          where: { id: validatedData.customerId },
+          data: {
+            totalPurchases: { increment: newTotal },
+            dues: { increment: newTotal - computedPaid }
+          }
+        });
+
+        // Cash Book Entries
+        const { postCashBookEntry, postPaymentJournal } = await import('@/shared/lib/auto-journal');
+        if (computedPaid > 0) {
+          if (validatedData.payments && validatedData.payments.length > 0) {
+            for (const payment of validatedData.payments) {
+              await postCashBookEntry({
+                amount: payment.amount,
+                type: 'RECEIPT',
+                narration: `${payment.paymentMethod.toUpperCase()} Payment received for Invoice ${sale.invoiceNo}`,
+                reference: sale.invoiceNo,
+                businessId: session.user.businessId,
+                date: new Date(),
+                tx,
+              });
+              await postPaymentJournal({
+                paymentId: `${sale.id}-pay-${Date.now()}-${payment.paymentMethod}`,
+                customerId: validatedData.customerId,
+                customerName: sale.customer?.name ?? 'Customer',
+                amount: payment.amount,
+                paymentMethod: payment.paymentMethod,
+                businessId: session.user.businessId,
+                tx,
+              });
+            }
+          } else {
+            await postCashBookEntry({
+              amount: computedPaid,
+              type: 'RECEIPT',
+              narration: `Payment received for Invoice ${sale.invoiceNo}`,
+              reference: sale.invoiceNo,
+              businessId: session.user.businessId,
+              date: new Date(),
+              tx,
+            });
+            await postPaymentJournal({
+              paymentId: `${sale.id}-pay-${Date.now()}`,
+              customerId: validatedData.customerId,
+              customerName: sale.customer?.name ?? 'Customer',
+              amount: computedPaid,
+              paymentMethod: 'cash',
+              businessId: session.user.businessId,
+              tx,
+            });
+          }
+        }
+
+        // Post main sale journal
+        const { postSaleJournal } = await import('@/shared/lib/auto-journal');
+        await postSaleJournal({
+          saleId: sale.id,
+          invoiceNo: sale.invoiceNo,
+          customerId: validatedData.customerId,
+          customerName: sale.customer?.name ?? 'Customer',
+          total: newTotal,
+          taxableValue: invoiceResult.totalTaxable,
+          cgst: invoiceResult.totalCgst,
+          sgst: invoiceResult.totalSgst,
+          igst: invoiceResult.totalIgst,
+          businessId: session.user.businessId,
+          tx,
+        });
+
+        }
+
+        return sale;
+      });
+
+      const { logAudit } = await import('@/shared/lib/audit');
+      await logAudit({ session, action: 'UPDATE', entityType: 'Sale', entityId: id, entityLabel: `Confirmed Draft -> ${confirmedSale.invoiceNo}` });
+
+      return NextResponse.json(confirmedSale);
+    }
+
+    // ── CASE 3: Full Edit of a Posted Sale (Existing Logic) ──
+    const isFullEdit = Array.isArray(body.items);
     if (!isFullEdit) {
       const validatedData = saleSchema.partial().parse(body);
       const { paid, status, notes } = validatedData;
@@ -60,7 +390,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           include: { customer: true, items: { include: { product: true } } }
         });
 
-        // Recalculate customer dues if payment changed
         if (paid !== undefined && existing.customerId) {
           const oldDueContrib = existing.total - existing.paid;
           const newDueContrib = existing.total - paid;
@@ -72,7 +401,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             });
           }
 
-          // Auto-create Cash Book entry and Payment Journal for new payment received
           const paymentDiff = paid - existing.paid;
           if (paymentDiff > 0) {
             const { postCashBookEntry, postPaymentJournal } = await import('@/shared/lib/auto-journal');
@@ -101,15 +429,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json(sale);
     }
 
-    // --- FULL EDIT LOGIC ---
     const validatedData = saleSchema.parse(body);
-    
-    // Calculate new total
     let newSubtotal = 0;
     let newTotalGst = 0;
-    const business = await prisma.business.findUnique({ where: { id: session.user.businessId } });
-    const gstInclusive = business?.gstInclusive ?? false;
-
     validatedData.items.forEach(item => {
       const grossAmt = (item.qty * item.price) - (item.discount || 0);
       const rate = item.gstRate || 0;
@@ -125,7 +447,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const newTotal = newSubtotal + newTotalGst;
     
     const sale = await prisma.$transaction(async (tx: any) => {
-      // 0. Reverse existing journal entries for this sale to prevent duplicates
       const relatedJournals = await tx.journalEntry.findMany({
         where: { businessId: session.user.businessId, reference: `SALE:${id}` },
         select: { id: true, status: true },
@@ -139,7 +460,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         }
       }
 
-      // 1. Revert stock for all OLD items
       for (const item of existing.items) {
         await tx.product.update({
           where: { id: item.productId },
@@ -147,10 +467,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         });
       }
 
-      // 2. Delete OLD items
       await tx.saleItem.deleteMany({ where: { saleId: id } });
+      await tx.salePayment.deleteMany({ where: { saleId: id } });
 
-      // 3. Deduct stock for NEW items
       for (const item of validatedData.items) {
         await tx.product.update({
           where: { id: item.productId },
@@ -158,12 +477,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         });
       }
 
-      // 4. Determine status based on payment
       let status = 'unpaid';
       if (validatedData.paid >= newTotal) status = 'paid';
       else if (validatedData.paid > 0) status = 'partial';
 
-      // 5. Update Sale record
       const updated = await tx.sale.update({
         where: { id },
         data: {
@@ -191,9 +508,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         include: { customer: true, items: { include: { product: true } } }
       });
 
-      // 6. Update Customer balances (revert old, apply new)
       if (existing.customerId) {
-        // Revert old
         await tx.customer.update({
           where: { id: existing.customerId },
           data: {
@@ -203,7 +518,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         });
       }
       
-      // Apply new
       await tx.customer.update({
         where: { id: validatedData.customerId },
         data: {
@@ -215,15 +529,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return updated;
     });
 
-    // 7. Fire new journal entry for the updated sale (after transaction commits)
     const { postSaleJournal } = await import('@/shared/lib/auto-journal');
     const { extractStateCodeFromGST } = await import('@/shared/lib/gst-engine');
     const { calculateInvoiceTotal } = await import('@/shared/lib/invoice-engine');
-    const businessInfo = await prisma.business.findUnique({
-      where: { id: session.user.businessId },
-      select: { gstNumber: true, stateCode: true, gstInclusive: true },
-    });
-    const businessStateCode = businessInfo?.stateCode || extractStateCodeFromGST(businessInfo?.gstNumber) || null;
+    
+    const businessStateCode = business?.stateCode || extractStateCodeFromGST(business?.gstNumber) || null;
     const invoiceLines = validatedData.items.map(item => ({
       qty: item.qty,
       price: item.price,
@@ -234,7 +544,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       invoiceLines,
       businessStateCode,
       validatedData.placeOfSupply || null,
-      businessInfo?.gstInclusive ?? false,
+      business?.gstInclusive ?? false,
     );
     postSaleJournal({
       saleId: id,
@@ -272,43 +582,45 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     await prisma.$transaction(async (tx: any) => {
-      // Restore stock for each sale item
-      for (const item of existing.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.qty } }
-        });
-      }
-
-      // Reverse customer totals if attached to a customer
-      if (existing.customerId) {
-        await tx.customer.update({
-          where: { id: existing.customerId },
-          data: {
-            totalPurchases: { decrement: existing.total },
-            dues: { decrement: existing.total - existing.paid }
-          }
-        });
-      }
-
-      // Reverse associated journal entries (auto-journal creates with reference 'SALE:{id}')
-      const relatedJournals = await tx.journalEntry.findMany({
-        where: { businessId: session.user.businessId, reference: `SALE:${id}` },
-        select: { id: true, status: true },
-      });
-      for (const je of relatedJournals) {
-        if (je.status !== 'REVERSED') {
-          await tx.journalEntry.update({
-            where: { id: je.id },
-            data: { status: 'REVERSED' },
+      if (existing.workflowState !== 'draft') {
+        for (const item of existing.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.qty } }
           });
+        }
+
+        if (existing.customerId) {
+          await tx.customer.update({
+            where: { id: existing.customerId },
+            data: {
+              totalPurchases: { decrement: existing.total },
+              dues: { decrement: existing.total - existing.paid }
+            }
+          });
+        }
+
+        const relatedJournals = await tx.journalEntry.findMany({
+          where: { businessId: session.user.businessId, reference: `SALE:${id}` },
+          select: { id: true, status: true },
+        });
+        for (const je of relatedJournals) {
+          if (je.status !== 'REVERSED') {
+            await tx.journalEntry.update({
+              where: { id: je.id },
+              data: { status: 'REVERSED' },
+            });
+          }
         }
       }
 
-      // Delete sale items first, then sale
       await tx.saleItem.deleteMany({ where: { saleId: id } });
+      await tx.salePayment.deleteMany({ where: { saleId: id } });
       await tx.sale.delete({ where: { id } });
     });
+
+    const { logAudit } = await import('@/shared/lib/audit');
+    await logAudit({ session, action: 'DELETE', entityType: existing.workflowState === 'draft' ? 'DraftInvoice' : 'Sale', entityId: id, entityLabel: existing.invoiceNo });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -317,4 +629,3 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
-

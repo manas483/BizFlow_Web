@@ -5,10 +5,13 @@ export interface Product {
   category: string;
   stock: number;
   minStock: number;
+  reservedStock?: number;
   sellingPrice: number;
+  standardCost: number;
   gstRate: number;
   hsnCode?: string | null;
   unit: string;
+  supplier?: string | null;
   active?: boolean;
 }
 

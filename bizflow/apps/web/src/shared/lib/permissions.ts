@@ -17,7 +17,11 @@ export type Permission =
   | "view_audit_trail"
   | "manage_backups"
   | "manage_security"
-  | "manage_roles";
+  | "manage_roles"
+  | "override_selling_price"
+  | "override_gst_rate"
+  | "view_profit_margin"
+  | "manage_drafts";
 
 /** All available permissions — used by the custom role editor UI. */
 export const ALL_PERMISSIONS: { key: Permission; label: string; group: string }[] = [
@@ -42,6 +46,11 @@ export const ALL_PERMISSIONS: { key: Permission; label: string; group: string }[
   { key: "manage_backups",    label: "Manage Backups",         group: "Administration" },
   { key: "manage_security",   label: "Manage Security",        group: "Administration" },
   { key: "manage_roles",      label: "Manage Roles",           group: "Administration" },
+  // Pricing & Tax
+  { key: "override_selling_price", label: "Override Selling Price", group: "Operations" },
+  { key: "override_gst_rate",      label: "Override GST Rate",     group: "Operations" },
+  { key: "view_profit_margin",     label: "View Profit Margin",    group: "Finance" },
+  { key: "manage_drafts",          label: "Manage Draft Invoices", group: "Operations" },
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -62,6 +71,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "manage_backups",
     "manage_security",
     "manage_roles",
+    "override_selling_price",
+    "override_gst_rate",
+    "view_profit_margin",
+    "manage_drafts",
   ],
   ADMIN: [
     "view_dashboard",
@@ -78,6 +91,10 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "manage_loans",
     "view_audit_trail",
     "manage_backups",
+    "override_selling_price",
+    "override_gst_rate",
+    "view_profit_margin",
+    "manage_drafts",
   ],
   ACCOUNTANT: [
     "view_dashboard",
@@ -103,6 +120,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "manage_customers",
     "view_reports",
     "manage_loans",
+    "override_selling_price",
+    "manage_drafts",
   ],
   EMPLOYEE: [
     "view_dashboard",

@@ -1,11 +1,9 @@
 const { Client } = require('pg');
 
-const urls = {
-  "Prisma Postgres": "postgres://e44ab1827ec514905ab475e3dcba47480dd1f2d4e96299f8ea1032e36132407e:sk_zKK4j0aNjyW6NvLz80fPP@db.prisma.io:5432/postgres?sslmode=require",
-  "Neon Project restless-glitter (production)": "postgresql://neondb_owner:npg_LzZK7qv3UAJV@ep-damp-feather-aqe6k0jz.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require",
-  "Neon Project billowing-sun (main - current .env)": "postgresql://neondb_owner:npg_9joCySKxm0Hi@ep-tiny-scene-aj1nynbc.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require",
-  "Neon Project billowing-sun (WAC test commit pwd)": "postgresql://neondb_owner:npg_VIc7akHMWOb0@ep-tiny-scene-aj1nynbc.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require"
-};
+const urls = {};
+if (process.env.DATABASE_URL) {
+  urls["Active Database (DATABASE_URL)"] = process.env.DATABASE_URL;
+}
 
 async function queryDb(name, url) {
   console.log(`\n=== Querying: ${name} ===`);

@@ -8,7 +8,7 @@ import { Button } from "@/shared/ui/ui/Button";
 import { useReports } from "@/shared/hooks/useReports";
 import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
 import { formatCurrency, exportToCSV } from "@/shared/lib/utils";
-import { BarChart2, TrendingUp, TrendingDown, IndianRupee, Package, Users, Percent, Download, FileText, RefreshCw, AlertTriangle, Scale, Sparkles, Brain, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { BarChart2, TrendingUp, TrendingDown, IndianRupee, Package, Users, Percent, Download, FileText, RefreshCw, AlertTriangle, Scale, Sparkles, Brain, ArrowUpRight, ArrowDownRight, PieChart, ShieldAlert } from "lucide-react";
 import { trackActivity } from "@/shared/hooks/useRecommendations";
 import { useAiForecast } from "@/shared/hooks/useAiForecast";
 import { useAutomationSettings } from "@/shared/hooks/useAutomationSettings";
@@ -16,8 +16,9 @@ import { useExportRegister } from "@/shared/hooks/useExportRegister";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid,
-  PieChart, Pie, Cell, Legend, AreaChart, Area
+  PieChart as RePieChart, Pie, Cell, Legend, AreaChart, Area
 } from "recharts";
+import { PriceAuditTrail } from "@/shared/ui/reports/PriceAuditTrail";
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
@@ -46,7 +47,7 @@ const PERIODS = [
 ];
 
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<"financials" | "ai">("financials");
+  const [activeTab, setActiveTab] = useState<"financials" | "ai" | "audit">("financials");
   const [period, setPeriod] = useState<"daily"|"weekly"|"monthly"|"yearly"|"lifetime"|"custom">("monthly");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -82,6 +83,8 @@ export default function ReportsPage() {
   const topProducts: any[] = report?.topProducts ?? [];
   const topCustomers: any[] = report?.topCustomers ?? [];
   const lowStockItems: any[] = report?.lowStockItems ?? [];
+  const salesByPaymentMethod: any[] = report?.salesByPaymentMethod ?? [];
+  const topOverriddenProducts: any[] = report?.topOverriddenProducts ?? [];
   const salesByMonthRaw: any[] = report?.salesByMonth ?? [];
 
   // Prepare trend data based on period
@@ -153,6 +156,17 @@ export default function ReportsPage() {
             >
               <Sparkles size={14} />
               AI Predictions & Forecasts
+            </button>
+            <button
+              onClick={() => setActiveTab("audit")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                activeTab === "audit"
+                  ? "bg-rose-600/20 text-rose-400 border border-rose-500/20 shadow-sm"
+                  : "text-primary/40 hover:text-primary"
+              }`}
+            >
+              <FileText size={14} />
+              Price Audit Trail
             </button>
           </div>
         </div>
@@ -375,14 +389,14 @@ export default function ReportsPage() {
                 ) : (
                   <>
                     <ResponsiveContainer width="100%" height={180}>
-                      <PieChart>
+                      <RePieChart>
                         <Pie data={expensesByCategory} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="amount">
                           {expensesByCategory.map((_: any, i: number) => (
                             <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="rgba(0,0,0,0.1)" />
                           ))}
                         </Pie>
                         <Tooltip formatter={(v: any) => [formatCurrency(v), "Amount"]} contentStyle={{ background: "var(--bg-surface-2)", border: "1px solid var(--border)", borderRadius: "8px" }} />
-                      </PieChart>
+                      </RePieChart>
                     </ResponsiveContainer>
                     <div className="space-y-2 mt-2 max-h-[100px] overflow-y-auto pr-1 custom-scrollbar">
                       {expensesByCategory.map((e: any, i: number) => (
@@ -390,6 +404,44 @@ export default function ReportsPage() {
                           <div className="flex items-center gap-2">
                             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
                             <span className="text-primary/60 text-xs font-medium">{e.category}</span>
+                          </div>
+                          <span className="text-primary font-medium text-xs">{formatCurrency(e.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Payment Method Breakdown */}
+            <Card className="shadow-sm border-primary/10">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <PieChart size={16} className="text-blue-400" /> Payment Methods
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {salesByPaymentMethod.length === 0 ? (
+                  <div className="flex items-center justify-center h-[240px] text-primary/40 text-sm">No payment data</div>
+                ) : (
+                  <>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <RePieChart>
+                        <Pie data={salesByPaymentMethod} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="amount">
+                          {salesByPaymentMethod.map((_: any, i: number) => (
+                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="rgba(0,0,0,0.1)" />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(v: any) => [formatCurrency(v), "Amount"]} contentStyle={{ background: "var(--bg-surface-2)", border: "1px solid var(--border)", borderRadius: "8px" }} />
+                      </RePieChart>
+                    </ResponsiveContainer>
+                    <div className="space-y-2 mt-2 max-h-[100px] overflow-y-auto pr-1 custom-scrollbar">
+                      {salesByPaymentMethod.map((e: any, i: number) => (
+                        <div key={e.method} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+                            <span className="text-primary/60 text-xs font-medium uppercase">{e.method}</span>
                           </div>
                           <span className="text-primary font-medium text-xs">{formatCurrency(e.amount)}</span>
                         </div>
@@ -470,7 +522,7 @@ export default function ReportsPage() {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
             {/* Top Selling Products */}
             <Card className="shadow-sm border-primary/10">
               <CardHeader className="pb-2 border-b border-primary/5">
@@ -521,6 +573,30 @@ export default function ReportsPage() {
               </div>
             </Card>
 
+            {/* Top Overridden Products */}
+            <Card className="shadow-sm border-amber-500/20 bg-amber-500/5">
+              <CardHeader className="pb-2 border-b border-amber-500/10">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-500">
+                  <ShieldAlert size={16} /> Most Overridden
+                </CardTitle>
+              </CardHeader>
+              <div className="divide-y divide-amber-500/10">
+                {topOverriddenProducts.length === 0 ? (
+                  <div className="text-center py-6 text-primary/40 text-xs">No price overrides</div>
+                ) : topOverriddenProducts.map((p: any, i: number) => (
+                  <div key={p.productId} className="flex items-center justify-between px-4 py-3">
+                    <div>
+                      <p className="text-primary text-sm font-medium">{p.productName}</p>
+                      <p className="text-amber-500/80 text-[10px] uppercase">{p.qty} overrides</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-amber-500 font-bold text-sm">{formatCurrency(p._sum?.price ?? 0)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
             {/* Low Stock Alerts */}
             <Card className="shadow-sm border-rose-500/20 bg-rose-500/5">
               <CardHeader className="pb-2 border-b border-rose-500/10">
@@ -548,7 +624,7 @@ export default function ReportsPage() {
           </div>
         </div>
       )
-    ) : (
+    ) : activeTab === "ai" ? (
       isLoadingForecast ? (
         <div className="flex flex-col items-center justify-center py-32 space-y-4">
           <div className="w-8 h-8 border-4 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
@@ -701,7 +777,9 @@ export default function ReportsPage() {
           </div>
         )
       )
-    )}
+    ) : activeTab === "audit" ? (
+      <PriceAuditTrail />
+    ) : null}
     </DashboardLayout>
   );
 }

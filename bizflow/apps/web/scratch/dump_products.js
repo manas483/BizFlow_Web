@@ -1,6 +1,6 @@
 const { Client } = require('pg');
 
-const connectionString = "postgres://e44ab1827ec514905ab475e3dcba47480dd1f2d4e96299f8ea1032e36132407e:sk_zKK4j0aNjyW6NvLz80fPP@db.prisma.io:5432/postgres?sslmode=require";
+const connectionString = process.env.DATABASE_URL;
 
 async function main() {
   const client = new Client({

@@ -2,13 +2,25 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/shared/lib/db';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
-import { saleSchema } from '@/shared/lib/validations';
+import { saleSchema, draftSaleSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
 import { extractStateCodeFromGST } from '@/shared/lib/gst-engine';
 import { calculateInvoiceTotal } from '@/shared/lib/invoice-engine';
 import { adjustStockWithLayers } from '@/shared/lib/stock-engine';
 import { postSaleJournal } from '@/shared/lib/auto-journal';
 import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
+
+export function computeDueDate(invoiceDate: string | null | undefined, paymentTerms: string | null | undefined, customDueDate: string | null | undefined): Date | null {
+  if (paymentTerms === 'custom' && customDueDate) return new Date(customDueDate);
+  if (!paymentTerms || paymentTerms === 'immediate') return invoiceDate ? new Date(invoiceDate) : new Date();
+  
+  const baseDate = invoiceDate ? new Date(invoiceDate) : new Date();
+  const days = parseInt(paymentTerms.replace('_days', ''), 10);
+  if (isNaN(days)) return baseDate;
+  
+  baseDate.setDate(baseDate.getDate() + days);
+  return baseDate;
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -20,6 +32,8 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(100, parseInt(searchParams.get('limit') ?? '25', 10));
     const skip  = (page - 1) * limit;
 
+    const workflowState = searchParams.get('workflowState');
+
     const where = {
       businessId: session.user.businessId,
       ...(search ? {
@@ -29,6 +43,7 @@ export async function GET(req: NextRequest) {
         ]
       } : {}),
       ...(status && status.toLowerCase() !== 'all' ? { status: status.toLowerCase() } : {}),
+      ...(workflowState ? { workflowState } : { workflowState: { not: 'draft' } }), // Hide drafts by default
     };
 
     const [sales, total] = await Promise.all([
@@ -52,17 +67,154 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(req: NextRequest) {
+  // ── Phase 2: Draft creation path ──
+  // Drafts have ZERO financial impact: no stock, no journals, no customer dues.
+  // They use DFT-YYYY-NNNNNN numbering and workflowState='draft'.
+  try {
+    const session = await requireAuth();
+    const body = await req.json();
+
+    if (body.isDraft === true) {
+      const validated = draftSaleSchema.parse(body);
+      const { customerId, items, notes, placeOfSupply, reverseCharge, isAggregate, aggregateDate, invoiceDate, paymentTerms, dueDate, payments } = validated;
+
+      const result = await prisma.$transaction(async (tx: any) => {
+        // Validate customer exists
+        const customer = await tx.customer.findFirst({
+          where: { id: customerId, businessId: session.user.businessId },
+          select: { id: true, name: true },
+        });
+        if (!customer) throw Object.assign(new Error('Customer not found or access denied'), { code: 'BUSINESS_RULE' });
+
+        // Validate products exist and are active (but do NOT check stock — draft is just a plan)
+        const productMap: Record<string, any> = {};
+        for (const item of items) {
+          const product = await tx.product.findFirst({ where: { id: item.productId, businessId: session.user.businessId } });
+          if (!product) throw new Error(`Product ${item.productId} not found`);
+          if (!product.active) throw new Error(`Product "${product.name}" is archived.`);
+          productMap[item.productId] = product;
+        }
+
+        // Calculate total (for display purposes only — draft is not an accounting document)
+        const business = await tx.business.findUnique({
+          where: { id: session.user.businessId },
+          select: { gstInclusive: true },
+        });
+        const gstInclusive = business?.gstInclusive ?? false;
+        let total = 0;
+        items.forEach((item: any) => {
+          const grossAmt = (item.qty * item.price) - (item.discount || 0);
+          const rate = item.gstRate || 0;
+          if (gstInclusive && rate > 0) { total += grossAmt; }
+          else { total += grossAmt + grossAmt * (rate / 100); }
+        });
+
+        // Generate DFT- number (never consumes official INV- numbers)
+        const year = new Date().getFullYear();
+        const dftPrefix = `DFT-${year}-`;
+        const lastDraft = await tx.sale.findFirst({
+          where: { businessId: session.user.businessId, invoiceNo: { startsWith: dftPrefix } },
+          orderBy: { invoiceNo: 'desc' },
+          select: { invoiceNo: true },
+        });
+        let dftNum = 1;
+        if (lastDraft) {
+          const parts = lastDraft.invoiceNo.split('-');
+          const lastNum = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(lastNum)) dftNum = lastNum + 1;
+        }
+        const invoiceNo = `${dftPrefix}${String(dftNum).padStart(6, '0')}`;
+
+        // Compute due date from payment terms
+        const computedDueDate = computeDueDate(invoiceDate, paymentTerms, dueDate);
+
+        // Create draft sale (NO stock deduction, NO journals, NO customer dues)
+        const sale = await tx.sale.create({
+          data: {
+            invoiceNo,
+            customerId,
+            total: Math.round(total * 100) / 100,
+            paid: 0,
+            status: 'unpaid',
+            workflowState: 'draft',
+            draftSavedAt: new Date(),
+            notes,
+            placeOfSupply: placeOfSupply || null,
+            reverseCharge: reverseCharge === true,
+            isAggregate: isAggregate === true,
+            aggregateDate: aggregateDate || null,
+            invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
+            paymentTerms: paymentTerms || null,
+            dueDate: computedDueDate,
+            businessId: session.user.businessId,
+            items: {
+              create: items.map((item: any) => {
+                const product = productMap[item.productId];
+                return {
+                  productId: item.productId,
+                  qty: item.qty,
+                  price: item.price,
+                  purchasePrice: 0,
+                  discount: parseFloat(item.discount) || 0,
+                  hsnCode: item.hsnCode,
+                  gstRate: parseFloat(item.gstRate) || 0,
+                  originalPrice: item.originalPrice ?? null,
+                  priceOverrideReason: item.priceOverrideReason || null,
+                  ...buildProductSnapshot(product),
+                };
+              }),
+            },
+            // Create split payment records if provided
+            ...(payments && payments.length > 0 ? {
+              payments: {
+                create: payments.map((p: any) => ({
+                  paymentMethod: p.paymentMethod,
+                  amount: p.amount,
+                  reference: p.reference || null,
+                  notes: p.notes || null,
+                  createdBy: session.user.id,
+                })),
+              },
+            } : {}),
+          },
+        });
+
+        // Track activity
+        await tx.userActivity.create({
+          data: {
+            businessId: session.user.businessId,
+            userId: session.user.id ?? 'unknown',
+            eventType: 'draft_created',
+            metadata: { saleId: sale.id, itemsCount: items.length },
+          },
+        });
+
+        return sale;
+      });
+
+      // Audit log
+      const { logAudit } = await import('@/shared/lib/audit');
+      await logAudit({ session, action: 'CREATE', entityType: 'DraftInvoice', entityId: result.id, entityLabel: result.invoiceNo });
+
+      return NextResponse.json(result, { status: 201 });
+    }
+  } catch (error: any) {
+    if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
+    if (error instanceof AuthError) return error.response;
+    const KNOWN_PREFIXES = ['Product ', 'Customer '];
+    const isBusinessError = KNOWN_PREFIXES.some(p => error.message?.startsWith(p)) || error?.code === 'BUSINESS_RULE';
+    return NextResponse.json({ error: error?.message || 'Internal Server Error' }, { status: isBusinessError ? 400 : 500 });
+  }
+
+  // ── Existing sale creation logic (non-draft) ──
   // A-3 FIX: Retry loop for invoice number collision.
-  // If two concurrent transactions generate the same invoice number,
-  // the @@unique([businessId, invoiceNo]) constraint will throw a P2002 error.
-  // We catch it and retry with the next number (max 3 attempts).
   const MAX_RETRIES = 3;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
   try {
     const session = await requireAuth();
     const body = await req.json();
     const validatedData = saleSchema.parse(body);
-    const { customerId, items, paid, status, notes, placeOfSupply, reverseCharge, isAggregate, aggregateDate, invoiceDate } = validatedData;
+    const { customerId, items, paid, status, notes, placeOfSupply, reverseCharge, isAggregate, aggregateDate, invoiceDate, paymentTerms, dueDate, payments } = validatedData;
 
     // Check if layer engine tables are migrated (outside transaction to avoid aborting it)
     let layerEngineEnabled = true;
@@ -152,6 +304,8 @@ export async function POST(req: NextRequest) {
       }
       const invoiceNo = `${prefix}${String(nextNum).padStart(3, "0")}`;
 
+      const computedDueDate = computeDueDate(invoiceDate, paymentTerms, dueDate);
+
       // 3. Create sale
       const sale = await tx.sale.create({
         data: {
@@ -160,12 +314,15 @@ export async function POST(req: NextRequest) {
           total,
           paid: paid || 0,
           status: status || (paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid"),
+          workflowState: "posted",
           notes,
           placeOfSupply: placeOfSupply || null,
           reverseCharge: reverseCharge === true,
           isAggregate: isAggregate === true,
           aggregateDate: aggregateDate || null,
           invoiceDate: invoiceDate ? new Date(invoiceDate) : null,
+          paymentTerms: paymentTerms || null,
+          dueDate: computedDueDate,
           businessId: session.user.businessId,
           items: {
             create: items.map((item: any) => {
@@ -178,10 +335,23 @@ export async function POST(req: NextRequest) {
                 discount: parseFloat(item.discount) || 0,
                 hsnCode: item.hsnCode,
                 gstRate: parseFloat(item.gstRate) || 0,
+                originalPrice: item.originalPrice ?? null,
+                priceOverrideReason: item.priceOverrideReason || null,
                 ...buildProductSnapshot(product),
               };
             })
-          }
+          },
+          ...(payments && payments.length > 0 ? {
+            payments: {
+              create: payments.map((p: any) => ({
+                paymentMethod: p.paymentMethod,
+                amount: p.amount,
+                reference: p.reference || null,
+                notes: p.notes || null,
+                createdBy: session.user.id,
+              })),
+            }
+          } : {})
         }
       });
 
