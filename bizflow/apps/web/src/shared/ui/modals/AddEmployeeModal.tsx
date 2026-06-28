@@ -95,6 +95,8 @@ export default function AddEmployeeModal({ open, onClose }: { open: boolean; onC
     setForm({ ...form, permissions: newPerms });
   };
 
+  const formRef = React.useRef<HTMLFormElement>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -115,6 +117,9 @@ export default function AddEmployeeModal({ open, onClose }: { open: boolean; onC
       onClose();
     } catch (err: any) {
       setError(err.message || "Failed to add employee. Please try again.");
+      if (formRef.current) {
+        formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     } finally {
       setLoading(false);
     }
@@ -126,7 +131,7 @@ export default function AddEmployeeModal({ open, onClose }: { open: boolean; onC
       title="Add New Employee" subtitle="Invite a new staff member with role-based access"
       icon={<UserCheck size={18} />} iconColor="bg-emerald-500/20 text-emerald-400" size="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
 
         {/* Error Banner */}
         {error && (
