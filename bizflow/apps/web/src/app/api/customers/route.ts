@@ -79,23 +79,24 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    await (prisma as any).userActivity.create({
-      data: {
-        businessId: session.user.businessId,
-        userId: session.user.id ?? "unknown",
-        eventType: "customer_added",
-        metadata: { customerId: customer.id },
-      }
-    });
-
     const { logAudit } = await import('@/shared/lib/audit');
-    await logAudit({
-      session,
-      action: 'CREATE',
-      entityType: 'Customer',
-      entityId: customer.id,
-      entityLabel: customer.name,
-    });
+    await Promise.all([
+      (prisma as any).userActivity.create({
+        data: {
+          businessId: session.user.businessId,
+          userId: session.user.id ?? "unknown",
+          eventType: "customer_added",
+          metadata: { customerId: customer.id },
+        }
+      }),
+      logAudit({
+        session,
+        action: 'CREATE',
+        entityType: 'Customer',
+        entityId: customer.id,
+        entityLabel: customer.name,
+      })
+    ]);
 
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {

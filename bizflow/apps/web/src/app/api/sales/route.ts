@@ -253,14 +253,20 @@ export async function POST(req: NextRequest) {
       }
 
       // 1. Calculate total with Invoice Engine
+      const productIds = items.map((i: any) => i.productId);
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds }, businessId: session.user.businessId }
+      });
       const productMap: Record<string, any> = {};
+      for (const p of products) {
+        productMap[p.id] = p;
+      }
+      
       const invoiceLines = [];
-
       for (const item of items) {
-        const product = await tx.product.findFirst({ where: { id: item.productId, businessId: session.user.businessId } });
+        const product = productMap[item.productId];
         if (!product) throw new Error(`Product ${item.productId} not found`);
         if (!product.active) throw new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`);
-        productMap[item.productId] = product;
         if (product.stock < item.qty) throw new Error(`Insufficient stock for ${product.name}`);
         invoiceLines.push({
           qty: item.qty,
