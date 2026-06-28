@@ -247,23 +247,21 @@ export async function POST(req: NextRequest) {
     const inviteLink = `${protocol}://${host}/accept-invitation?token=${token}`;
 
     console.log("POST /api/employees: Employee created, starting email send");
-    await sendEmployeeInvitationEmail(
+    sendEmployeeInvitationEmail(
       validatedData.email,
       validatedData.name,
       validatedData.role,
       inviteLink,
       businessName
-    );
-    console.log("POST /api/employees: Email sent successfully");
+    ).catch(err => console.error("POST /api/employees: Email failed", err));
 
-    await logAudit({
+    logAudit({
       session,
       action: 'CREATE',
       entityType: 'Employee',
       entityId: employee.id,
       entityLabel: employee.name,
-    });
-    console.log("POST /api/employees: Audit logged, returning 201");
+    }).catch(err => console.error("POST /api/employees: Audit failed", err));
 
     return NextResponse.json(employee, { status: 201 });
   } catch (error) {

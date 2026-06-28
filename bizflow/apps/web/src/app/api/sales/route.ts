@@ -229,7 +229,7 @@ export async function POST(req: NextRequest) {
     const result = await prisma.$transaction(async (tx: any) => {
       const customer = await tx.customer.findFirst({
         where: { id: customerId, businessId: session.user.businessId },
-        select: { id: true }
+        select: { id: true, name: true }
       });
       if (!customer) {
         throw Object.assign(new Error('Customer not found or access denied'), { code: 'BUSINESS_RULE' });
@@ -437,26 +437,25 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return { sale, gstBreakdown, totalSaleCOGS };
+      return { sale, gstBreakdown, totalSaleCOGS, customerName: customer.name };
     }, { maxWait: 10000, timeout: 20000 });
 
     // A-4 FIX: Use dynamic import() instead of require() for proper tree-shaking
     const { logAudit } = await import('@/shared/lib/audit');
-    await logAudit({
+    logAudit({
       session,
       action: 'CREATE',
       entityType: 'Sale',
       entityId: result.sale.id,
       entityLabel: result.sale.invoiceNo,
-    });
+    }).catch(console.error);
 
     // 8. Auto-post journal entry (fire-and-forget, never blocks)
-    const customer = await prisma.customer.findUnique({ where: { id: validatedData.customerId }, select: { name: true } });
     postSaleJournal({
       saleId: result.sale.id,
       invoiceNo: result.sale.invoiceNo,
       customerId: validatedData.customerId,
-      customerName: customer?.name ?? 'Customer',
+      customerName: result.customerName ?? 'Customer',
       total: result.sale.total,
       taxableValue: result.gstBreakdown.totalTaxableValue,
       cgst: result.gstBreakdown.totalCgst,
