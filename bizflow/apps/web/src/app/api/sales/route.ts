@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
         });
 
         return sale;
-      });
+      }, { maxWait: 10000, timeout: 20000 });
 
       // Audit log
       const { logAudit } = await import('@/shared/lib/audit');
@@ -432,7 +432,7 @@ export async function POST(req: NextRequest) {
       }
 
       return { sale, gstBreakdown, totalSaleCOGS };
-    });
+    }, { maxWait: 10000, timeout: 20000 });
 
     // A-4 FIX: Use dynamic import() instead of require() for proper tree-shaking
     const { logAudit } = await import('@/shared/lib/audit');

@@ -319,13 +319,27 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
     if (selectedList.length === 0) return;
 
     if (pickingIndex !== null) {
-      // Replacing a single row product
-      const sel = selectedList[0];
-      if (sel) {
+      // Replace the specific row with the first selection
+      const firstSel = selectedList[0];
+      if (firstSel) {
         const newItems = [...items];
-        newItems[pickingIndex] = createLineItemFromProduct(sel.product, sel.qty, sel.resolvedPrice);
-        setItems(newItems);
+        newItems[pickingIndex] = createLineItemFromProduct(firstSel.product, firstSel.qty, firstSel.resolvedPrice);
         setLastAddedIndex(pickingIndex);
+        
+        // If there are more selections, append them (merging if necessary)
+        const remainingSelections = selectedList.slice(1);
+        remainingSelections.forEach((sel: any) => {
+          const existingIdx = newItems.findIndex(i => i.productId === sel.product.id);
+          if (existingIdx !== -1) {
+            const currentQty = Number(newItems[existingIdx].qty) || 0;
+            newItems[existingIdx] = { ...newItems[existingIdx], qty: currentQty + sel.qty };
+            toast.success(`Merged quantity for ${sel.product.name}`);
+          } else {
+            newItems.push(createLineItemFromProduct(sel.product, sel.qty, sel.resolvedPrice));
+            setLastAddedIndex(newItems.length - 1);
+          }
+        });
+        setItems(newItems);
       }
     } else {
       // Append multi-selections with duplicate merge checks
