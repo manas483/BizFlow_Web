@@ -33,7 +33,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const parsed = customerSchema.partial().safeParse(await req.json());
     if (!parsed.success) return validationError(parsed.error.issues);
 
-    const customer = await prisma.customer.update({ where: { id }, data: parsed.data });
+    const dataToUpdate: any = { ...parsed.data };
+    if (dataToUpdate.phone === null) dataToUpdate.phone = '';
+
+    const customer = await prisma.customer.update({ where: { id }, data: dataToUpdate });
     return ok(customer, { message: 'Customer updated' });
   } catch (e) {
     if (e instanceof AuthError) return e.response;

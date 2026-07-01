@@ -44,6 +44,10 @@ const ALL_PERMISSIONS: Permission[] = [
   "manage_backups",
   "manage_security",
   "manage_roles",
+  "override_selling_price",
+  "override_gst_rate",
+  "view_profit_margin",
+  "manage_drafts",
 ];
 
 const PERMISSION_LABELS: Record<Permission, string> = {
@@ -63,6 +67,10 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   manage_backups: "Manage Backups",
   manage_security: "Manage Security",
   manage_roles: "Manage Roles",
+  override_selling_price: "Override Selling Price",
+  override_gst_rate: "Override GST Rate",
+  view_profit_margin: "View Profit Margin",
+  manage_drafts: "Manage Drafts",
 };
 
 export default function AddEmployeeModal({ open, onClose }: { open: boolean; onClose: () => void }) {

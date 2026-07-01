@@ -65,7 +65,7 @@ import { useSales } from "@/shared/hooks/useSales";
 import { useQuotations } from "@/shared/hooks/useQuotations";
 import { useCreditNotes, useDebitNotes, useBillsOfSupply } from "@/shared/hooks/useInvoiceDocs";
 import { formatCurrency, formatDate } from "@/shared/lib/utils";
-import { Search, FileText, Download, TrendingUp, Clock, CheckCircle, AlertCircle, Plus, FileDown, FileUp, FileMinus, Trash2, RefreshCw, MessageSquare, Pencil, CreditCard, XCircle } from "lucide-react";
+import { Search, FileText, Download, TrendingUp, Clock, CheckCircle, AlertCircle, Plus, FileDown, FileUp, FileMinus, Trash2, RefreshCw, MessageSquare, Pencil, CreditCard, XCircle, FileArchive, Loader2 } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import NewSaleModal from "@/shared/ui/modals/NewSaleModal";
 import NewCreditNoteModal from "@/shared/ui/modals/NewCreditNoteModal";
@@ -107,6 +107,7 @@ export default function SalesPage() {
   const [salePayInput, setSalePayInput] = useState("");
   const [bosPayTarget, setBosPayTarget] = useState<{ id: string; total: number; paid: number; billNo: string } | null>(null);
   const [bosPayInput, setBosPayInput] = useState("");
+  const [exporting, setExporting] = useState(false);
   const router = useRouter();
   const queryClient = useQueryClient();
   const deleteSale = useDeleteSale();
@@ -227,13 +228,67 @@ export default function SalesPage() {
     }
   };
 
+  const handleExportAll = async (copy: string) => {
+    setExporting(true);
+    try {
+      const filterParam = filter !== 'all' ? `&filter=${filter}` : '';
+      await downloadPdf(
+        `/api/sales/export-all?copy=${copy}${filterParam}`,
+        `All-Invoices_${copy}_${new Date().toISOString().slice(0, 10)}.pdf`
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <DashboardLayout title="Sales & Billing">
       {/* Header */}
       <div className="flex flex-col gap-4 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-primary">Sales & Billing</h2>
-          <p className="text-primary/40 text-sm mt-0.5">Manage GST invoices, notes, and bills of supply</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-primary">Sales & Billing</h2>
+            <p className="text-primary/40 text-sm mt-0.5">Manage GST invoices, notes, and bills of supply</p>
+          </div>
+          {/* Export All Button */}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                disabled={exporting}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+                title="Export all invoices as merged PDF"
+              >
+                {exporting ? <Loader2 size={15} className="animate-spin" /> : <FileArchive size={15} />}
+                {exporting ? 'Exporting…' : 'Export All'}
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                align="end"
+                className="z-[9999] min-w-[180px] bg-surface-2 border border-primary/10 rounded-xl p-1 shadow-xl text-sm"
+                style={{ backgroundColor: 'var(--bg-surface-2)', borderColor: 'var(--border)' }}
+              >
+                <DropdownMenu.Item
+                  className="px-3 py-2 text-primary/80 hover:text-primary hover:bg-primary/5 rounded-lg cursor-pointer outline-none transition-colors"
+                  onClick={() => handleExportAll('original')}
+                >
+                  Original (Buyer)
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="px-3 py-2 text-primary/80 hover:text-primary hover:bg-primary/5 rounded-lg cursor-pointer outline-none transition-colors"
+                  onClick={() => handleExportAll('duplicate')}
+                >
+                  Duplicate (Transporter)
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="px-3 py-2 text-primary/80 hover:text-primary hover:bg-primary/5 rounded-lg cursor-pointer outline-none transition-colors"
+                  onClick={() => handleExportAll('triplicate')}
+                >
+                  Triplicate (Supplier)
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
         {/* Action buttons — scrollable row on mobile */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">

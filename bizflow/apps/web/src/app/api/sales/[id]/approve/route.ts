@@ -69,12 +69,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             tx,
             productId: item.productId,
             businessId: session.user.businessId,
-            qty: -item.qty,
-            type: 'out',
+            qty: item.qty,
+            type: 'sale',
             transactionId: sale.id,
             transactionType: 'sale'
           });
-          const cogs = consumption?.totalCost || 0;
+          const cogs = consumption?.totalCOGS || 0;
           totalSaleCOGS += cogs;
           await tx.saleItem.update({
             where: { id: item.id },
@@ -180,7 +180,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json(approvedSale);
   } catch (error) {
-    if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.errors }, { status: 400 });
+    if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
     if (error instanceof AuthError) return error.response;
     console.error(error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

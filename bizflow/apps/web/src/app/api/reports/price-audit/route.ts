@@ -19,11 +19,11 @@ export async function GET(req: NextRequest) {
           select: { 
             invoiceNo: true, 
             workflowState: true, 
-            approvedByUser: { select: { name: true } }
+            approvedBy: true
           } 
         }
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { sale: { createdAt: 'desc' } },
       take: 200
     });
 

@@ -276,8 +276,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           let totalSaleCOGS = 0;
           for (const item of sale.items) {
             if (layerEngineEnabled) {
-              const consumption = await adjustStockWithLayers(tx, item.productId, session.user.businessId, -item.qty, `SALE:${sale.id}`);
-              const cogs = consumption.totalCost;
+              const consumption = await adjustStockWithLayers({
+                tx,
+                productId: item.productId,
+                businessId: session.user.businessId,
+                qty: item.qty,
+                type: 'sale',
+                transactionId: sale.id,
+                transactionType: `SALE:${sale.id}`
+              });
+              const cogs = consumption?.totalCOGS || 0;
               totalSaleCOGS += cogs;
             await tx.saleItem.update({
               where: { id: item.id },
@@ -317,10 +325,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
               });
               await postPaymentJournal({
                 paymentId: `${sale.id}-pay-${Date.now()}-${payment.paymentMethod}`,
-                customerId: validatedData.customerId,
+                customerId: sale.customerId,
                 customerName: sale.customer?.name ?? 'Customer',
                 amount: payment.amount,
-                paymentMethod: payment.paymentMethod,
+                paymentMethod: payment.paymentMethod === 'cash' ? 'cash' : 'bank',
                 businessId: session.user.businessId,
                 tx,
               });

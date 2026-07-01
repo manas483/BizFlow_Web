@@ -221,9 +221,9 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
           } else {
             const emptyIndex = newItems.findIndex(i => !i.productId);
             if (emptyIndex >= 0) {
-              newItems[emptyIndex] = createLineItemFromProduct(product);
+              newItems[emptyIndex] = createLineItemFromProduct(product, 1, product.sellingPrice);
             } else {
-              newItems.push(createLineItemFromProduct(product));
+              newItems.push(createLineItemFromProduct(product, 1, product.sellingPrice));
             }
           }
           return newItems;

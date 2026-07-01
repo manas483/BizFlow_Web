@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return validationError(parsed.error.issues);
 
     const customer = await prisma.customer.create({
-      data: { ...parsed.data, status: 'active', businessId: session.user.businessId },
+      data: { ...parsed.data, phone: parsed.data.phone || '', status: 'active', businessId: session.user.businessId },
     });
 
     await prisma.userActivity.create({

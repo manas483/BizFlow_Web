@@ -47,10 +47,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const validatedData = customerSchema.partial().parse(body);
 
+    const dataToUpdate: any = { ...validatedData };
+    if (dataToUpdate.phone === null) dataToUpdate.phone = '';
+
     const customer = await prisma.customer.update({
       where: { id },
       data: {
-        ...validatedData,
+        ...dataToUpdate,
         ...(body.status !== undefined && { status: String(body.status) }),
       },
     });

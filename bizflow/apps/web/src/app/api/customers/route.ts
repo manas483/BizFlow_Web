@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
     const customer = await prisma.customer.create({
       data: {
         ...validatedData,
+        phone: validatedData.phone || '',
         status: 'active',
         businessId: session.user.businessId,
       }
