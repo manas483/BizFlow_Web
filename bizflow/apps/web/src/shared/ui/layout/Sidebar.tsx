@@ -117,17 +117,20 @@ export default function Sidebar() {
         <nav className="flex-1 py-4 px-2 space-y-0.5 overflow-y-auto scrollbar-hide">
           {mounted && (() => {
             const filtered = navItems.filter(item => {
-              if (!session?.user?.role) return false;
-              const role = session.user.role as string;
+              // Extract role and permissions, falling back to STAFF if session is partially loaded
+              const role = (session?.user as any)?.role || "STAFF";
+              const userPermissions = (session?.user as any)?.permissions as string[] | undefined;
+
               // adminOnly=true: only show to SUPER_ADMIN or ADMIN
               if (item.adminOnly === true && role !== 'SUPER_ADMIN' && role !== 'ADMIN') return false;
               // adminOnly=false: hide from SUPER_ADMIN (employee-only pages)
               if (item.adminOnly === false && role === 'SUPER_ADMIN') return false;
-              const userPermissions = (session.user as any).permissions as string[] | undefined;
+              
               // If custom permissions are loaded, use them directly
               if (userPermissions && userPermissions.length > 0) {
                 return userPermissions.includes(item.permission);
               }
+              
               // Fallback: use static role defaults
               return hasPermission(role as any, item.permission);
             });

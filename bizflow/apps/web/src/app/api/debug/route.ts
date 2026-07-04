@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/shared/lib/db";
 
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') {
+    return new NextResponse('Not Found', { status: 404 });
+  }
+
   try {
     // Fetch ALL products in the whole DB
     const allProducts = await prisma.product.findMany({ select: { id: true, businessId: true, name: true, createdAt: true, category: true }});

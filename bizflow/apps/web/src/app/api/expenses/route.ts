@@ -5,21 +5,30 @@ import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { expenseSchema } from '@/shared/lib/validations';
 import { allocateExpenseToLayers } from '@/shared/lib/expense-calculations';
 import { z } from 'zod';
+import { withPerf, getTimer } from '@/shared/lib/telemetry';
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   try {
+    const timer = getTimer();
+
+    timer?.phase('auth');
     const session = await requireAuth();
+
+    timer?.phase('parse_params');
     const { searchParams } = new URL(req.url);
     const category = searchParams.get('category');
 
+    timer?.phase('db_query');
     const expenses = await prisma.expense.findMany({
       where: {
         businessId: session.user.businessId,
+        status: 'ACTIVE',
         ...(category && category !== 'All' ? { category } : {}),
       },
       orderBy: { date: 'desc' }
     });
 
+    timer?.phase('serialization');
     return NextResponse.json(expenses);
   } catch (error) {
     if (error instanceof AuthError) return error.response;
@@ -28,12 +37,18 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
+    const timer = getTimer();
+
+    timer?.phase('auth');
     const session = await requireAuth();
+
+    timer?.phase('validation');
     const body = await req.json();
     const validatedData = expenseSchema.parse(body);
 
+    timer?.phase('db_write');
     const expense = await prisma.expense.create({
       data: {
         ...validatedData,
@@ -42,8 +57,10 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    timer?.phase('layer_allocation');
     await allocateExpenseToLayers(expense.id, session.user.businessId);
 
+    timer?.phase('journal_entries');
     // Auto-post journal entry for expense (Dr Expense / Cr Cash)
     const { postExpenseJournal, postCashBookEntry } = await import('@/shared/lib/auto-journal');
     await postExpenseJournal({
@@ -64,6 +81,7 @@ export async function POST(req: NextRequest) {
       date: new Date(validatedData.date),
     });
 
+    timer?.phase('ap_entry');
     // Auto-create AP entry for purchase-related categories
     const AP_CATEGORIES = ['Purchase', 'Raw Material', 'Supplier Payment', 'Inventory'];
     if (AP_CATEGORIES.includes(expense.category)) {
@@ -81,6 +99,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    timer?.phase('audit');
     await (prisma as any).userActivity.create({
       data: {
         businessId: session.user.businessId,
@@ -99,6 +118,12 @@ export async function POST(req: NextRequest) {
       entityLabel: `${expense.category}: ₹${expense.amount}`,
     });
 
+    timer?.phase('cache_invalidation');
+    const { invalidateCache } = await import('@/shared/lib/cache');
+    await invalidateCache(`reports:${session.user.businessId}:*`);
+    await invalidateCache(`dashboard:${session.user.businessId}`);
+
+    timer?.phase('serialization');
     return NextResponse.json(expense, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
@@ -108,4 +133,5 @@ export async function POST(req: NextRequest) {
   }
 }
 
-
+export const GET = withPerf(handleGET);
+export const POST = withPerf(handlePOST);

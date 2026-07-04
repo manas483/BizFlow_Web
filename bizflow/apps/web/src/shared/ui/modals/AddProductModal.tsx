@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import Modal, { FormField, ModalInput, ModalFooter } from "@/shared/ui/ui/Modal";
 import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
 import { Package, Calendar } from "lucide-react";
-import { useCreateProduct } from "@/shared/hooks/useProducts";
+import { useCreateProduct, useProductCategories } from "@/shared/hooks/useProducts";
 import { useBusiness } from "@/shared/hooks/useBusiness";
 import { getBusinessProfile } from "@/shared/lib/business-intelligence";
 
@@ -73,9 +73,11 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
       setForm(f => ({ ...f, unit: primaryUnit }));
     }
   }, [primaryUnit]);
-  const categoriesList = profile 
-    ? [...profile.productCategories, "Other"].map(c => ({ value: c, label: c }))
-    : CATEGORIES;
+  const { data: dbCategories } = useProductCategories();
+  const profileCats = profile ? profile.productCategories : CATEGORIES.map(c => c.value);
+  const mergedCategories = Array.from(new Set([...(dbCategories || []), ...profileCats, "Other"]));
+  
+  const categoriesList = mergedCategories.map(c => ({ value: c, label: c }));
 
   // Dynamic placeholders
   const sampleProduct = profile?.seedProducts?.[0] ?? {

@@ -58,14 +58,42 @@ if (url && token) {
 
   /**
    * General API rate limit (per IP).
-   * 120 requests per minute for authenticated endpoints.
+   * Now uses an in-memory Map instead of Upstash to eliminate HTTPS overhead
+   * on every single authenticated request. (120 requests per minute)
    */
-  apiLimiter = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(120, "1 m"),
-    analytics: true,
-    prefix: "@bizflow/ratelimit/api",
-  });
+  class InMemoryRateLimiter {
+    private hits = new Map<string, { count: number, resetTime: number }>();
+    private maxLimit = 120;
+    private windowMs = 60 * 1000;
+
+    async limit(id: string) {
+      const now = Date.now();
+      let record = this.hits.get(id);
+
+      if (!record || now > record.resetTime) {
+        record = { count: 0, resetTime: now + this.windowMs };
+      }
+
+      record.count += 1;
+      this.hits.set(id, record);
+
+      // Clean up old entries occasionally (rough garbage collection)
+      if (this.hits.size > 1000) {
+        for (const [key, val] of this.hits) {
+          if (now > val.resetTime) this.hits.delete(key);
+        }
+      }
+
+      return {
+        success: record.count <= this.maxLimit,
+        pending: Promise.resolve(),
+        limit: this.maxLimit,
+        remaining: Math.max(0, this.maxLimit - record.count),
+        reset: record.resetTime,
+      };
+    }
+  }
+  apiLimiter = new InMemoryRateLimiter();
 }
 
 export const authRateLimit = authLimiter;

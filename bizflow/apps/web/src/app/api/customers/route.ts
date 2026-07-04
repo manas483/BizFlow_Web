@@ -4,10 +4,16 @@ import { prisma } from '@/shared/lib/db';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { customerSchema } from '@/shared/lib/validations';
 import { z } from 'zod';
+import { withPerf, getTimer } from '@/shared/lib/telemetry';
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   try {
+    const timer = getTimer();
+
+    timer?.phase('auth');
     const session = await requireAuth();
+
+    timer?.phase('parse_params');
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
     const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1', 10));
@@ -16,6 +22,7 @@ export async function GET(req: NextRequest) {
 
     const where = {
       businessId: session.user.businessId,
+      deletedAt: null,
       ...(search ? {
         OR: [
           { name: { contains: search, mode: 'insensitive' as const } },
@@ -24,6 +31,7 @@ export async function GET(req: NextRequest) {
       } : {}),
     };
 
+    timer?.phase('db_query');
     const [customers, total] = await Promise.all([
       prisma.customer.findMany({
         where,
@@ -37,6 +45,7 @@ export async function GET(req: NextRequest) {
       prisma.customer.count({ where }),
     ]);
 
+    timer?.phase('db_aggregation');
     // Compute exact purchase amounts from actual sales data
     const customerIds = customers.map((c: any) => c.id);
     const salesAggregates = customerIds.length > 0
@@ -47,6 +56,7 @@ export async function GET(req: NextRequest) {
         })
       : [];
 
+    timer?.phase('enrichment');
     const salesMap = new Map(salesAggregates.map((a: any) => [a.customerId, a._sum.total || 0]));
 
     const enrichedCustomers = customers.map((c: any) => ({
@@ -55,6 +65,7 @@ export async function GET(req: NextRequest) {
       computedTotalPurchases: salesMap.get(c.id) || 0,
     }));
 
+    timer?.phase('serialization');
     return NextResponse.json({ data: enrichedCustomers, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     if (error instanceof AuthError) return error.response;
@@ -64,13 +75,18 @@ export async function GET(req: NextRequest) {
 }
 
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
-    const session = await requireAuth();
-    const body = await req.json();
+    const timer = getTimer();
 
+    timer?.phase('auth');
+    const session = await requireAuth();
+
+    timer?.phase('validation');
+    const body = await req.json();
     const validatedData = customerSchema.parse(body);
 
+    timer?.phase('db_write');
     const customer = await prisma.customer.create({
       data: {
         ...validatedData,
@@ -80,6 +96,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    timer?.phase('audit');
     const { logAudit } = await import('@/shared/lib/audit');
     await Promise.all([
       (prisma as any).userActivity.create({
@@ -99,6 +116,7 @@ export async function POST(req: NextRequest) {
       })
     ]);
 
+    timer?.phase('serialization');
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
@@ -108,4 +126,5 @@ export async function POST(req: NextRequest) {
   }
 }
 
-
+export const GET = withPerf(handleGET);
+export const POST = withPerf(handlePOST);

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { loginAction } from "./actions";
 import {
   Store, Eye, EyeOff, ArrowRight,
   BarChart2, Package, Users, Receipt,
@@ -94,19 +94,13 @@ function LoginContent() {
     setLoading(true);
 
     try {
-      const signInData: any = {
+      const res = await loginAction({
         email: form.email.trim().toLowerCase(),
         password: form.password,
-        redirect: false,
-      };
+        otpToken: requires2FA ? otpToken : undefined,
+      });
 
-      if (requires2FA) {
-        signInData.otpToken = otpToken;
-      }
-
-      const res: any = await signIn("credentials", signInData);
-
-      if (res?.error) {
+      if (!res.success && res.error) {
         if (res.error.includes("REQUIRES_2FA")) {
           setRequires2FA(true);
           setError(null);

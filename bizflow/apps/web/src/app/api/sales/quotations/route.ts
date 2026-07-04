@@ -49,19 +49,27 @@ export async function POST(req: NextRequest) {
     const { customerId, items, notes, placeOfSupply, reverseCharge, validUntil } = validatedData;
 
     const result = await prisma.$transaction(async (tx: any) => {
-      const customer = await tx.customer.findFirst({
-        where: { id: customerId, businessId: session.user.businessId },
-        select: { id: true }
-      });
+      const productIds = items.map((i: any) => i.productId);
+      const { loadProductsForDocument } = require('@/shared/lib/batch-queries');
+
+      const [customer, business, { productMap, missingIds }] = await Promise.all([
+        tx.customer.findFirst({
+          where: { id: customerId, businessId: session.user.businessId },
+          select: { id: true }
+        }),
+        tx.business.findUnique({
+          where: { id: session.user.businessId },
+          select: { gstInclusive: true, gstNumber: true, stateCode: true }
+        }),
+        loadProductsForDocument(tx, session.user.businessId, productIds)
+      ]);
+
       if (!customer) {
         throw new Error('Customer not found or access denied');
       }
+      if (missingIds.length > 0) throw new Error(`Products not found: ${missingIds.join(', ')}`);
 
       // 0. Get business settings
-      const business = await tx.business.findUnique({
-        where: { id: session.user.businessId },
-        select: { gstInclusive: true, gstNumber: true, stateCode: true }
-      });
       const gstInclusive = business?.gstInclusive ?? false;
       const businessStateCode = business?.stateCode || extractStateCodeFromGST(business?.gstNumber) || null;
 
@@ -74,13 +82,10 @@ export async function POST(req: NextRequest) {
       }
 
       // 1. Calculate total with Invoice Engine
-      const productMap: Record<string, any> = {};
       const invoiceLines = [];
       for (const item of items) {
-        const product = await tx.product.findFirst({ where: { id: item.productId, businessId: session.user.businessId } });
-        if (!product) throw new Error(`Product ${item.productId} not found`);
+        const product = productMap.get(item.productId);
         if (!product.active) throw new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`);
-        productMap[item.productId] = product;
         invoiceLines.push({
           qty: item.qty,
           price: product.sellingPrice,
@@ -126,12 +131,12 @@ export async function POST(req: NextRequest) {
           businessId: session.user.businessId,
           items: {
             create: items.map((item: any) => {
-              const product = productMap[item.productId];
+              const product = productMap.get(item.productId);
               return {
                 productId: item.productId,
                 qty: item.qty,
                 price: item.price,
-                purchasePrice: productMap[item.productId]?.purchasePrice || 0,
+                purchasePrice: productMap.get(item.productId)?.purchasePrice || 0,
                 discount: parseFloat(item.discount) || 0,
                 hsnCode: item.hsnCode,
                 gstRate: parseFloat(item.gstRate) || 0,

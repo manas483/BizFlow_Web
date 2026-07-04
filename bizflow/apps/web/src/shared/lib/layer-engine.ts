@@ -346,6 +346,7 @@ async function consumeFIFOLIFO(
   const layers = await tx.inventoryLayer.findMany({
     where,
     orderBy,
+    select: { id: true, remainingQty: true, unitCost: true, batchNo: true, lotNo: true },
   });
 
   // Check total available
@@ -380,6 +381,7 @@ async function consumeFIFOLIFO(
       data: {
         remainingQty: newRemaining,
         status: newRemaining <= 0 ? 'EXHAUSTED' : 'ACTIVE',
+        version: { increment: 1 },
       },
     });
 
@@ -432,6 +434,7 @@ async function consumeWAC(tx: any, params: ConsumeLayersParams): Promise<LayerCo
   const layers = await tx.inventoryLayer.findMany({
     where,
     orderBy: [{ receiptDate: 'asc' }, { createdAt: 'asc' }],
+    select: { id: true, remainingQty: true, unitCost: true, batchNo: true, lotNo: true },
   });
 
   const totalAvailable = layers.reduce((sum: number, l: any) => sum + l.remainingQty, 0);
@@ -466,6 +469,7 @@ async function consumeWAC(tx: any, params: ConsumeLayersParams): Promise<LayerCo
       data: {
         remainingQty: newRemaining,
         status: newRemaining <= 0 ? 'EXHAUSTED' : 'ACTIVE',
+        version: { increment: 1 },
       },
     });
 
@@ -538,6 +542,7 @@ async function consumeSpecific(
     data: {
       remainingQty: newRemaining,
       status: newRemaining <= 0 ? 'EXHAUSTED' : 'ACTIVE',
+      version: { increment: 1 },
     },
   });
 
@@ -598,6 +603,7 @@ async function consumeStandard(tx: any, params: ConsumeLayersParams): Promise<La
   const layers = await tx.inventoryLayer.findMany({
     where,
     orderBy: [{ receiptDate: 'asc' }, { createdAt: 'asc' }],
+    select: { id: true, remainingQty: true, unitCost: true, batchNo: true, lotNo: true },
   });
 
   const totalAvailable = layers.reduce((sum: number, l: any) => sum + l.remainingQty, 0);
@@ -627,6 +633,7 @@ async function consumeStandard(tx: any, params: ConsumeLayersParams): Promise<La
       data: {
         remainingQty: newRemaining,
         status: newRemaining <= 0 ? 'EXHAUSTED' : 'ACTIVE',
+        version: { increment: 1 },
       },
     });
 
@@ -700,6 +707,7 @@ export async function restoreLayer(params: RestoreLayerParams): Promise<void> {
       data: {
         remainingQty: { increment: restoreQty },
         status: 'ACTIVE',  // Re-activate if it was exhausted
+        version: { increment: 1 },
       },
     });
 
@@ -763,6 +771,7 @@ export async function reduceLayer(params: ReduceLayerParams): Promise<void> {
     data: {
       remainingQty: newRemaining,
       status: newRemaining <= 0 ? 'RETURNED' : 'ACTIVE',
+      version: { increment: 1 },
     },
   });
 

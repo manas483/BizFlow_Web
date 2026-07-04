@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendEmployeeInvitationEmail } from '@/shared/lib/email';
 
 export async function GET(req: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return new NextResponse('Not Found', { status: 404 });
+  }
+
   try {
     const result = await sendEmployeeInvitationEmail(
       'test@example.com',

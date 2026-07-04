@@ -66,10 +66,43 @@ export async function POST(req: NextRequest) {
 
       const existingProducts = await prisma.product.findMany({
         where: { businessId },
-        select: { id: true, sku: true, name: true },
+        select: { id: true, sku: true, name: true, stock: true, standardCost: true, sellingPrice: true, supplierId: true },
       });
       const existingSkuMap = new Map(existingProducts.map((p) => [p.sku?.toLowerCase() ?? "", p.id]));
       const existingNameMap = new Map(existingProducts.map((p) => [p.name.toLowerCase(), p.id]));
+
+      const uniqueSupplierNames = new Set<string>();
+      for (const inv of invoicesToProcess) {
+        if (inv.invoiceInfo?.supplier && inv.invoiceInfo.supplier !== "Unknown Supplier") {
+          uniqueSupplierNames.add(inv.invoiceInfo.supplier.toLowerCase());
+        }
+      }
+
+      const existingSuppliers = await prisma.supplier.findMany({
+        where: { businessId }
+      });
+      const supplierMap = new Map<string, any>();
+      for (const s of existingSuppliers) {
+        supplierMap.set(s.name.toLowerCase(), s);
+      }
+
+      const invoiceNumbersInPayload = invoicesToProcess
+        .map((inv: any) => inv.invoiceInfo?.invoiceNumber)
+        .filter(Boolean);
+        
+      const existingMovements = await prisma.stockMovement.findMany({
+        where: {
+          businessId,
+          referenceId: { in: invoiceNumbersInPayload as string[] }
+        },
+        select: { productId: true, referenceId: true }
+      });
+      const movementMap = new Set<string>();
+      for (const m of existingMovements) {
+        if (m.referenceId) {
+          movementMap.add(`${m.productId}-${m.referenceId}`);
+        }
+      }
 
       for (const invoice of invoicesToProcess) {
         const { invoiceInfo, products } = invoice;
@@ -99,9 +132,7 @@ export async function POST(req: NextRequest) {
         let supplierId: string | null = null;
         let supplierName = invoiceInfo?.supplier;
         if (supplierName && supplierName !== "Unknown Supplier") {
-          let supplier = await prisma.supplier.findFirst({
-             where: { businessId, name: { equals: supplierName, mode: 'insensitive' } }
-          });
+          let supplier = supplierMap.get(supplierName.toLowerCase());
           if (!supplier) {
              supplier = await prisma.supplier.create({
                 data: {
@@ -109,6 +140,7 @@ export async function POST(req: NextRequest) {
                    name: supplierName,
                 }
              });
+             supplierMap.set(supplierName.toLowerCase(), supplier);
           }
           supplierId = supplier.id;
         }
@@ -186,20 +218,14 @@ export async function POST(req: NextRequest) {
             let finalProductId = existingId;
 
             if (existingId) {
-              const existingProduct = await prisma.product.findUnique({ where: { id: existingId } });
+              const existingProduct = existingProducts.find(p => p.id === existingId);
               
               const incomingQuantity = productData.stock;
               let newTotalStock = existingProduct?.stock || 0;
               let shouldAddStock = true;
               
               if (productData.purchaseInvoiceNo) {
-                const duplicateMovement = await prisma.stockMovement.findFirst({
-                  where: {
-                    productId: existingId,
-                    referenceId: productData.purchaseInvoiceNo,
-                    businessId,
-                  }
-                });
+                const duplicateMovement = movementMap.has(`${existingId}-${productData.purchaseInvoiceNo}`);
                 if (duplicateMovement) shouldAddStock = false;
               }
               
@@ -581,7 +607,7 @@ export async function POST(req: NextRequest) {
       return mapped;
     });
 
-    const existingProducts = await prisma.product.findMany({ where: { businessId }, select: { id: true, sku: true } });
+    const existingProducts = await prisma.product.findMany({ where: { businessId }, select: { id: true, sku: true, stock: true, standardCost: true, sellingPrice: true, supplierId: true } });
     const existingSkus = existingProducts.map((p) => p.sku).filter((s): s is string => !!s);
 
     const validationResult = validateImportData(normalizedRows, template, existingSkus, []);
@@ -654,7 +680,7 @@ export async function POST(req: NextRequest) {
         if (processedRow.action === "update" && sku) {
           const existingId = existingSkuMap.get(sku.toLowerCase());
           if (existingId) { 
-            const existingProduct = await prisma.product.findUnique({ where: { id: existingId } });
+            const existingProduct = existingProducts.find(p => p.id === existingId);
             const stockDiff = productData.stock - (existingProduct?.stock || 0);
             
             const updateData: any = {

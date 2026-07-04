@@ -164,6 +164,19 @@ jobs:
           path: apps/web/test-results/
           retention-days: 14
 
+  migration-safety:
+    name: Migration Safety Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run Migration Scanner
+        working-directory: ./apps/web
+        run: npx tsx scripts/validate-migration.ts
+
   type-check-and-build:
     name: Type Check & Build
     needs: [unit-tests, api-tests]
@@ -202,3 +215,46 @@ jobs:
           name: build-log
           path: .next/
           retention-days: 14
+
+  preflight:
+    name: Preflight Checks
+    needs: [type-check-and-build, e2e-tests, migration-safety]
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://test_user:test_password@localhost:5432/bizflow_test?schema=public
+      NEXTAUTH_SECRET: test-secret-minimum-32-characters-for-ci
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: bizflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: DB Setup
+        working-directory: ./apps/web
+        run: |
+          npx prisma db push --skip-generate
+          npx prisma generate
+      - name: Run Preflight
+        working-directory: ./apps/web
+        run: pnpm preflight

@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 import Modal, { FormField, ModalInput, ModalFooter } from "@/shared/ui/ui/Modal";
 import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
 import { Package } from "lucide-react";
-import { useUpdateProduct } from "@/shared/hooks/useProducts";
+import { useUpdateProduct, useProductCategories } from "@/shared/hooks/useProducts";
 import { useBusiness } from "@/shared/hooks/useBusiness";
 import { getBusinessProfile } from "@/shared/lib/business-intelligence";
 import { formatCurrency } from "@/shared/lib/utils";
@@ -33,10 +33,12 @@ export default function EditProductModal({ product, onClose }: { product: any; o
   const profile = business ? getBusinessProfile(business.businessType) : null;
   const primaryUnit = profile?.primaryUnit || "pcs";
 
+  const { data: dbCategories } = useProductCategories();
+  const profileCats = profile ? profile.productCategories : FALLBACK_CATEGORIES.map(c => c.value);
+  const mergedCategories = Array.from(new Set([...(dbCategories || []), ...profileCats, "Other"]));
+
   // Build dynamic categories from business profile
-  const categoriesList = profile
-    ? [...profile.productCategories, "Other"].map(c => ({ value: c, label: c }))
-    : FALLBACK_CATEGORIES;
+  const categoriesList = mergedCategories.map(c => ({ value: c, label: c }));
 
   // Build dynamic unit options, sorted by the business's primary unit first
   const unitOptions = [

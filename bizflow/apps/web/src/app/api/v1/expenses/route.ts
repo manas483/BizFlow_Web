@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
 
     const where: any = {
       businessId: session.user.businessId,
+      status: 'ACTIVE',
       ...(category && category !== 'All' ? { category } : {}),
       ...(recurring !== null ? { recurring: recurring === 'true' } : {}),
       ...(from || to ? { date: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59') } : {}) } } : {}),

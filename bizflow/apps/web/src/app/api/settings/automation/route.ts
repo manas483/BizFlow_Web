@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/shared/lib/db';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
 import { z } from 'zod';
+import { withPerf, getTimer } from '@/shared/lib/telemetry';
 
 const automationSettingsSchema = z.object({
   autoGst: z.boolean().optional(),
@@ -19,16 +20,21 @@ const automationSettingsSchema = z.object({
  * GET — return current automation settings for the business.
  * Creates defaults if none exist (upsert pattern).
  */
-export async function GET() {
+async function handleGET(_req: NextRequest) {
   try {
+    const timer = getTimer();
+
+    timer?.phase('auth');
     const session = await requireAuth();
 
+    timer?.phase('db_query');
     const settings = await prisma.automationSettings.upsert({
       where: { businessId: session.user.businessId },
       update: {},
       create: { businessId: session.user.businessId },
     });
 
+    timer?.phase('serialization');
     return NextResponse.json(settings);
   } catch (error) {
     if (error instanceof AuthError) return error.response;
@@ -40,8 +46,11 @@ export async function GET() {
 /**
  * PUT — update automation settings. Super Admin only.
  */
-export async function PUT(req: NextRequest) {
+async function handlePUT(req: NextRequest) {
   try {
+    const timer = getTimer();
+
+    timer?.phase('auth');
     const session = await requireAuth();
 
     // Only SUPER_ADMIN can modify automation settings
@@ -50,9 +59,11 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Only Super Admin can modify automation settings' }, { status: 403 });
     }
 
+    timer?.phase('validation');
     const body = await req.json();
     const data = automationSettingsSchema.parse(body);
 
+    timer?.phase('db_write');
     const settings = await prisma.automationSettings.upsert({
       where: { businessId: session.user.businessId },
       update: data,
@@ -62,6 +73,7 @@ export async function PUT(req: NextRequest) {
       },
     });
 
+    timer?.phase('audit');
     // Log the change for audit trail
     const { logAudit } = await import('@/shared/lib/audit');
     await logAudit({
@@ -73,6 +85,7 @@ export async function PUT(req: NextRequest) {
       changes: data as any,
     });
 
+    timer?.phase('serialization');
     return NextResponse.json(settings);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -84,3 +97,5 @@ export async function PUT(req: NextRequest) {
   }
 }
 
+export const GET = withPerf(handleGET);
+export const PUT = withPerf(handlePUT);

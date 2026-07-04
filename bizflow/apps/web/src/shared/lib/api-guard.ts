@@ -19,6 +19,8 @@ import { headers }            from 'next/headers';
 import { verifyAccessToken }  from './mobile-jwt';
 import { prisma }             from './db';
 import { ROLE_PERMISSIONS, Permission } from './permissions';
+import { requestContext } from './logger';
+import { getTimer } from './telemetry';
 
 export class AuthError extends Error {
   response: NextResponse;
@@ -172,9 +174,14 @@ async function sessionFromCookie(): Promise<AuthSession | null> {
  * 6. Throws AuthError (caught by withAuth wrapper) on failure.
  */
 export async function requireAuth(allowedRoles?: string[]): Promise<AuthSession> {
+  const timer = getTimer();
+
+  // ── Phase: Rate limiting ──────────────────────────────────────────────────
+  timer?.phase('auth:rate_limit');
   await applyRateLimit();
 
-  // ── Try Bearer token ──────────────────────────────────────────────────────
+  // ── Phase: Authentication ─────────────────────────────────────────────────
+  timer?.phase('auth:authenticate');
   let session: AuthSession | null = null;
 
   try {
@@ -209,7 +216,8 @@ export async function requireAuth(allowedRoles?: string[]): Promise<AuthSession>
     }
   }
 
-  // ── Role check ────────────────────────────────────────────────────────────
+  // ── Phase: Role check ─────────────────────────────────────────────────────
+  timer?.phase('auth:role_check');
   if (allowedRoles && allowedRoles.length > 0) {
     if (!allowedRoles.includes(session.user.role)) {
       throw new AuthError(
@@ -219,6 +227,16 @@ export async function requireAuth(allowedRoles?: string[]): Promise<AuthSession>
         )
       );
     }
+  }
+
+  // Close the auth phase group
+  timer?.end();
+
+  // Inject into telemetry context if available
+  const store = requestContext.getStore();
+  if (store) {
+    store.userId = session.user.id;
+    store.businessId = session.user.businessId;
   }
 
   return session;

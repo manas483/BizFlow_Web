@@ -10,7 +10,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params;
 
     const customer = await prisma.customer.findFirst({
-      where: { id, businessId: session.user.businessId },
+      where: { id, businessId: session.user.businessId, deletedAt: null },
       include: {
         sales: {
           orderBy: { createdAt: 'desc' },
@@ -39,7 +39,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json();
 
     const existing = await prisma.customer.findFirst({
-      where: { id, businessId: session.user.businessId },
+      where: { id, businessId: session.user.businessId, deletedAt: null },
     });
     if (!existing) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
@@ -86,13 +86,19 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
 
     const existing = await prisma.customer.findFirst({
-      where: { id, businessId: session.user.businessId },
+      where: { id, businessId: session.user.businessId, deletedAt: null },
     });
     if (!existing) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
 
-    await prisma.customer.delete({ where: { id } });
+    await prisma.customer.update({ 
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        deletedBy: session.user.id
+      }
+    });
 
     const { logAudit } = await import('@/shared/lib/audit');
     await logAudit({

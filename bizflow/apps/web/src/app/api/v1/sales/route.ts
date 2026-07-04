@@ -33,8 +33,8 @@ export async function GET(req: NextRequest) {
       ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59') } : {}) } } : {}),
     };
 
-    const allowedSort = ['invoiceNo', 'total', 'paid', 'createdAt', 'status'];
-    const orderField  = allowedSort.includes(sortBy) ? sortBy : 'createdAt';
+    const allowedSort = ['invoiceNo', 'total', 'paid', 'createdAt', 'status', 'invoiceDate'];
+    const orderField  = allowedSort.includes(sortBy) ? sortBy : 'invoiceDate';
 
     const [data, total] = await Promise.all([
       prisma.sale.findMany({
@@ -43,7 +43,10 @@ export async function GET(req: NextRequest) {
         include: summary
           ? { customer: { select: { id: true, name: true, phone: true } } }
           : { customer: true, items: { include: { product: { select: { id: true, name: true, sku: true } } } } },
-        orderBy: { [orderField]: sortDir },
+        orderBy: [
+          { [orderField]: sortDir },
+          ...(orderField !== 'createdAt' ? [{ createdAt: sortDir }] : [])
+        ],
         skip,
         take: limit,
       }),
@@ -71,13 +74,21 @@ export async function POST(req: NextRequest) {
     const { customerId, items, paid, placeOfSupply, reverseCharge, notes } = parsed.data;
 
     const result = await prisma.$transaction(async (tx: any) => {
-      const customer = await tx.customer.findFirst({
-        where: { id: customerId, businessId: biz },
-        select: { id: true }
-      });
-      if (!customer) throw Object.assign(new Error('Customer not found or access denied'), { code: 'BUSINESS_RULE' });
+      const productIds = items.map((i: any) => i.productId);
+      
+      const { loadProductsForDocument } = require('@/shared/lib/batch-queries');
+      const [customer, business, { productMap, missingIds }] = await Promise.all([
+        tx.customer.findFirst({
+          where: { id: customerId, businessId: biz },
+          select: { id: true }
+        }),
+        tx.business.findUnique({ where: { id: biz }, select: { gstInclusive: true, gstNumber: true, stateCode: true } }),
+        loadProductsForDocument(tx, biz, productIds)
+      ]);
 
-      const business     = await tx.business.findUnique({ where: { id: biz }, select: { gstInclusive: true, gstNumber: true, stateCode: true } });
+      if (!customer) throw Object.assign(new Error('Customer not found or access denied'), { code: 'BUSINESS_RULE' });
+      if (missingIds.length > 0) throw Object.assign(new Error(`Products not found: ${missingIds.join(', ')}`), { code: 'BUSINESS_RULE' });
+
       const gstInclusive = business?.gstInclusive ?? false;
       const businessStateCode = business?.stateCode || extractStateCodeFromGST(business?.gstNumber) || null;
 
@@ -89,15 +100,13 @@ export async function POST(req: NextRequest) {
           : businessStateCode;
       }
 
-      const productMap: Record<string, any> = {};
       const invoiceLines = [];
 
       for (const item of items) {
-        const product = await tx.product.findFirst({ where: { id: item.productId, businessId: biz } });
-        if (!product) throw new Error(`Product ${item.productId} not found`);
+        const product = productMap.get(item.productId);
         if (!product.active) throw Object.assign(new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`), { code: 'BUSINESS_RULE' });
         if (product.stock < item.qty) throw Object.assign(new Error(`Insufficient stock for "${product.name}"`), { code: 'BUSINESS_RULE' });
-        productMap[item.productId] = product;
+        
         invoiceLines.push({
           qty: item.qty,
           price: item.price,
@@ -123,7 +132,7 @@ export async function POST(req: NextRequest) {
       const paidAmt  = typeof paid === 'number' ? paid : parseFloat(String(paid)) || 0;
       const saleStatus = paidAmt >= total ? 'PAID' : paidAmt > 0 ? 'PARTIAL' : 'UNPAID';
 
-      const enriched = items.map((item: any) => ({ ...item, purchasePrice: productMap[item.productId]?.purchasePrice || 0 }));
+      const enriched = items.map((item: any) => ({ ...item, purchasePrice: productMap.get(item.productId)?.purchasePrice || 0 }));
 
       // Deduct stock for each item
       for (const item of items) {
@@ -137,7 +146,7 @@ export async function POST(req: NextRequest) {
           businessId: biz,
           items: {
             create: enriched.map((i: any) => {
-              const product = productMap[i.productId];
+              const product = productMap.get(i.productId);
               return {
                 productId: i.productId,
                 qty: i.qty,

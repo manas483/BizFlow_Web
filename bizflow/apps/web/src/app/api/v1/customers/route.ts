@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
 
     const where: any = {
       businessId: session.user.businessId,
+      deletedAt: null,
       ...(search ? { OR: [{ name: { contains: search, mode: 'insensitive' as const } }, { phone: { contains: search } }] } : {}),
       ...(status ? { status } : {}),
     };

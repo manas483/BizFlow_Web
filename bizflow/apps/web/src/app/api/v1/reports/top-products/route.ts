@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
     const topProducts = await prisma.saleItem.groupBy({
       by:      ['productId'],
-      where:   { sale: { businessId: biz, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } } },
+      where:   { sale: { businessId: biz, OR: [ { invoiceDate: { gte: from, lte: to } }, { invoiceDate: null, createdAt: { gte: from, lte: to } } ], status: { not: 'CANCELLED' } } },
       _sum:    { qty: true, price: true },
       orderBy: { _sum: { qty: 'desc' } },
       take,

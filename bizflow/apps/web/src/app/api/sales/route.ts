@@ -9,6 +9,7 @@ import { calculateInvoiceTotal } from '@/shared/lib/invoice-engine';
 import { adjustStockWithLayers } from '@/shared/lib/stock-engine';
 import { postSaleJournal } from '@/shared/lib/auto-journal';
 import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
+import { withPerf, getTimer } from '@/shared/lib/telemetry';
 
 export function computeDueDate(invoiceDate: string | null | undefined, paymentTerms: string | null | undefined, customDueDate: string | null | undefined): Date | null {
   if (paymentTerms === 'custom' && customDueDate) return new Date(customDueDate);
@@ -22,9 +23,14 @@ export function computeDueDate(invoiceDate: string | null | undefined, paymentTe
   return baseDate;
 }
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   try {
+    const timer = getTimer();
+
+    timer?.phase('auth');
     const session = await requireAuth();
+
+    timer?.phase('parse_params');
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
     const status = searchParams.get('status');
@@ -46,18 +52,38 @@ export async function GET(req: NextRequest) {
       ...(workflowState ? { workflowState } : { workflowState: { not: 'draft' } }), // Hide drafts by default
     };
 
+    timer?.phase('db_query');
     const [sales, total] = await Promise.all([
       prisma.sale.findMany({
         where,
-        include: { customer: true, items: { include: { product: true } } },
-        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          invoiceNo: true,
+          total: true,
+          paid: true,
+          status: true,
+          workflowState: true,
+          createdAt: true,
+          dueDate: true,
+          invoiceDate: true,
+          customer: { select: { id: true, name: true, phone: true } },
+          _count: { select: { items: true } }
+        },
+        orderBy: [{ invoiceDate: 'desc' }, { createdAt: 'desc' }],
         skip,
         take: limit,
       }),
       prisma.sale.count({ where }),
     ]);
 
-    return NextResponse.json({ data: sales, total, page, limit, totalPages: Math.ceil(total / limit) });
+    timer?.phase('serialization');
+    // Map _count.items to items: { length } for backward compatibility with UI
+    const mappedSales = sales.map((sale: any) => {
+      const { _count, ...rest } = sale;
+      return { ...rest, items: { length: _count?.items || 0 } };
+    });
+    
+    return NextResponse.json({ data: mappedSales, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     if (error instanceof AuthError) return error.response;
     console.error(error);
@@ -65,43 +91,50 @@ export async function GET(req: NextRequest) {
   }
 }
 
+export const GET = withPerf(handleGET);
 
-export async function POST(req: NextRequest) {
+
+async function handlePOST(req: NextRequest) {
   // ── Phase 2: Draft creation path ──
   // Drafts have ZERO financial impact: no stock, no journals, no customer dues.
   // They use DFT-YYYY-NNNNNN numbering and workflowState='draft'.
   let session: any;
   let body: any;
+  const timer = getTimer();
   try {
+    timer?.phase('auth');
     session = await requireAuth();
     body = await req.json();
 
     if (body.isDraft === true) {
+      timer?.phase('draft_validation');
       const validated = draftSaleSchema.parse(body);
       const { customerId, items, notes, placeOfSupply, reverseCharge, isAggregate, aggregateDate, invoiceDate, paymentTerms, dueDate, payments } = validated;
 
+      timer?.phase('draft_transaction');
       const result = await prisma.$transaction(async (tx: any) => {
-        // Validate customer exists
-        const customer = await tx.customer.findFirst({
-          where: { id: customerId, businessId: session.user.businessId },
-          select: { id: true, name: true },
-        });
+        const productIds = items.map((i: any) => i.productId);
+        const { loadProductsForDocument } = require('@/shared/lib/batch-queries');
+
+        const [customer, business, { productMap, missingIds }] = await Promise.all([
+          tx.customer.findFirst({
+            where: { id: customerId, businessId: session.user.businessId },
+            select: { id: true, name: true },
+          }),
+          tx.business.findUnique({
+            where: { id: session.user.businessId },
+            select: { gstInclusive: true },
+          }),
+          loadProductsForDocument(tx, session.user.businessId, productIds)
+        ]);
+
         if (!customer) throw Object.assign(new Error('Customer not found or access denied'), { code: 'BUSINESS_RULE' });
+        if (missingIds.length > 0) throw new Error(`Products not found: ${missingIds.join(', ')}`);
 
-        // Validate products exist and are active (but do NOT check stock — draft is just a plan)
-        const productMap: Record<string, any> = {};
         for (const item of items) {
-          const product = await tx.product.findFirst({ where: { id: item.productId, businessId: session.user.businessId } });
-          if (!product) throw new Error(`Product ${item.productId} not found`);
+          const product = productMap.get(item.productId);
           if (!product.active) throw new Error(`Product "${product.name}" is archived.`);
-          productMap[item.productId] = product;
         }
-
-        // Calculate total (for display purposes only — draft is not an accounting document)
-        const business = await tx.business.findUnique({
-          where: { id: session.user.businessId },
-          select: { gstInclusive: true },
-        });
         const gstInclusive = business?.gstInclusive ?? false;
         let total = 0;
         items.forEach((item: any) => {
@@ -151,7 +184,7 @@ export async function POST(req: NextRequest) {
             businessId: session.user.businessId,
             items: {
               create: items.map((item: any) => {
-                const product = productMap[item.productId];
+                const product = productMap.get(item.productId);
                 return {
                   productId: item.productId,
                   qty: item.qty,
@@ -213,6 +246,7 @@ export async function POST(req: NextRequest) {
   const MAX_RETRIES = 3;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
   try {
+    timer?.phase('sale_validation');
     const validatedData = saleSchema.parse(body);
     const { customerId, items, paid, status, notes, placeOfSupply, reverseCharge, isAggregate, aggregateDate, invoiceDate, paymentTerms, dueDate, payments } = validatedData;
 
@@ -226,20 +260,29 @@ export async function POST(req: NextRequest) {
       console.warn('[Sales] Layer engine tables not migrated. Falling back to simple stock deduction.');
     }
 
+    timer?.phase('sale_transaction');
     const result = await prisma.$transaction(async (tx: any) => {
-      const customer = await tx.customer.findFirst({
-        where: { id: customerId, businessId: session.user.businessId },
-        select: { id: true, name: true }
-      });
+      const productIds = items.map((i: any) => i.productId);
+      const { loadProductsForDocument } = require('@/shared/lib/batch-queries');
+
+      const [customer, business, { productMap, missingIds }] = await Promise.all([
+        tx.customer.findFirst({
+          where: { id: customerId, businessId: session.user.businessId },
+          select: { id: true, name: true }
+        }),
+        tx.business.findUnique({
+          where: { id: session.user.businessId },
+          select: { gstInclusive: true, gstNumber: true, stateCode: true, state: true }
+        }),
+        loadProductsForDocument(tx, session.user.businessId, productIds)
+      ]);
+
       if (!customer) {
         throw Object.assign(new Error('Customer not found or access denied'), { code: 'BUSINESS_RULE' });
       }
+      if (missingIds.length > 0) throw Object.assign(new Error(`Products not found: ${missingIds.join(', ')}`), { code: 'BUSINESS_RULE' });
 
       // 0. Get business settings
-      const business = await tx.business.findUnique({
-        where: { id: session.user.businessId },
-        select: { gstInclusive: true, gstNumber: true, stateCode: true, state: true }
-      });
       const gstInclusive = business?.gstInclusive ?? false;
       const businessStateCode = business?.stateCode || extractStateCodeFromGST(business?.gstNumber) || null;
 
@@ -253,19 +296,10 @@ export async function POST(req: NextRequest) {
       }
 
       // 1. Calculate total with Invoice Engine
-      const productIds = items.map((i: any) => i.productId);
-      const products = await tx.product.findMany({
-        where: { id: { in: productIds }, businessId: session.user.businessId }
-      });
-      const productMap: Record<string, any> = {};
-      for (const p of products) {
-        productMap[p.id] = p;
-      }
       
       const invoiceLines = [];
       for (const item of items) {
-        const product = productMap[item.productId];
-        if (!product) throw new Error(`Product ${item.productId} not found`);
+        const product = productMap.get(item.productId);
         if (!product.active) throw new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`);
         if (product.stock < item.qty) throw new Error(`Insufficient stock for ${product.name}`);
         invoiceLines.push({
@@ -332,7 +366,7 @@ export async function POST(req: NextRequest) {
           businessId: session.user.businessId,
           items: {
             create: items.map((item: any) => {
-              const product = productMap[item.productId];
+              const product = productMap.get(item.productId);
               return {
                 productId: item.productId,
                 qty: item.qty,
@@ -385,20 +419,20 @@ export async function POST(req: NextRequest) {
             totalSaleCOGS += layerResult.totalCOGS;
           } else {
             // Fallback to product-level purchasePrice if no layers exist
-            const fallbackCost = (productMap[item.productId]?.purchasePrice || 0) * item.qty;
+            const fallbackCost = (productMap.get(item.productId)?.purchasePrice || 0) * item.qty;
+            totalSaleCOGS += fallbackCost;
             await tx.saleItem.updateMany({
               where: { saleId: sale.id, productId: item.productId },
-              data: { purchasePrice: productMap[item.productId]?.purchasePrice || 0 },
+              data: { purchasePrice: productMap.get(item.productId)?.purchasePrice || 0 },
             });
-            totalSaleCOGS += fallbackCost;
           }
         } else {
           // Layer engine disabled (tables not migrated) — fall back to simple stock deduction
           await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
-          const fallbackCost = (productMap[item.productId]?.purchasePrice || 0) * item.qty;
+          const fallbackCost = (productMap.get(item.productId)?.purchasePrice || 0) * item.qty;
           await tx.saleItem.updateMany({
             where: { saleId: sale.id, productId: item.productId },
-            data: { purchasePrice: productMap[item.productId]?.purchasePrice || 0 },
+            data: { purchasePrice: productMap.get(item.productId)?.purchasePrice || 0 },
           });
           totalSaleCOGS += fallbackCost;
         }
@@ -440,6 +474,7 @@ export async function POST(req: NextRequest) {
       return { sale, gstBreakdown, totalSaleCOGS, customerName: customer.name };
     }, { maxWait: 10000, timeout: 20000 });
 
+    timer?.phase('post_transaction');
     // A-4 FIX: Use dynamic import() instead of require() for proper tree-shaking
     const { logAudit } = await import('@/shared/lib/audit');
     logAudit({
@@ -475,6 +510,10 @@ export async function POST(req: NextRequest) {
       }).catch(err => console.error('[AutoJournal] COGS journal failed:', err));
     }
 
+    const { invalidateCache } = await import('@/shared/lib/cache');
+    await invalidateCache(`reports:${session.user.businessId}:*`);
+    await invalidateCache(`dashboard:${session.user.businessId}`);
+
     return NextResponse.json(result.sale, { status: 201 });
   } catch (error: any) {
     // A-3 FIX: Retry on unique constraint violation (invoice number collision)
@@ -499,3 +538,5 @@ export async function POST(req: NextRequest) {
   } // end retry loop
   return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
 }
+
+export const POST = withPerf(handlePOST);

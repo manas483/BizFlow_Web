@@ -59,22 +59,28 @@ export async function POST(req: NextRequest) {
     const { customerId, items, notes, placeOfSupply, reverseCharge, validUntil } = parsed.data;
 
     const result = await prisma.$transaction(async (tx: any) => {
-      const customer = await tx.customer.findFirst({
-        where: { id: customerId, businessId: session.user.businessId },
-        select: { id: true }
-      });
-      if (!customer) throw new Error('Customer not found or access denied');
+      const productIds = items.map((i: any) => i.productId);
+      const { loadProductsForDocument } = require('@/shared/lib/batch-queries');
 
-      const business    = await tx.business.findUnique({ where: { id: session.user.businessId }, select: { gstInclusive: true } });
+      const [customer, business, { productMap, missingIds }] = await Promise.all([
+        tx.customer.findFirst({
+          where: { id: customerId, businessId: session.user.businessId },
+          select: { id: true }
+        }),
+        tx.business.findUnique({ where: { id: session.user.businessId }, select: { gstInclusive: true } }),
+        loadProductsForDocument(tx, session.user.businessId, productIds)
+      ]);
+
+      if (!customer) throw new Error('Customer not found or access denied');
+      if (missingIds.length > 0) throw new Error(`Products not found: ${missingIds.join(', ')}`);
+
       const gstInclusive = business?.gstInclusive ?? false;
 
       let total = 0;
-      const productMap: Record<string, any> = {};
       for (const item of items) {
-        const product = await tx.product.findFirst({ where: { id: item.productId, businessId: session.user.businessId } });
-        if (!product) throw new Error(`Product ${item.productId} not found`);
+        const product = productMap.get(item.productId);
         if (!product.active) throw new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`);
-        productMap[item.productId] = product;
+        
         const amount = (product.sellingPrice * item.qty) - (item.discount || 0);
         const rate   = item.gstRate || product.gstRate || 0;
         total += gstInclusive && rate > 0 ? amount : amount + amount * (rate / 100);
@@ -95,12 +101,12 @@ export async function POST(req: NextRequest) {
           businessId:    session.user.businessId,
           items: {
             create: items.map((item: any) => {
-              const product = productMap[item.productId];
+              const product = productMap.get(item.productId);
               return {
                 productId:     item.productId,
                 qty:           item.qty,
                 price:         item.price,
-                purchasePrice: productMap[item.productId]?.purchasePrice || 0,
+                purchasePrice: productMap.get(item.productId)?.purchasePrice || 0,
                 discount:      parseFloat(item.discount) || 0,
                 hsnCode:       item.hsnCode,
                 gstRate:       parseFloat(item.gstRate) || 0,

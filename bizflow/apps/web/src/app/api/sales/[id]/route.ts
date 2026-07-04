@@ -46,6 +46,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
     }
 
+    if (typeof body.version === 'number' && existing.version !== body.version) {
+      return NextResponse.json({
+        success: false,
+        code: "SALE_CONFLICT",
+        error: {
+          code: "SALE_CONFLICT",
+          message: `This sale was modified by another user. Current version in database is ${existing.version}. Please refresh and try again.`,
+          meta: { currentVersion: existing.version, id: existing.id }
+        }
+      }, { status: 409 });
+    }
+
     const business = await prisma.business.findUnique({ where: { id: session.user.businessId } });
     const gstInclusive = business?.gstInclusive ?? false;
 
@@ -82,6 +94,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             paymentTerms: validatedData.paymentTerms,
             dueDate: computedDueDate,
             draftSavedAt: new Date(),
+            version: { increment: 1 },
             items: {
               create: validatedData.items.map(item => ({
                 productId: item.productId,
@@ -239,6 +252,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             invoiceDate: validatedData.invoiceDate ? new Date(validatedData.invoiceDate) : null,
             paymentTerms: validatedData.paymentTerms,
             dueDate: computedDueDate,
+            version: { increment: 1 },
             items: {
               create: validatedData.items.map(item => {
                 const product = productMap[item.productId];
@@ -394,6 +408,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             ...(paid !== undefined ? { paid } : {}),
             ...(status ? { status } : {}),
             ...(notes !== undefined ? { notes } : {}),
+            version: { increment: 1 },
           },
           include: { customer: true, items: { include: { product: true } } }
         });
@@ -502,6 +517,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           isAggregate: validatedData.isAggregate,
           aggregateDate: validatedData.aggregateDate ? new Date(validatedData.aggregateDate) : null,
           invoiceDate: validatedData.invoiceDate ? new Date(validatedData.invoiceDate) : null,
+          version: { increment: 1 },
           items: {
             create: validatedData.items.map(item => ({
               productId: item.productId,
@@ -608,23 +624,33 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
           });
         }
 
+        const { postReversingJournal } = await import('@/shared/lib/auto-journal');
         const relatedJournals = await tx.journalEntry.findMany({
           where: { businessId: session.user.businessId, reference: `SALE:${id}` },
           select: { id: true, status: true },
         });
         for (const je of relatedJournals) {
           if (je.status !== 'REVERSED') {
-            await tx.journalEntry.update({
-              where: { id: je.id },
-              data: { status: 'REVERSED' },
+            await postReversingJournal({
+              originalJournalId: je.id,
+              reason: 'Sale Voided',
+              businessId: session.user.businessId,
+              tx
             });
           }
         }
-      }
 
-      await tx.saleItem.deleteMany({ where: { saleId: id } });
-      await tx.salePayment.deleteMany({ where: { saleId: id } });
-      await tx.sale.delete({ where: { id } });
+        // Void the sale instead of hard-deleting it
+        await tx.sale.update({
+          where: { id },
+          data: { workflowState: 'voided' }
+        });
+      } else {
+        // Safe to hard-delete drafts since they haven't impacted ledgers
+        await tx.saleItem.deleteMany({ where: { saleId: id } });
+        await tx.salePayment.deleteMany({ where: { saleId: id } });
+        await tx.sale.delete({ where: { id } });
+      }
     });
 
     const { logAudit } = await import('@/shared/lib/audit');

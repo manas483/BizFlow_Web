@@ -4,6 +4,18 @@ import { resolve } from "path";
 const nextConfig: any = {
   serverExternalPackages: ['@react-pdf/renderer'],
 
+  // Strict environment validation during build/startup
+  env: (() => {
+    if (process.env.NODE_ENV === 'production' && !process.env.SKIP_ENV_VALIDATION) {
+      const required = ['DATABASE_URL', 'NEXTAUTH_SECRET', 'NEXTAUTH_URL', 'RESEND_API_KEY'];
+      const missing = required.filter(key => !process.env[key]);
+      if (missing.length > 0) {
+        throw new Error(`\n❌ Deployment Failed: Missing required environment variables:\n${missing.join(', ')}\n`);
+      }
+    }
+    return {};
+  })(),
+
   // I-3 FIX: Use absolute path to silence turbopack workspace detection warning
   turbopack: {
     root: resolve(process.cwd(), '../../'),
@@ -11,6 +23,7 @@ const nextConfig: any = {
 
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  experimental: { instrumentationHook: true },
 
   // Security headers to prevent clickjacking, MIME sniffing, XSS, and content injection
   async headers() {

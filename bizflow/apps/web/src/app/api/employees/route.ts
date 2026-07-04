@@ -7,10 +7,16 @@ import { z } from 'zod';
 import { randomBytes } from 'crypto';
 import { sendEmployeeInvitationEmail } from '@/shared/lib/email';
 import { logAudit } from '@/shared/lib/audit';
+import { withPerf, getTimer } from '@/shared/lib/telemetry';
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   try {
+    const timer = getTimer();
+
+    timer?.phase('auth');
     const session = await requireAuth();
+
+    timer?.phase('parse_params');
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search');
     const department = searchParams.get('department');
@@ -21,10 +27,12 @@ export async function GET(req: NextRequest) {
 
     const where = {
       businessId: session.user.businessId,
+      deletedAt: null,
       ...(search ? { name: { contains: search, mode: 'insensitive' as const } } : {}),
       ...(department && department !== 'All' ? { department } : {}),
     };
 
+    timer?.phase('db_query');
     const [employees, total] = await Promise.all([
       prisma.employee.findMany({
         where,
@@ -39,7 +47,6 @@ export async function GET(req: NextRequest) {
               role: true,
               createdAt: true,
               twoFactorEnabled: true,
-              password: true,
             }
           }
         },
@@ -53,7 +60,7 @@ export async function GET(req: NextRequest) {
     const staleIds = employees
       .filter((e) =>
         (e.status === 'INVITATION_SENT' || e.status === 'PENDING_VERIFICATION') &&
-        (e.user?.emailVerified || e.user?.password)
+        (e.user?.emailVerified) // removed e.user?.password
       )
       .map((e) => e.id);
 
@@ -67,32 +74,37 @@ export async function GET(req: NextRequest) {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const cutoff = thirtyDaysAgo.toISOString().split('T')[0]; // "YYYY-MM-DD" — string comparison works
 
-    const attCounts = await prisma.attendanceRecord.groupBy({
-      by: ['employeeId', 'status'],
-      where: {
-        businessId: session.user.businessId,
-        employeeId: { in: employees.map(e => e.id) },
-        date: { gte: cutoff },
-      },
-      _count: { id: true },
+    timer?.phase('attendance_aggregation');
+    const { getCachedOrSet, CACHE_TTL } = await import('@/shared/lib/cache');
+    // We cache the attendance aggregation per business since it groups by employeeId anyway
+    const cacheKey = `attendance_agg:${session.user.businessId}`;
+    
+    type AttMap = { present: number; half: number; total: number };
+    
+    const attMap = await getCachedOrSet<Record<string, AttMap>>(cacheKey, CACHE_TTL.ATTENDANCE, async () => {
+      const attCounts = await prisma.attendanceRecord.groupBy({
+        by: ['employeeId', 'status'],
+        where: {
+          businessId: session.user.businessId,
+          date: { gte: cutoff },
+        },
+        _count: { id: true },
+      });
+
+      const map: Record<string, AttMap> = {};
+      for (const entry of attCounts) {
+        if (!map[entry.employeeId]) map[entry.employeeId] = { present: 0, half: 0, total: 0 };
+        const c = (entry._count as any).id ?? 0;
+        if (entry.status === 'present') map[entry.employeeId].present += c;
+        if (entry.status === 'half_day') map[entry.employeeId].half += c;
+        map[entry.employeeId].total += c;
+      }
+      return map;
     });
 
-    // Build map: employeeId -> { present, half_day, total }
-    type AttMap = { present: number; half: number; total: number };
-    const attMap: Record<string, AttMap> = {};
-    for (const entry of attCounts) {
-      if (!attMap[entry.employeeId]) attMap[entry.employeeId] = { present: 0, half: 0, total: 0 };
-      const c = (entry._count as any).id ?? 0;
-      if (entry.status === 'present') attMap[entry.employeeId].present += c;
-      if (entry.status === 'half_day') attMap[entry.employeeId].half += c;
-      attMap[entry.employeeId].total += c;
-    }
-
+    timer?.phase('enrichment');
     // Inject computed attendance% (fall back to stored value if no records)
     const enriched = employees.map(e => {
-      if (e.user) {
-        delete (e.user as any).password;
-      }
       const rec = attMap[e.id];
       const pct = rec && rec.total > 0
         ? Math.round(((rec.present + rec.half * 0.5) / rec.total) * 100)
@@ -100,6 +112,7 @@ export async function GET(req: NextRequest) {
       return { ...e, attendance: pct };
     });
 
+    timer?.phase('serialization');
     return NextResponse.json({ data: enriched, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (error) {
     if (error instanceof AuthError) return error.response;
@@ -110,8 +123,11 @@ export async function GET(req: NextRequest) {
 
 
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
+    const timer = getTimer();
+
+    timer?.phase('auth');
     console.log("POST /api/employees: Starting request");
     const session = await requireAuth();
     
@@ -120,6 +136,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Only Super Admins can add employees' }, { status: 403 });
     }
 
+    timer?.phase('validation');
     const body = await req.json();
     console.log("POST /api/employees: Body received", body.email);
     const validatedData = employeeSchema.parse(body);
@@ -129,6 +146,7 @@ export async function POST(req: NextRequest) {
     const business = await prisma.business.findUnique({ where: { id: session.user.businessId } });
     const businessName = business?.name ?? 'BizFlow';
 
+    timer?.phase('duplicate_check');
     // ── DUPLICATE CHECK 1: same email already in THIS business ──────────────
     const existingEmployee = await prisma.employee.findUnique({
       where: {
@@ -138,7 +156,7 @@ export async function POST(req: NextRequest) {
         },
       },
     });
-    if (existingEmployee) {
+    if (existingEmployee && !existingEmployee.deletedAt) {
       return NextResponse.json(
         { error: 'An employee with this email address already exists in your organization.' },
         { status: 400 }
@@ -181,71 +199,74 @@ export async function POST(req: NextRequest) {
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    const employee = await prisma.$transaction(async (tx) => {
-      // Create the User (login identity) — globally unique by email
-      const user = await tx.user.create({
-        data: {
-          email: validatedData.email,
-          name: validatedData.name,
-          role: validatedData.role as any,
-          businessId: session.user.businessId,
-          emailVerified: false,
-        },
-      });
-
-      // Create the Employee record (scoped to this business)
-      const emp = await tx.employee.create({
-        data: {
-          ...validatedData,
-          userId: user.id,
-          joinDate: new Date(validatedData.joinDate),
-          businessId: session.user.businessId,
-        },
-      });
-
-      // Create the invitation token (scoped to this business)
-      await tx.invitation.create({
-        data: {
-          email: validatedData.email,
-          token,
-          role: validatedData.role as any,
-          businessId: session.user.businessId,
-          expiresAt,
-        },
-      });
-
-      // Audit log
-      await tx.userActivity.create({
-        data: {
-          businessId: session.user.businessId,
-          userId: session.user.id,
-          eventType: 'EMPLOYEE_CREATED',
-          metadata: {
-            employeeId: emp.id,
-            employeeName: emp.name,
-            role: validatedData.role,
-          },
-        },
-      });
-
-      // In-app notification — admin only
-      await tx.notification.create({
-        data: {
-          businessId: session.user.businessId,
-          type: 'INFO',
-          title: 'New Employee Added',
-          message: `Employee ${emp.name} has been added as ${emp.role.replace('_', ' ')}. Invitation sent to ${emp.email}.`,
-          targetRole: 'SUPER_ADMIN',
-        },
-      });
-
-      return emp;
+    timer?.phase('db_transaction');
+    
+    // Using sequential queries instead of $transaction because Neon HTTP driver 
+    // does not support interactive transactions.
+    // Create the User (login identity) — globally unique by email
+    const user = await prisma.user.create({
+      data: {
+        email: validatedData.email,
+        name: validatedData.name,
+        role: validatedData.role as any,
+        businessId: session.user.businessId,
+        emailVerified: false,
+      },
     });
+
+    // Create the Employee record (scoped to this business)
+    const emp = await prisma.employee.create({
+      data: {
+        ...validatedData,
+        userId: user.id,
+        joinDate: new Date(validatedData.joinDate),
+        businessId: session.user.businessId,
+      },
+    });
+
+    // Create the invitation token (scoped to this business)
+    await prisma.invitation.create({
+      data: {
+        email: validatedData.email,
+        token,
+        role: validatedData.role as any,
+        businessId: session.user.businessId,
+        expiresAt,
+      },
+    });
+
+    // Audit log
+    await prisma.userActivity.create({
+      data: {
+        businessId: session.user.businessId,
+        userId: session.user.id,
+        eventType: 'EMPLOYEE_CREATED',
+        metadata: {
+          employeeId: emp.id,
+          employeeName: emp.name,
+          role: validatedData.role,
+        },
+      },
+    });
+
+    // In-app notification — admin only
+    await prisma.notification.create({
+      data: {
+        businessId: session.user.businessId,
+        type: 'INFO',
+        title: 'New Employee Added',
+        message: `Employee ${emp.name} has been added as ${emp.role.replace('_', ' ')}. Invitation sent to ${emp.email}.`,
+        targetRole: 'SUPER_ADMIN',
+      },
+    });
+
+    const employee = emp;
 
     const protocol = req.headers.get('x-forwarded-proto') || 'http';
     const host = req.headers.get('host');
     const inviteLink = `${protocol}://${host}/accept-invitation?token=${token}`;
 
+    timer?.phase('email');
     console.log("POST /api/employees: Employee created, starting email send");
     sendEmployeeInvitationEmail(
       validatedData.email,
@@ -276,4 +297,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+export const GET = withPerf(handleGET);
+export const POST = withPerf(handlePOST);
 

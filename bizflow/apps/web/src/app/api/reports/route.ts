@@ -2,8 +2,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/shared/lib/db';
 import { requireAuth, AuthError } from '@/shared/lib/api-guard';
+import { withTelemetry } from '@/shared/lib/telemetry';
 
-export async function GET(req: NextRequest) {
+async function handler(req: NextRequest) {
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
@@ -60,7 +61,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const [
+    const saleDateFilter = {
+      OR: [
+        { invoiceDate: { gte: from, lte: to } },
+        { invoiceDate: null, ...saleDateFilter }
+      ]
+    };
+
+    const { getCachedOrSet, CACHE_TTL } = await import('@/shared/lib/cache');
+    const cacheKey = `reports:${businessId}:${period}:${yearParam || ''}:${monthParam || ''}:${startDateParam || ''}:${endDateParam || ''}`;
+
+    const reportData = await getCachedOrSet(cacheKey, CACHE_TTL.REPORTS, async () => {
+      const [
       salesAgg,
       expensesAgg,
       salesByMonth,
@@ -78,28 +90,28 @@ export async function GET(req: NextRequest) {
     ] = await Promise.all([
       // Total revenue & count (excluding CANCELLED)
       prisma.sale.aggregate({
-        where: { businessId, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } },
+        where: { businessId, ...saleDateFilter, status: { not: 'CANCELLED' }, workflowState: { not: 'voided' } },
         _sum: { total: true, paid: true },
         _count: true,
       }),
 
       // Total operating expenses
       prisma.expense.aggregate({
-        where: { businessId, date: { gte: from, lte: to } },
+        where: { businessId, date: { gte: from, lte: to }, status: 'ACTIVE' },
         _sum: { amount: true },
       }),
 
       // Monthly sales breakdown (for charts)
       prisma.sale.groupBy({
-        by: ['createdAt'],
-        where: { businessId, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } },
+        by: ['createdAt', 'invoiceDate'],
+        where: { businessId, ...saleDateFilter, status: { not: 'CANCELLED' }, workflowState: { not: 'voided' } },
         _sum: { total: true, paid: true },
       }),
 
       // Expenses by category
       prisma.expense.groupBy({
         by: ['category'],
-        where: { businessId, date: { gte: from, lte: to } },
+        where: { businessId, date: { gte: from, lte: to }, status: 'ACTIVE' },
         _sum: { amount: true },
         orderBy: { _sum: { amount: 'desc' } },
       }),
@@ -107,7 +119,7 @@ export async function GET(req: NextRequest) {
       // Top selling products
       prisma.saleItem.groupBy({
         by: ['productId'],
-        where: { sale: { businessId, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } } },
+        where: { sale: { businessId, ...saleDateFilter, status: { not: 'CANCELLED' }, workflowState: { not: 'voided' } } },
         _sum: { qty: true, price: true },
         orderBy: { _sum: { qty: 'desc' } },
         take: 5,
@@ -121,14 +133,14 @@ export async function GET(req: NextRequest) {
 
       // COGS calculation & GST calculation
       prisma.saleItem.findMany({
-        where: { sale: { businessId, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } } },
+        where: { sale: { businessId, ...saleDateFilter, status: { not: 'CANCELLED' }, workflowState: { not: 'voided' } } },
         select: { qty: true, price: true, purchasePrice: true, gstRate: true, discount: true, sale: { select: { createdAt: true } } },
       }),
 
       // Top customers by revenue
       prisma.sale.groupBy({
         by: ['customerId'],
-        where: { businessId, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } },
+        where: { businessId, ...saleDateFilter, status: { not: 'CANCELLED' }, workflowState: { not: 'voided' } },
         _sum: { total: true },
         orderBy: { _sum: { total: 'desc' } },
         take: 5,
@@ -148,21 +160,21 @@ export async function GET(req: NextRequest) {
 
       // Credit Notes (Refunds/Returns)
       prisma.creditNote.aggregate({
-        where: { businessId, createdAt: { gte: from, lte: to } },
+        where: { businessId, ...saleDateFilter },
         _sum: { amount: true, taxAmount: true }
       }),
       
       // Expenses by date (for charts)
       prisma.expense.groupBy({
         by: ['date'],
-        where: { businessId, date: { gte: from, lte: to } },
+        where: { businessId, date: { gte: from, lte: to }, status: 'ACTIVE' },
         _sum: { amount: true },
       }),
 
       // Sales by Payment Method
       prisma.salePayment.groupBy({
         by: ['paymentMethod'],
-        where: { sale: { businessId, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } } },
+        where: { sale: { businessId, ...saleDateFilter, status: { not: 'CANCELLED' }, workflowState: { not: 'voided' } } },
         _sum: { amount: true },
       }),
 
@@ -170,7 +182,7 @@ export async function GET(req: NextRequest) {
       prisma.saleItem.groupBy({
         by: ['productId'],
         where: { 
-          sale: { businessId, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } },
+          sale: { businessId, ...saleDateFilter, status: { not: 'CANCELLED' }, workflowState: { not: 'voided' } },
           originalPrice: { not: null } 
         },
         _sum: { qty: true, price: true },
@@ -243,32 +255,32 @@ export async function GET(req: NextRequest) {
 
     // Enrich top products with names
     const productIds = topProducts.map((p: any) => p.productId);
-    const productsInfo = await prisma.product.findMany({
-      where: { id: { in: productIds }, businessId },
-      select: { id: true, name: true, category: true },
-    });
-    const productMap = Object.fromEntries(productsInfo.map((p: any) => [p.id, p]));
-
-    // Enrich top customers
     const customerIds = topCustomers.map((c: any) => c.customerId);
-    const customersInfo = await prisma.customer.findMany({
-      where: { id: { in: customerIds }, businessId },
-      select: { id: true, name: true, phone: true }
-    });
+    const overriddenProductIds = topOverriddenProducts.map((p: any) => p.productId);
+
+    const [productsInfo, customersInfo, overriddenProductsInfo] = await Promise.all([
+      prisma.product.findMany({
+        where: { id: { in: productIds }, businessId },
+        select: { id: true, name: true, category: true },
+      }),
+      prisma.customer.findMany({
+        where: { id: { in: customerIds }, businessId },
+        select: { id: true, name: true, phone: true }
+      }),
+      prisma.product.findMany({
+        where: { id: { in: overriddenProductIds }, businessId },
+        select: { id: true, name: true, category: true },
+      })
+    ]);
+
+    const productMap = Object.fromEntries(productsInfo.map((p: any) => [p.id, p]));
     const customerMap = Object.fromEntries(customersInfo.map((c: any) => [c.id, c]));
+    const overriddenProductMap = Object.fromEntries(overriddenProductsInfo.map((p: any) => [p.id, p]));
 
     // Filter low stock
     const filteredLowStock = lowStockItems
       .filter((p: any) => p.stock <= p.minStock)
       .slice(0, 10);
-
-    // Enrich top overridden products
-    const overriddenProductIds = topOverriddenProducts.map((p: any) => p.productId);
-    const overriddenProductsInfo = await prisma.product.findMany({
-      where: { id: { in: overriddenProductIds }, businessId },
-      select: { id: true, name: true, category: true },
-    });
-    const overriddenProductMap = Object.fromEntries(overriddenProductsInfo.map((p: any) => [p.id, p]));
 
     const mappedExpenses = expensesByCategory.map((e: any) => ({
       category: e.category,
@@ -286,7 +298,7 @@ export async function GET(req: NextRequest) {
       qty: p._sum.qty ?? 0,
     }));
 
-    return NextResponse.json({
+    return {
       period: { from, to, period },
       summary: {
         totalSales,
@@ -309,7 +321,10 @@ export async function GET(req: NextRequest) {
         gstInputCredit,
         taxSummaryByMonth
       },
-      salesByMonth,
+      salesByMonth: salesByMonth.map((s: any) => ({
+        ...s,
+        createdAt: s.invoiceDate || s.createdAt
+      })),
       expensesByDate,
       expensesByCategory: mappedExpenses,
       topProducts: topProducts.map((tp: any) => ({
@@ -324,7 +339,10 @@ export async function GET(req: NextRequest) {
       lowStockItems: filteredLowStock,
       salesByPaymentMethod: mappedPaymentMethods,
       topOverriddenProducts: mappedOverridden
+    };
     });
+
+    return NextResponse.json(reportData);
   } catch (error) {
     if (error instanceof AuthError) return error.response;
     console.error(error);
@@ -332,3 +350,4 @@ export async function GET(req: NextRequest) {
   }
 }
 
+export const GET = withTelemetry(handler);

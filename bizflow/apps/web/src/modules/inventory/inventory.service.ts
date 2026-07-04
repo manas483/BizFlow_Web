@@ -2,6 +2,7 @@ import { prisma } from '@/shared/lib/db';
 import { recalculateTransportCosts } from '@/shared/lib/expense-calculations';
 import { createLayerSafe } from '@/shared/lib/layer-engine';
 import { CostingService } from './costing.service';
+import { getCachedOrSet, CACHE_TTL } from '@/shared/lib/cache';
 
 export class InventoryService {
   static async getProducts(
@@ -12,67 +13,76 @@ export class InventoryService {
     limit = 25,
     isPicker = false
   ) {
-    const skip = (page - 1) * limit;
-    const where = {
-      businessId,
-      ...(search ? {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' as const } },
-          { sku: { contains: search, mode: 'insensitive' as const } },
-          { hsnCode: { contains: search, mode: 'insensitive' as const } },
-          { category: { contains: search, mode: 'insensitive' as const } }
-        ]
-      } : {}),
-      ...(category ? { category } : {}),
-    };
+    const cacheKey = `inventory:${businessId}:${page}:${limit}:${search || ''}:${category || ''}:${isPicker}`;
+    return getCachedOrSet(cacheKey, CACHE_TTL.PRODUCT_LIST, async () => {
+      const skip = (page - 1) * limit;
+      
+      // Exact SKU lookup priority
+      const exactSkuWhere = search ? { businessId, sku: search } : null;
+      
+      const where = {
+        businessId,
+        ...(search ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' as const } },
+            { sku: { contains: search, mode: 'insensitive' as const } },
+            { hsnCode: { contains: search, mode: 'insensitive' as const } },
+            { category: { contains: search, mode: 'insensitive' as const } }
+          ]
+        } : {}),
+        ...(category ? { category } : {}),
+      };
 
-    if (isPicker) {
+      if (isPicker) {
+        // Redesigned picker: 50 for search, 25 for recent
+        const pickerLimit = search ? 50 : 25;
+        const [products, total] = await Promise.all([
+          prisma.product.findMany({
+            where,
+            select: {
+              id: true, name: true, sku: true, category: true, stock: true,
+              minStock: true, sellingPrice: true, gstRate: true, hsnCode: true, unit: true,
+            },
+            // Order by stock (favorites/top sellers approximation) if no search, else recent
+            orderBy: search ? { createdAt: 'desc' } : { stock: 'desc' },
+            skip: 0, // Always page 1 for picker
+            take: pickerLimit,
+          }),
+          prisma.product.count({ where }),
+        ]);
+
+        return {
+          data: products,
+          total,
+          page: 1,
+          limit: pickerLimit,
+          totalPages: Math.ceil(total / pickerLimit),
+        };
+      }
+
       const [products, total] = await Promise.all([
-        prisma.product.findMany({
-          where,
-          select: {
-            id: true,
-            name: true,
-            sku: true,
-            category: true,
-            stock: true,
-            minStock: true,
-            sellingPrice: true,
-            gstRate: true,
-            hsnCode: true,
-            unit: true,
-          },
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: limit,
-        }),
+        prisma.product.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
         prisma.product.count({ where }),
       ]);
 
-      return {
-        data: products,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      };
-    }
+      const productsWithCosts = await CostingService.computeProductAverageCosts(products, businessId);
 
-    const [products, total, allFiltered] = await Promise.all([
-      prisma.product.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-      prisma.product.count({ where }),
-      prisma.product.findMany({ where, select: { stock: true, minStock: true, standardCost: true, sellingPrice: true } })
-    ]);
+      // Cache stats separately (30s TTL) to avoid pulling all products on every pagination request
+      const statsCacheKey = `inventory:stats:${businessId}`;
+      const stats = await getCachedOrSet(statsCacheKey, CACHE_TTL.INVENTORY_STATS, async () => {
+        const allProducts = await prisma.product.findMany({
+          where: { businessId },
+          select: { stock: true, minStock: true, standardCost: true, sellingPrice: true }
+        });
+        return {
+          lowStock: allProducts.filter(p => p.stock <= p.minStock).length,
+          totalValue: allProducts.reduce((s, p) => s + (Math.max(0, p.stock) * p.standardCost), 0),
+          totalSellValue: allProducts.reduce((s, p) => s + (Math.max(0, p.stock) * p.sellingPrice), 0),
+        };
+      });
 
-    const productsWithCosts = await CostingService.computeProductAverageCosts(products, businessId);
-
-    const stats = {
-      lowStock: allFiltered.filter(p => p.stock <= p.minStock).length,
-      totalValue: allFiltered.reduce((s, p) => s + (Math.max(0, p.stock) * p.standardCost), 0),
-      totalSellValue: allFiltered.reduce((s, p) => s + (Math.max(0, p.stock) * p.sellingPrice), 0),
-    };
-
-    return { data: productsWithCosts, total, page, limit, totalPages: Math.ceil(total / limit), stats };
+      return { data: productsWithCosts, total, page, limit, totalPages: Math.ceil(total / limit), stats };
+    });
   }
 
   static async getProductById(id: string, businessId: string) {
@@ -84,96 +94,105 @@ export class InventoryService {
 
   static async createProduct(data: any, session: any) {
     const { purchaseDate, ...rest } = data;
-    const product = await prisma.product.create({
-      data: {
-        ...rest,
-        purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
-        businessId: session.user.businessId,
-      }
-    });
 
-    if (product.stock > 0) {
-      await prisma.stockMovement.create({
+    const result = await prisma.$transaction(async (tx) => {
+      const product = await tx.product.create({
         data: {
-          productId: product.id,
-          type: 'IN',
-          quantity: product.stock,
-          notes: product.purchaseFrom || product.supplier || 'Initial stock on creation',
-          referenceId: product.purchaseInvoiceNo,
-          createdAt: product.purchaseDate || undefined,
+          ...rest,
+          purchaseDate: purchaseDate ? new Date(purchaseDate) : null,
           businessId: session.user.businessId,
         }
       });
 
-      // 📦 Create initial inventory layer 📦
-      const baseCost = product.standardCost * product.stock;
-      const expenses: any[] = [];
+      if (product.stock > 0) {
+        await tx.stockMovement.create({
+          data: {
+            productId: product.id,
+            type: 'IN',
+            quantity: product.stock,
+            notes: product.purchaseFrom || product.supplier || 'Initial stock on creation',
+            referenceId: product.purchaseInvoiceNo,
+            createdAt: product.purchaseDate || undefined,
+            businessId: session.user.businessId,
+          }
+        });
 
-      await createLayerSafe({
-        itemId: product.id,
-        receiptNo: product.purchaseInvoiceNo || undefined,
-        receiptDate: product.purchaseDate || undefined,
-        quantity: product.stock,
-        purchaseCost: baseCost,
-        expenses,
-        supplierId: product.supplier || product.purchaseFrom || undefined,
-        sourceTransactionType: 'purchase',
-        businessId: session.user.businessId,
+        // 📦 Create initial inventory layer 📦
+        const baseCost = product.standardCost * product.stock;
+        const expenses: any[] = [];
+
+        await createLayerSafe({
+          itemId: product.id,
+          receiptNo: product.purchaseInvoiceNo || undefined,
+          receiptDate: product.purchaseDate || undefined,
+          quantity: product.stock,
+          purchaseCost: baseCost,
+          expenses,
+          supplierId: product.supplier || product.purchaseFrom || undefined,
+          sourceTransactionType: 'purchase',
+          businessId: session.user.businessId,
+          tx,
+        });
+
+        // Auto-create Accounts Payable for the purchase cost
+        if (product.standardCost > 0) {
+          const apAmount = product.stock * product.standardCost;
+          const supplierName = product.supplier || product.purchaseFrom || product.name;
+          const invoiceRef = product.purchaseInvoiceNo || `PROD-${product.id.slice(0, 8)}`;
+
+          const payable = await tx.accountsPayable.create({
+            data: {
+              supplierName,
+              invoiceRef,
+              amount: apAmount,
+              paidAmount: 0,
+              dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+              category: product.category || 'Purchase',
+              status: 'OUTSTANDING',
+              notes: `Auto-generated: Purchase of ${product.stock} × ${product.name}`,
+              businessId: session.user.businessId,
+            },
+          });
+
+          // Fire journal entry for the payable
+          const { postPayableJournal } = await import('@/shared/lib/auto-journal');
+          await postPayableJournal({
+            payableId: payable.id,
+            supplierName,
+            amount: apAmount,
+            category: 'Purchase',
+            businessId: session.user.businessId,
+            tx,
+          });
+        }
+      }
+
+      await recalculateTransportCosts(session.user.businessId);
+
+      const { logAudit } = await import('@/shared/lib/audit');
+      await logAudit({
+        session,
+        action: 'CREATE',
+        entityType: 'Product',
+        entityId: product.id,
+        entityLabel: product.name,
       });
 
-      // Auto-create Accounts Payable for the purchase cost
-      if (product.standardCost > 0) {
-        const apAmount = product.stock * product.standardCost;
-        const supplierName = product.supplier || product.purchaseFrom || product.name;
-        const invoiceRef = product.purchaseInvoiceNo || `PROD-${product.id.slice(0, 8)}`;
-
-        const payable = await prisma.accountsPayable.create({
-          data: {
-            supplierName,
-            invoiceRef,
-            amount: apAmount,
-            paidAmount: 0,
-            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-            category: product.category || 'Purchase',
-            status: 'OUTSTANDING',
-            notes: `Auto-generated: Purchase of ${product.stock} × ${product.name}`,
-            businessId: session.user.businessId,
-          },
-        });
-
-        // Fire journal entry for the payable
-        const { postPayableJournal } = await import('@/shared/lib/auto-journal');
-        await postPayableJournal({
-          payableId: payable.id,
-          supplierName,
-          amount: apAmount,
-          category: 'Purchase',
+      await (tx as any).userActivity.create({
+        data: {
           businessId: session.user.businessId,
-        });
-      }
-    }
+          userId: session.user.id ?? "unknown",
+          eventType: "product_add",
+          metadata: { productId: product.id, category: product.category },
+        }
+      });
 
-    await recalculateTransportCosts(session.user.businessId);
-
-    const { logAudit } = await import('@/shared/lib/audit');
-    await logAudit({
-      session,
-      action: 'CREATE',
-      entityType: 'Product',
-      entityId: product.id,
-      entityLabel: product.name,
+      return product;
     });
 
-    await (prisma as any).userActivity.create({
-      data: {
-        businessId: session.user.businessId,
-        userId: session.user.id ?? "unknown",
-        eventType: "product_add",
-        metadata: { productId: product.id, category: product.category },
-      }
-    });
-
-    return product;
+    const { invalidateCache } = await import('@/shared/lib/cache');
+    await invalidateCache(`inventory:${session.user.businessId}:*`);
+    return result;
   }
 
   static async updateProduct(id: string, existing: any, data: any, session: any) {
@@ -272,6 +291,9 @@ export class InventoryService {
       });
     }
 
+    const { invalidateCache } = await import('@/shared/lib/cache');
+    await invalidateCache(`inventory:${session.user.businessId}:*`);
+
     return product;
   }
 
@@ -287,13 +309,17 @@ export class InventoryService {
       entityId: id,
       entityLabel: existing.name,
     });
+    
+    const { invalidateCache } = await import('@/shared/lib/cache');
+    await invalidateCache(`inventory:${session.user.businessId}:*`);
+
     return { success: true };
   }
 
   static async adjustStock(productId: string, quantity: number, type: 'IN' | 'OUT' | 'ADJUST' | 'TRANSFER', businessId: string, notes?: string, referenceId?: string, warehouseId?: string) {
     if (quantity === 0) return null;
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       // Create movement
       const movement = await tx.stockMovement.create({
         data: {
@@ -319,5 +345,10 @@ export class InventoryService {
 
       return movement;
     });
+
+    const { invalidateCache } = await import('@/shared/lib/cache');
+    await invalidateCache(`inventory:${businessId}:*`);
+
+    return result;
   }
 }

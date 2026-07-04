@@ -14,7 +14,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   try {
     const session  = await requireAuth();
     const { id }   = await params;
-    const customer = await prisma.customer.findFirst({ where: { id, businessId: session.user.businessId } });
+    const customer = await prisma.customer.findFirst({ where: { id, businessId: session.user.businessId, deletedAt: null } });
     if (!customer) return notFound('Customer not found');
     return ok(customer);
   } catch (e) {
@@ -27,7 +27,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const session = await requireAuth();
     const { id }  = await params;
-    const exists  = await prisma.customer.findFirst({ where: { id, businessId: session.user.businessId } });
+    const exists  = await prisma.customer.findFirst({ where: { id, businessId: session.user.businessId, deletedAt: null } });
     if (!exists) return notFound('Customer not found');
 
     const parsed = customerSchema.partial().safeParse(await req.json());
@@ -48,9 +48,9 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await requireAuth(['SUPER_ADMIN', 'MANAGER']);
     const { id }  = await params;
-    const exists  = await prisma.customer.findFirst({ where: { id, businessId: session.user.businessId } });
+    const exists  = await prisma.customer.findFirst({ where: { id, businessId: session.user.businessId, deletedAt: null } });
     if (!exists) return notFound('Customer not found');
-    await prisma.customer.delete({ where: { id } });
+    await prisma.customer.update({ where: { id }, data: { deletedAt: new Date(), deletedBy: session.user.id } });
     return deleted(id);
   } catch (e) {
     if (e instanceof AuthError) return e.response;

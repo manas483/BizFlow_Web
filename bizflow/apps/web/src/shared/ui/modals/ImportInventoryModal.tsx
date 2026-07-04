@@ -11,6 +11,7 @@ import {
   FileText, Pencil, Trash2, Plus, Truck, IndianRupee
 } from "lucide-react";
 import { useBusiness } from "@/shared/hooks/useBusiness";
+import { useProductCategories } from "@/shared/hooks/useProducts";
 import { getBusinessProfile } from "@/shared/lib/business-intelligence";
 
 type Step = "upload" | "validating" | "review" | "expenses" | "summary" | "training" | "importing" | "done";
@@ -147,9 +148,9 @@ export default function ImportInventoryModal({ open, onClose }: { open: boolean;
 
   const { data: business } = useBusiness();
   const profile = business ? getBusinessProfile(business.businessType) : null;
-  const categoriesList = profile 
-    ? [...profile.productCategories, "Other"]
-    : ["Grains", "Pulses", "Edible Oil", "Spices", "Construction", "Other"];
+  const { data: dbCategories } = useProductCategories();
+  const profileCats = profile ? profile.productCategories : ["Grains", "Pulses", "Edible Oil", "Spices", "Construction"];
+  const categoriesList = Array.from(new Set([...(dbCategories || []), ...profileCats, "Other"]));
 
   // Import state
   const [importResults, setImportResults] = useState<ImportResults | null>(null);

@@ -33,14 +33,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const exists  = await prisma.product.findFirst({ where: { id, businessId: session.user.businessId } });
     if (!exists) return notFound('Product not found');
 
+    const clientVersion = body.version;
+
     const parsed = productSchema.partial().safeParse(body);
     if (!parsed.success) return validationError(parsed.error.issues);
 
-    if (clientUpdatedAt) {
-      const clientDate = new Date(clientUpdatedAt);
+    if (typeof clientVersion === 'number') {
       const result = await prisma.product.updateMany({
-        where: { id, businessId: session.user.businessId, updatedAt: clientDate },
-        data: parsed.data,
+        where: { id, businessId: session.user.businessId, version: clientVersion },
+        data: {
+          ...parsed.data,
+          version: { increment: 1 }
+        },
       });
       if (result.count === 0) {
         return NextResponse.json({
@@ -48,15 +52,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           code: "PRODUCT_CONFLICT",
           error: {
             code: "PRODUCT_CONFLICT",
-            message: "This product was modified by another user. Please refresh and try again."
+            message: `This product was modified by another user. Current version in database is ${exists.version}. Please refresh and try again.`,
+            meta: { currentVersion: exists.version, id: exists.id }
           },
-          message: "This product was modified by another user. Please refresh and try again."
+          message: `This product was modified by another user. Current version in database is ${exists.version}. Please refresh and try again.`
         }, { status: 409 });
       }
     } else {
       await prisma.product.update({
         where: { id },
-        data: parsed.data,
+        data: {
+          ...parsed.data,
+          version: { increment: 1 }
+        },
       });
     }
 

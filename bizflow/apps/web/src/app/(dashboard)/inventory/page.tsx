@@ -12,6 +12,7 @@ import ConfirmDialog from "@/shared/ui/ui/ConfirmDialog";
 import { useProducts, useDeleteProduct } from "@/shared/hooks/useProducts";
 import { useBusiness } from "@/shared/hooks/useBusiness";
 import { getBusinessProfile } from "@/shared/lib/business-intelligence";
+import { useProductCategories } from "@/shared/hooks/useProducts";
 import Pagination from "@/shared/ui/ui/Pagination";
 import { formatCurrency, exportToCSV } from "@/shared/lib/utils";
 import { Package, Plus, Search, AlertTriangle, TrendingUp, Download, Pencil, Trash2, Upload } from "lucide-react";
@@ -34,8 +35,12 @@ export default function InventoryPage() {
   const { data: business } = useBusiness();
   const deleteProduct = useDeleteProduct();
 
+  const { data: dbCategories } = useProductCategories();
+
   const profile = business ? getBusinessProfile(business.businessType) : null;
-  const categories = ["All", ...(profile ? profile.productCategories : ["Grains", "Pulses", "Edible Oil", "Spices", "Construction"]), "Other"];
+  const profileCats = profile ? profile.productCategories : ["Grains", "Pulses", "Edible Oil", "Spices", "Construction"];
+  const mergedCategories = Array.from(new Set([...(dbCategories || []), ...profileCats]));
+  const categories = ["All", ...mergedCategories, "Other"];
   const totalProducts = paged?.total ?? 0;
   const lowStock = paged?.stats?.lowStock ?? products.filter((p: any) => p.stock <= p.minStock).length;
   const totalValue = paged?.stats?.totalValue ?? products.reduce((s: number, p: any) => s + Math.max(0, p.stock) * p.standardCost, 0);

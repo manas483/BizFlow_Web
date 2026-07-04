@@ -1,6 +1,4 @@
 import { useState, useEffect } from 'react';
-import { exportRegister, exportBIReport } from '@/shared/lib/export-excel';
-
 export function useExportRegister() {
   const [categories, setCategories] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
@@ -27,6 +25,7 @@ export function useExportRegister() {
       const res = await fetch(url);
       const data = await res.json();
       
+      const { exportRegister } = await import('@/shared/lib/export-excel');
       exportRegister(type, category, data, { from: startDate || '', to: endDate || '' });
     } catch (error) {
       console.error('Failed to export register', error);
@@ -36,8 +35,9 @@ export function useExportRegister() {
     }
   };
 
-  const handleExportBI = (reportData: any) => {
+  const handleExportBI = async (reportData: any) => {
     try {
+      const { exportBIReport } = await import('@/shared/lib/export-excel');
       exportBIReport(reportData);
     } catch (error) {
       console.error('Failed to export BI report', error);

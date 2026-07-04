@@ -10,7 +10,10 @@ import { EmployeeInvitationEmail } from '@/emails/EmployeeInvitationEmail';
 import { PaymentReminderEmail } from '@/emails/PaymentReminderEmail';
 import { GstReminderEmail } from '@/emails/GstReminderEmail';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+if (!process.env.RESEND_API_KEY && process.env.NODE_ENV === 'production') {
+  console.warn('RESEND_API_KEY is missing. Email features will fail.');
+}
+const resend = new Resend(process.env.RESEND_API_KEY || 're_dummy_for_build');
 
 // H-N7 FIX: Read sender address from environment variable (configurable without redeploy)
 const SENDER_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'BizFlow <noreply@bizflow.littleryders.com>';

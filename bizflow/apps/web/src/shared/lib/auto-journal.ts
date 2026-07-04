@@ -940,3 +940,66 @@ export async function postProductionJournal(params: {
     console.error('[AutoJournal] Failed to post production journal:', err);
   }
 }
+
+// ── Reversing Journal (For Void/Cancel logic) ────────────────────────────────
+
+/**
+ * Creates a reversing journal entry that immutably offsets the original entry.
+ * It swaps debits and credits from the original entry.
+ */
+export async function postReversingJournal(params: {
+  originalJournalId: string;
+  reason: string;
+  businessId: string;
+  tx?: any;
+}): Promise<string | null> {
+  const { originalJournalId, reason, businessId, tx = prisma } = params;
+
+  if (!await isAutoJournalEnabled(businessId)) return null;
+
+  try {
+    const originalEntry = await tx.journalEntry.findUnique({
+      where: { id: originalJournalId, businessId },
+      include: { lines: true },
+    });
+
+    if (!originalEntry) {
+      console.warn(`[AutoJournal] Original journal ${originalJournalId} not found for reversal.`);
+      return null;
+    }
+
+    if (originalEntry.status === 'REVERSED') {
+      // Already reversed
+      return null;
+    }
+
+    // Mark original as reversed (optional, but good for reporting)
+    await tx.journalEntry.update({
+      where: { id: originalJournalId },
+      data: { status: 'REVERSED' },
+    });
+
+    // Create the reversing lines (swap debit and credit)
+    const reversedLines: JournalLineInput[] = originalEntry.lines.map((line: any) => ({
+      accountCode: line.accountCode || '',
+      accountName: line.accountName || 'Unknown Account',
+      accountType: line.accountType || 'EXPENSE',
+      debit: line.credit, // SWAP
+      credit: line.debit, // SWAP
+      narration: `Reversal of: ${line.narration || ''}`,
+    }));
+
+    // Post the new reversing journal
+    return await createJournal({
+      businessId,
+      narration: `Auto Reversal: ${reason} (Original: ${originalEntry.entryNumber})`,
+      reference: `REVERSAL:${originalEntry.id}`,
+      lines: reversedLines,
+      tx,
+    });
+  } catch (err) {
+    console.error('[AutoJournal] Failed to post reversing journal:', err);
+    return null;
+  }
+}
+

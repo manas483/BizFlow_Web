@@ -17,7 +17,17 @@ export function useProducts(search?: string, category?: string, page = 1, limit 
   });
 }
 
-
+export function useProductCategories() {
+  return useQuery({
+    queryKey: ["productCategories"],
+    queryFn: async () => {
+      const res = await fetch("/api/v1/products/categories");
+      if (!res.ok) throw new Error("Failed to fetch categories");
+      const data = await res.json();
+      return data.data as string[];
+    }
+  });
+}
 export function useCreateProduct() {
   const qc = useQueryClient();
   return useMutation({

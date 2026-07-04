@@ -9,12 +9,13 @@ import {
   TrendingUp, ShoppingCart, Users, Receipt, Package, AlertTriangle,
   ArrowRight, Plus, FileText, BarChart2
 } from "lucide-react";
-import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { formatCurrency, formatDate, exportToCSV } from "@/shared/lib/utils";
 import { useEffect, useState } from "react";
+
+const RevenueChart = dynamic(() => import("@/shared/ui/widgets/DashboardCharts").then(m => m.RevenueChart), { ssr: false });
+const ExpensePieChart = dynamic(() => import("@/shared/ui/widgets/DashboardCharts").then(m => m.ExpensePieChart), { ssr: false });
+const WeeklySalesChart = dynamic(() => import("@/shared/ui/widgets/DashboardCharts").then(m => m.WeeklySalesChart), { ssr: false });
 import NewSaleModal from "@/shared/ui/modals/NewSaleModal";
 import { useDashboardStats } from "@/shared/hooks/useDashboard";
 import { useProducts } from "@/shared/hooks/useProducts";
@@ -26,29 +27,7 @@ import { useRecommendations, trackActivity } from "@/shared/hooks/useRecommendat
 import { useAiInsights } from "@/shared/hooks/useAiInsights";
 import { useAiForecast } from "@/shared/hooks/useAiForecast";
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-surface-2 border border-primary/10 rounded-xl p-3 shadow-xl">
-      <p className="text-primary/40 text-xs mb-1">{label}</p>
-      {payload.map((p: any, i: number) => (
-        <p key={i} className="text-xs font-semibold" style={{ color: p.color }}>
-          {p.name}: {formatCurrency(p.value)}
-        </p>
-      ))}
-    </div>
-  );
-};
-
-const WeeklyTooltip = ({ active, payload, label }: any) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-surface-2 border border-primary/10 rounded-xl p-3 shadow-xl">
-      <p className="text-primary/40 text-xs mb-1">{label}</p>
-      <p className="text-xs font-semibold text-violet-400">{formatCurrency(payload[0]?.value)}</p>
-    </div>
-  );
-};
+// Custom Tooltips moved to DashboardCharts.tsx
 
 // Derive hour-based greeting
 function getGreeting() {
@@ -241,26 +220,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="pt-2">
             {mounted ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={chartData.length > 0 ? chartData : [{ monthIndex: 0, month: "—", sales: 0, expenses: 0, profit: 0 }]}>
-                  <defs>
-                    <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="month" tick={{ fill: "var(--text-muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis hide />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="sales" name="Sales" stroke="#8b5cf6" strokeWidth={2} fill="url(#salesGrad)" />
-                  <Area type="monotone" dataKey="expenses" name="Expenses" stroke="#ef4444" strokeWidth={2} fill="none" strokeDasharray="4 4" />
-                  <Area type="monotone" dataKey="profit" name="Profit" stroke="#10b981" strokeWidth={2} fill="url(#profitGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
+              <RevenueChart data={chartData.length > 0 ? chartData : [{ monthIndex: 0, month: "—", sales: 0, expenses: 0, profit: 0 }]} />
             ) : (
               <div className="h-[220px] flex items-center justify-center text-primary/20 text-xs">Loading chart...</div>
             )}
@@ -277,27 +237,7 @@ export default function DashboardPage() {
               <p className="text-center text-primary/40 text-xs py-8">No expense data yet</p>
             ) : (
               <>
-                <ResponsiveContainer width="100%" height={140}>
-                  <PieChart>
-                    <Pie
-                      data={categoryData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={65}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {categoryData.map((entry: any, index: number) => (
-                        <Cell key={index} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(v: any) => [formatCurrency(v), ""]}
-                      contentStyle={{ background: "var(--bg-surface-2)", border: "1px solid var(--border)", borderRadius: "12px", color: "var(--text-primary)", fontSize: "12px" }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <ExpensePieChart data={categoryData} />
                 <div className="space-y-1.5 mt-2">
                   {categoryData.slice(0, 4).map((cat: any) => (
                     <div key={cat.name} className="flex items-center justify-between">
@@ -363,14 +303,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="pt-0">
               {mounted ? (
-                <ResponsiveContainer width="100%" height={110}>
-                  <BarChart data={weeklyData} barSize={18}>
-                    <XAxis dataKey="day" tick={{ fill: "var(--text-muted)", fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis hide />
-                    <Tooltip content={<WeeklyTooltip />} cursor={{ fill: "rgba(139,92,246,0.08)" }} />
-                    <Bar dataKey="sales" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <WeeklySalesChart data={weeklyData} />
               ) : (
                 <div className="h-[110px]" />
               )}

@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
 
     const sales = await prisma.sale.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ invoiceDate: 'desc' }, { createdAt: 'desc' }],
       include: {
         customer: {
           select: {
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
     const today = new Date().toISOString().slice(0, 10);
     const filename = `All-Invoices_${copy}_${today}.pdf`;
 
-    return new NextResponse(mergedBytes, {
+    return new NextResponse(mergedBytes as any, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${filename}"`,
