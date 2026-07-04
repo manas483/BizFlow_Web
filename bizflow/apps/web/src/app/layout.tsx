@@ -5,6 +5,7 @@ import { AppProvider } from "@/context/AppContext";
 import { Toaster } from "react-hot-toast";
 import QueryProvider from "@/shared/ui/QueryProvider";
 import { SessionProvider } from "next-auth/react";
+import { auth } from "@/shared/lib/auth";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -54,7 +55,9 @@ export const viewport: Viewport = {
   themeColor: "#0d0d1a",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -66,7 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
-        <SessionProvider>
+        <SessionProvider session={session}>
           <QueryProvider>
             <AppProvider>
               {children}

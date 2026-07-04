@@ -9,6 +9,9 @@ import {
   BarChart3, Settings,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 const mobileNav = [
   { href: "/", icon: LayoutDashboard, label: "Home" },
@@ -30,6 +33,22 @@ export default function DashboardLayoutInner({
   title: string;
 }) {
   const pathname = usePathname();
+  const { status } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    }
+  }, [status, router]);
+
+  if (status === "loading" || status === "unauthenticated") {
+    return (
+      <div className="flex h-screen bg-app items-center justify-center">
+        <div className="w-8 h-8 border-4 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-app text-primary overflow-hidden">

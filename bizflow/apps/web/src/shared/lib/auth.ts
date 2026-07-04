@@ -192,6 +192,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.sessionStart = now;
         token.lastActive = now;
         token.permissionsRefreshedAt = now;
+        token.name = user.name;
+        token.email = user.email;
         logger.info({ category: "AUTH", event: "JWT_CREATED", message: "Step 5 ✅ JWT callback invoked (initial sign-in)", userId: user.id });
       }
 

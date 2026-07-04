@@ -45,14 +45,21 @@ export async function GET(req: NextRequest) {
     }
 
     // Update employee status to PENDING_VERIFICATION (scoped to this business)
-    await prisma.employee.updateMany({
+    // Avoid updateMany as it may use internal transactions not supported by Neon HTTP
+    const pendingEmployees = await prisma.employee.findMany({
       where: {
         email: invitation.email,
         businessId: invitation.businessId,
         status: 'INVITATION_SENT',
       },
-      data: { status: 'PENDING_VERIFICATION' },
+      select: { id: true },
     });
+    for (const emp of pendingEmployees) {
+      await prisma.employee.update({
+        where: { id: emp.id },
+        data: { status: 'PENDING_VERIFICATION' },
+      });
+    }
 
     const expiresInHours = Math.round((invitation.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60));
 
@@ -95,49 +102,56 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(validatedData.password, 10);
 
-    await prisma.$transaction(async (tx) => {
-      // 1. Update user — set password + verify email
-      const user = await tx.user.update({
-        where: { email: invitation.email },
-        data: {
-          password: hashedPassword,
-          emailVerified: true,
-        },
-      });
+    // Using sequential queries instead of $transaction because Neon HTTP driver
+    // does not support interactive transactions.
 
-      // 2. Activate the employee and link userId (scoped to this business + email)
-      await tx.employee.updateMany({
-        where: { email: invitation.email, businessId: invitation.businessId },
+    // 1. Update user — set password + verify email
+    const user = await prisma.user.update({
+      where: { email: invitation.email },
+      data: {
+        password: hashedPassword,
+        emailVerified: true,
+      },
+    });
+
+    // 2. Activate the employee and link userId (scoped to this business + email)
+    const employeesToActivate = await prisma.employee.findMany({
+      where: { email: invitation.email, businessId: invitation.businessId },
+      select: { id: true },
+    });
+    for (const emp of employeesToActivate) {
+      await prisma.employee.update({
+        where: { id: emp.id },
         data: { status: 'active', userId: user.id },
       });
+    }
 
-      // 3. Mark invitation as used (soft-delete for audit trail) then delete
-      await tx.invitation.update({ where: { id: invitation.id }, data: { used: true } });
-      await tx.invitation.delete({ where: { id: invitation.id } });
+    // 3. Mark invitation as used (soft-delete for audit trail) then delete
+    await prisma.invitation.update({ where: { id: invitation.id }, data: { used: true } });
+    await prisma.invitation.delete({ where: { id: invitation.id } });
 
-      // 4. Audit log
-      await tx.userActivity.create({
-        data: {
-          businessId: invitation.businessId,
-          userId: user.id,
-          eventType: 'EMPLOYEE_ACCOUNT_ACTIVATED',
-          metadata: {
-            email: invitation.email,
-            role: invitation.role,
-          },
+    // 4. Audit log
+    await prisma.userActivity.create({
+      data: {
+        businessId: invitation.businessId,
+        userId: user.id,
+        eventType: 'EMPLOYEE_ACCOUNT_ACTIVATED',
+        metadata: {
+          email: invitation.email,
+          role: invitation.role,
         },
-      });
+      },
+    });
 
-      // 5. Notification to admins only
-      await tx.notification.create({
-        data: {
-          businessId: invitation.businessId,
-          type: 'SUCCESS',
-          title: 'Employee Account Activated',
-          message: `${invitation.email} has accepted their invitation and activated their ${invitation.role.replace('_', ' ')} account.`,
-          targetRole: 'SUPER_ADMIN',
-        },
-      });
+    // 5. Notification to admins only
+    await prisma.notification.create({
+      data: {
+        businessId: invitation.businessId,
+        type: 'SUCCESS',
+        title: 'Employee Account Activated',
+        message: `${invitation.email} has accepted their invitation and activated their ${invitation.role.replace('_', ' ')} account.`,
+        targetRole: 'SUPER_ADMIN',
+      },
     });
 
     return NextResponse.json({ success: true, message: 'Account setup complete. You can now log in.' });
@@ -148,4 +162,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-

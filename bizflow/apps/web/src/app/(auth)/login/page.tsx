@@ -108,8 +108,7 @@ function LoginContent() {
           setError(res.error);
         }
       } else {
-        router.push("/");
-        router.refresh();
+        window.location.href = "/";
       }
     } catch {
       setError("An unexpected error occurred. Please try again.");
