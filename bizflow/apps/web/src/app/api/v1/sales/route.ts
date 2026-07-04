@@ -13,6 +13,7 @@ import { extractStateCodeFromGST } from '@/shared/lib/gst-engine';
 import { calculateInvoiceTotal } from '@/shared/lib/invoice-engine';
 import { z } from 'zod';
 import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
+import { invalidateCache } from '@/shared/lib/cache';
 
 export async function GET(req: NextRequest) {
   try {
@@ -170,6 +171,12 @@ export async function POST(req: NextRequest) {
       await tx.userActivity.create({ data: { businessId: biz, userId: session.user.id, eventType: 'sale_created', metadata: { saleId: sale.id, invoiceNo, total } } });
       return sale;
     });
+
+    // Invalidate dashboard and reports caches
+    await Promise.all([
+      invalidateCache(`dashboard:${biz}`),
+      invalidateCache(`reports:${biz}:*`)
+    ]).catch(console.error);
 
     return created(result);
   } catch (e: any) {
