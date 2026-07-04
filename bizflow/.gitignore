@@ -55,3 +55,11 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# === Scratch and Temp Files ===
+scratch/
+scripts/
+test_*.js
+test_*.ts
+next_server_log.txt
+*.csv
