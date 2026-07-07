@@ -6,7 +6,8 @@ const nextConfig: any = {
 
   // Strict environment validation during build/startup
   env: (() => {
-    if (process.env.NODE_ENV === 'production' && !process.env.SKIP_ENV_VALIDATION) {
+    // Skip validation during Vercel builds as some vars might be runtime-only
+    if (process.env.NODE_ENV === 'production' && !process.env.SKIP_ENV_VALIDATION && !process.env.VERCEL) {
       const required = ['DATABASE_URL', 'NEXTAUTH_SECRET', 'NEXTAUTH_URL', 'RESEND_API_KEY'];
       const missing = required.filter(key => !process.env[key]);
       if (missing.length > 0) {
