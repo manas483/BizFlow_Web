@@ -108,6 +108,7 @@ export default function SalesPage() {
   const [bosPayTarget, setBosPayTarget] = useState<{ id: string; total: number; paid: number; billNo: string } | null>(null);
   const [bosPayInput, setBosPayInput] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [selectedSaleIds, setSelectedSaleIds] = useState<string[]>([]);
   const router = useRouter();
   const queryClient = useQueryClient();
   const deleteSale = useDeleteSale();
@@ -292,6 +293,9 @@ export default function SalesPage() {
         </div>
         {/* Action buttons — scrollable row on mobile */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {activeTab === "invoices" && selectedSaleIds.length > 0 ? (
+            <Button variant="danger" size="sm" icon={<Trash2 size={14} />} onClick={() => setDeleteInvoiceTarget({ id: "bulk-delete", invoiceNo: `${selectedSaleIds.length} selected invoices` })} className="whitespace-nowrap flex-shrink-0">Delete Selected ({selectedSaleIds.length})</Button>
+          ) : null}
           <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => setSaleModalOpen(true)} className="whitespace-nowrap flex-shrink-0">Tax Invoice</Button>
           <Button variant="secondary" size="sm" icon={<FileText size={14} />} onClick={() => setQuotationModalOpen(true)} className="whitespace-nowrap flex-shrink-0">Quotation</Button>
           <Button variant="secondary" size="sm" icon={<FileDown size={14} />} onClick={() => setCnModalOpen(true)} className="whitespace-nowrap flex-shrink-0">Credit Note</Button>
@@ -352,6 +356,16 @@ export default function SalesPage() {
               <table className="w-full min-w-[640px]">
                 <thead>
                   <tr className="border-b border-primary/10">
+                    <th className="text-left px-4 py-3 w-10">
+                      <input type="checkbox"
+                        checked={sales.length > 0 && selectedSaleIds.length === sales.length}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedSaleIds(sales.map((s: any) => s.id));
+                          else setSelectedSaleIds([]);
+                        }}
+                        className="rounded border-primary/20 bg-transparent text-violet-500 focus:ring-violet-500/20 w-4 h-4 cursor-pointer"
+                      />
+                    </th>
                     {["Invoice ID", "Customer", "Date", "Items", "Total", "Paid", "Due", "Status", "Actions"].map((h) => (
                       <th key={h} className="text-left px-4 py-3 text-primary/40 text-xs font-medium whitespace-nowrap">{h}</th>
                     ))}
@@ -359,13 +373,23 @@ export default function SalesPage() {
                 </thead>
                 <tbody className="divide-y divide-primary/10">
                   {salesLoading ? (
-                    <tr><td colSpan={9} className="text-center py-12 text-primary/40 text-sm">Loading sales...</td></tr>
+                    <tr><td colSpan={10} className="text-center py-12 text-primary/40 text-sm">Loading sales...</td></tr>
                   ) : sales.length === 0 ? (
-                    <tr><td colSpan={9} className="text-center py-12 text-primary/40 text-sm">No invoices found</td></tr>
+                    <tr><td colSpan={10} className="text-center py-12 text-primary/40 text-sm">No invoices found</td></tr>
                   ) : sales.map((sale: any) => {
                     const due = sale.total - sale.paid;
                     return (
                       <tr key={sale.id} className="hover:bg-primary/5 transition-colors">
+                        <td className="px-4 py-3.5 w-10">
+                          <input type="checkbox"
+                            checked={selectedSaleIds.includes(sale.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedSaleIds(prev => [...prev, sale.id]);
+                              else setSelectedSaleIds(prev => prev.filter(id => id !== sale.id));
+                            }}
+                            className="rounded border-primary/20 bg-transparent text-violet-500 focus:ring-violet-500/20 w-4 h-4 opacity-50 hover:opacity-100 transition-opacity cursor-pointer"
+                          />
+                        </td>
                         <td className="px-4 py-3.5 text-violet-400 text-xs font-mono">{sale.invoiceNo}</td>
                         <td className="px-4 py-3.5 text-primary text-sm font-medium">{sale.customer?.name || "Walk-in"}</td>
                         <td className="px-4 py-3.5 text-primary/40 text-xs">{formatDate(sale.invoiceDate || sale.createdAt)}</td>
@@ -674,7 +698,18 @@ export default function SalesPage() {
         loading={deleteSale.isPending}
         onConfirm={async () => {
           if (!deleteInvoiceTarget) return;
-          try { await deleteSale.mutateAsync(deleteInvoiceTarget.id); } catch (err: any) { toast.error(err.message || "Failed to delete invoice"); }
+          try {
+            if (deleteInvoiceTarget.id === "bulk-delete") {
+              for (const id of selectedSaleIds) {
+                await deleteSale.mutateAsync(id);
+              }
+              setSelectedSaleIds([]);
+              toast.success(`Deleted ${selectedSaleIds.length} invoices`);
+            } else {
+              await deleteSale.mutateAsync(deleteInvoiceTarget.id);
+              toast.success("Invoice deleted");
+            }
+          } catch (err: any) { toast.error(err.message || "Failed to delete invoice(s)"); }
           setDeleteInvoiceTarget(null);
         }}
         onCancel={() => setDeleteInvoiceTarget(null)}

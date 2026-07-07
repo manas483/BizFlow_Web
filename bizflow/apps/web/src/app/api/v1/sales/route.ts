@@ -14,6 +14,10 @@ import { calculateInvoiceTotal } from '@/shared/lib/invoice-engine';
 import { z } from 'zod';
 import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
 import { invalidateCache } from '@/shared/lib/cache';
+import {
+  updateLooseStock,
+  formatLooseStock,
+} from '@/shared/lib/loose-utils';
 
 export async function GET(req: NextRequest) {
   try {
@@ -106,10 +110,27 @@ export async function POST(req: NextRequest) {
       for (const item of items) {
         const product = productMap.get(item.productId);
         if (!product.active) throw Object.assign(new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`), { code: 'BUSINESS_RULE' });
-        if (product.stock < item.qty) throw Object.assign(new Error(`Insufficient stock for "${product.name}"`), { code: 'BUSINESS_RULE' });
-        
+
+        if (product.allowLooseSale) {
+          const currentBaseStock = Number(product.baseStock) || 0;
+          const packaging = item.packagingId
+            ? product.packagingOptions?.find((p: any) => p.id === item.packagingId)
+            : null;
+          const factor = packaging ? Number(packaging.conversionFactor) : 1;
+          const deduction = Number(item.saleQty || item.qty) * factor;
+          if (deduction > currentBaseStock) {
+            const primaryPkg = product.packagingOptions?.find((p: any) => p.isPurchaseUnit);
+            const pFactor = primaryPkg ? Number(primaryPkg.conversionFactor) : 1;
+            const display = formatLooseStock(currentBaseStock, pFactor, primaryPkg?.unit || product.unit, product.baseUnit || 'units');
+            throw Object.assign(new Error(`Insufficient stock for "${product.name}" (have ${display.display})`), { code: 'BUSINESS_RULE' });
+          }
+        } else {
+          if (product.stock < item.qty) throw Object.assign(new Error(`Insufficient stock for "${product.name}"`), { code: 'BUSINESS_RULE' });
+        }
+
+        const effectiveQty = item.saleQty || item.qty;
         invoiceLines.push({
-          qty: item.qty,
+          qty: effectiveQty,
           price: item.price,
           discount: item.discount || 0,
           gstRate: item.gstRate || product.gstRate || 0,
@@ -137,7 +158,20 @@ export async function POST(req: NextRequest) {
 
       // Deduct stock for each item
       for (const item of items) {
-        await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
+        const product = productMap.get(item.productId);
+        if (product.allowLooseSale) {
+          const packaging = item.packagingId
+            ? product.packagingOptions?.find((p: any) => p.id === item.packagingId)
+            : null;
+          const factor = packaging ? Number(packaging.conversionFactor) : 1;
+          const effectiveSaleQty = Number(item.saleQty || item.qty);
+          const baseDeduction = effectiveSaleQty * factor;
+          const primaryPkg = product.packagingOptions?.find((p: any) => p.isPurchaseUnit);
+          const primaryFactor = primaryPkg ? Number(primaryPkg.conversionFactor) : 1;
+          await updateLooseStock(tx, item.productId, -baseDeduction, primaryFactor);
+        } else {
+          await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
+        }
       }
 
       const sale = await tx.sale.create({
@@ -148,14 +182,21 @@ export async function POST(req: NextRequest) {
           items: {
             create: enriched.map((i: any) => {
               const product = productMap.get(i.productId);
+              const effectiveSaleQty = i.saleQty || i.qty;
               return {
                 productId: i.productId,
-                qty: i.qty,
+                qty: product.allowLooseSale ? Math.round(Number(effectiveSaleQty)) : i.qty,
                 price: i.price,
                 purchasePrice: i.purchasePrice,
                 discount: parseFloat(i.discount) || 0,
                 hsnCode: i.hsnCode,
                 gstRate: parseFloat(i.gstRate) || 0,
+                // Loose sale fields
+                saleQty: product.allowLooseSale ? effectiveSaleQty : i.qty,
+                saleUnit: i.saleUnit || product.unit,
+                isLoose: i.isLoose ?? false,
+                packagingId: i.packagingId ?? null,
+                packagingLabel: i.packagingLabel ?? null,
                 ...buildProductSnapshot(product),
               };
             })

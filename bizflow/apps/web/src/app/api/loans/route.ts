@@ -122,7 +122,8 @@ export async function POST(req: NextRequest) {
       data.amount,
       data.interestRate,
       data.tenure,
-      startDate
+      startDate,
+      data.emiDay ?? undefined
     );
 
     // Compute end date from schedule

@@ -141,6 +141,38 @@ function createPrismaClient() {
           return result;
         },
       },
+      product: {
+        async update({ args, query }) {
+          const isUpdatingStock = args.data.stock !== undefined;
+          const isUpdatingBaseStock = args.data.baseStock !== undefined;
+
+          if (isUpdatingStock && !isUpdatingBaseStock) {
+            const current = await (this as any).findUnique({
+              where: args.where,
+              select: { allowLooseSale: true },
+            });
+            if (current?.allowLooseSale) {
+              throw new Error("Direct modification of 'stock' on loose-enabled products is forbidden. Use updateLooseStock() instead.");
+            }
+          }
+          return query(args);
+        },
+        async updateMany({ args, query }) {
+          const isUpdatingStock = (args.data as any)?.stock !== undefined;
+          const isUpdatingBaseStock = (args.data as any)?.baseStock !== undefined;
+
+          if (isUpdatingStock && !isUpdatingBaseStock) {
+            const products = await (this as any).findMany({
+              where: args.where,
+              select: { allowLooseSale: true },
+            });
+            if (products.some((p: any) => p.allowLooseSale)) {
+              throw new Error("Direct modification of 'stock' on loose-enabled products is forbidden. Use updateLooseStock() instead.");
+            }
+          }
+          return query(args);
+        }
+      }
     },
   }) as unknown as PrismaClient; // Cast required because global type expects PrismaClient
 }

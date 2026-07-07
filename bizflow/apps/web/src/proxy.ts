@@ -40,10 +40,9 @@ export function proxy(req: NextRequest) {
     req.cookies.has("__Secure-next-auth.session-token");
 
   if (isPublic) {
-    // Redirect already-authenticated users away from auth pages
-    if (isLoggedIn && (pathname.startsWith('/login') || pathname.startsWith('/register'))) {
-      return NextResponse.redirect(new URL('/', req.url));
-    }
+    // I-8 FIX: Do not redirect authenticated users away from auth pages at the edge.
+    // Let the client/server components handle it to prevent infinite redirect loops
+    // when cookies are present but invalid.
     return NextResponse.next();
   }
 

@@ -31,7 +31,8 @@ export function generateEMISchedule(
   principal: number,
   annualRate: number,
   tenureMonths: number,
-  startDate: Date
+  startDate: Date,
+  emiDay?: number
 ): { emiAmount: number; totalInterest: number; totalPayable: number; schedule: EMIScheduleRow[] } {
   const monthlyRate = annualRate / 100 / 12;
   let emiAmount: number;
@@ -61,7 +62,7 @@ export function generateEMISchedule(
       const adjustedEmi = principalAmount + interestAmount;
       schedule.push({
         installmentNumber: i,
-        dueDate: addMonths(startDate, i),
+        dueDate: addMonths(startDate, i, emiDay),
         emiAmount: Math.round(adjustedEmi * 100) / 100,
         principalAmount,
         interestAmount,
@@ -75,7 +76,7 @@ export function generateEMISchedule(
     const closingBalance = Math.round((balance - principalAmount) * 100) / 100;
     schedule.push({
       installmentNumber: i,
-      dueDate: addMonths(startDate, i),
+      dueDate: addMonths(startDate, i, emiDay),
       emiAmount,
       principalAmount,
       interestAmount,
@@ -373,9 +374,24 @@ export function computeCashFlow(
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
-function addMonths(date: Date, months: number): Date {
+function addMonths(date: Date, months: number, emiDay?: number): Date {
   const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
+  const currentMonth = d.getMonth();
+  d.setMonth(currentMonth + months);
+  
+  // Handle standard JS Date overflow (e.g. Jan 31 + 1 month -> Mar 3)
+  const expectedMonth = (currentMonth + months) % 12;
+  const targetMonth = expectedMonth < 0 ? expectedMonth + 12 : expectedMonth;
+  if (d.getMonth() !== targetMonth) {
+    d.setDate(0); // Go to last day of the intended month
+  }
+  
+  if (emiDay !== undefined) {
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+    d.setDate(Math.min(emiDay, lastDayOfMonth));
+  }
   return d;
 }
 

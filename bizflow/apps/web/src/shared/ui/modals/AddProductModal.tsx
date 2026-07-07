@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import Modal, { FormField, ModalInput, ModalFooter } from "@/shared/ui/ui/Modal";
 import { CustomSelect } from "@/shared/ui/ui/CustomSelect";
-import { Package, Calendar } from "lucide-react";
+import { Package, Calendar, Plus, Trash2, Scale } from "lucide-react";
 import { useCreateProduct, useProductCategories } from "@/shared/hooks/useProducts";
 import { useBusiness } from "@/shared/hooks/useBusiness";
 import { getBusinessProfile } from "@/shared/lib/business-intelligence";
@@ -26,7 +26,17 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
     hsnCode: "", gstRate: "0",
     purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "",
     reorderLevel: "", preferredSupplier: "",
+    allowLooseSale: false,
+    baseUnit: "",
   });
+
+  // Packaging variants state for loose sale products
+  interface PackagingRow {
+    label: string; unit: string; conversionFactor: string;
+    defaultPrice: string; isPurchaseUnit: boolean; isLoose: boolean; isDefault: boolean;
+  }
+  const emptyPkg = (): PackagingRow => ({ label: "", unit: "", conversionFactor: "", defaultPrice: "", isPurchaseUnit: false, isLoose: false, isDefault: false });
+  const [packagingRows, setPackagingRows] = useState<PackagingRow[]>([]);
 
   // Bidirectional calculations for Bags, Packets in 1 Bag, and Stock
   const handleBagsChange = (bagsVal: string) => {
@@ -103,6 +113,20 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
     e.preventDefault();
     setLoading(true);
     try {
+      // Build packaging options for loose-enabled products
+      const packagingOptions = form.allowLooseSale
+        ? packagingRows.filter(p => p.label && p.conversionFactor).map((p, i) => ({
+            label: p.label,
+            unit: p.unit || form.baseUnit,
+            conversionFactor: parseFloat(p.conversionFactor) || 1,
+            defaultPrice: p.defaultPrice ? parseFloat(p.defaultPrice) : null,
+            isPurchaseUnit: p.isPurchaseUnit,
+            isLoose: p.isLoose,
+            isDefault: p.isDefault,
+            sortOrder: i,
+          }))
+        : undefined;
+
       await createProduct.mutateAsync({
         ...form,
         stock: parseInt(form.stock) || 0,
@@ -116,8 +140,12 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
         purchaseInvoiceNo: form.purchaseInvoiceNo || null,
         reorderLevel: parseInt(form.reorderLevel) || 0,
         preferredSupplier: form.preferredSupplier || null,
+        allowLooseSale: form.allowLooseSale,
+        baseUnit: form.allowLooseSale ? form.baseUnit : null,
+        packagingOptions,
       });
-      setForm({ name: "", sku: "", category: "Grains", unit: "pcs", noOfBags: "", unitsPerBag: "1", stock: "", minStock: "", standardCost: "", sellingPrice: "", supplier: "", hsnCode: "", gstRate: "0", purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "", reorderLevel: "", preferredSupplier: "" });
+      setForm({ name: "", sku: "", category: "Grains", unit: "pcs", noOfBags: "", unitsPerBag: "1", stock: "", minStock: "", standardCost: "", sellingPrice: "", supplier: "", hsnCode: "", gstRate: "0", purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "", reorderLevel: "", preferredSupplier: "", allowLooseSale: false, baseUnit: "" });
+      setPackagingRows([]);
       onClose();
     } catch (error: any) {
       console.error(error);
@@ -233,6 +261,138 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
               ]}
             />
           </FormField>
+        </div>
+
+        {/* ── Loose Sale Configuration ── */}
+        <div className="border-t pt-4" style={{ borderColor: "var(--border)" }}>
+          <div className="flex items-center gap-3 mb-3">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !form.allowLooseSale;
+                setForm(f => ({ ...f, allowLooseSale: next }));
+                if (next && packagingRows.length === 0) {
+                  setPackagingRows([
+                    { label: "50 Kg Bag", unit: "Bag", conversionFactor: "50", defaultPrice: "", isPurchaseUnit: true, isLoose: false, isDefault: true },
+                    { label: "Loose", unit: "Kg", conversionFactor: "1", defaultPrice: "", isPurchaseUnit: false, isLoose: true, isDefault: false },
+                  ]);
+                  if (!form.baseUnit) setForm(f => ({ ...f, allowLooseSale: true, baseUnit: "Kg" }));
+                }
+              }}
+              className={`relative w-10 h-5 rounded-full transition-colors ${
+                form.allowLooseSale ? "bg-violet-500" : "bg-white/10"
+              }`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                form.allowLooseSale ? "translate-x-5" : ""
+              }`} />
+            </button>
+            <div className="flex items-center gap-2">
+              <Scale size={14} className="text-violet-400" />
+              <span className="text-sm font-medium">Allow Loose Sale</span>
+            </div>
+            <span className="text-xs text-primary/40">Sell in fractional units (Kg, Liter, g, ml)</span>
+          </div>
+
+          {form.allowLooseSale && (
+            <div className="space-y-3 pl-2 border-l-2 border-violet-500/30 ml-2">
+              <FormField label="Base Unit" hint="Smallest unit for this product (Kg, Liter, g, ml)">
+                <CustomSelect
+                  value={form.baseUnit}
+                  onChange={(v) => setForm({ ...form, baseUnit: v })}
+                  options={[
+                    { value: "Kg", label: "Kilograms (Kg)" },
+                    { value: "g", label: "Grams (g)" },
+                    { value: "Liter", label: "Liters (L)" },
+                    { value: "ml", label: "Milliliters (ml)" },
+                  ]}
+                />
+              </FormField>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-primary/60">Packaging Variants</label>
+                  <button
+                    type="button"
+                    onClick={() => setPackagingRows([...packagingRows, emptyPkg()])}
+                    className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1"
+                  >
+                    <Plus size={12} /> Add Variant
+                  </button>
+                </div>
+
+                {packagingRows.map((pkg, idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_80px_80px_80px_auto] gap-2 items-end">
+                    <ModalInput
+                      placeholder="e.g. 50 Kg Bag"
+                      value={pkg.label}
+                      onChange={(e) => {
+                        const rows = [...packagingRows];
+                        rows[idx] = { ...rows[idx], label: e.target.value };
+                        setPackagingRows(rows);
+                      }}
+                    />
+                    <ModalInput
+                      type="number" min="0" step="any"
+                      placeholder="Factor"
+                      title="Conversion factor (1 of this = N base units)"
+                      value={pkg.conversionFactor}
+                      onChange={(e) => {
+                        const rows = [...packagingRows];
+                        rows[idx] = { ...rows[idx], conversionFactor: e.target.value };
+                        setPackagingRows(rows);
+                      }}
+                    />
+                    <ModalInput
+                      type="number" min="0" step="any"
+                      placeholder="₹ Price"
+                      title="Default selling price (optional)"
+                      value={pkg.defaultPrice}
+                      onChange={(e) => {
+                        const rows = [...packagingRows];
+                        rows[idx] = { ...rows[idx], defaultPrice: e.target.value };
+                        setPackagingRows(rows);
+                      }}
+                    />
+                    <div className="flex items-center gap-1">
+                      <label className="flex items-center gap-1 text-[10px] text-primary/50" title="Primary purchase unit">
+                        <input
+                          type="radio" name="purchaseUnit" checked={pkg.isPurchaseUnit}
+                          onChange={() => {
+                            const rows = packagingRows.map((r, i) => ({ ...r, isPurchaseUnit: i === idx }));
+                            setPackagingRows(rows);
+                          }}
+                        />
+                        Buy
+                      </label>
+                      <label className="flex items-center gap-1 text-[10px] text-primary/50" title="Loose variant">
+                        <input
+                          type="checkbox" checked={pkg.isLoose}
+                          onChange={(e) => {
+                            const rows = [...packagingRows];
+                            rows[idx] = { ...rows[idx], isLoose: e.target.checked };
+                            setPackagingRows(rows);
+                          }}
+                        />
+                        Loose
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPackagingRows(packagingRows.filter((_, i) => i !== idx))}
+                      className="text-red-400/60 hover:text-red-400 p-1"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+
+                {packagingRows.length === 0 && (
+                  <p className="text-xs text-primary/30 italic">No packaging variants. Click "Add Variant" to define pack sizes.</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <ModalFooter onClose={onClose} loading={loading} submitLabel="Add Product" />

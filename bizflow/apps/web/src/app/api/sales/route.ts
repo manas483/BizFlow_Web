@@ -10,6 +10,13 @@ import { adjustStockWithLayers } from '@/shared/lib/stock-engine';
 import { postSaleJournal } from '@/shared/lib/auto-journal';
 import { buildProductSnapshot } from '@/shared/lib/product-snapshot';
 import { withPerf, getTimer } from '@/shared/lib/telemetry';
+import {
+  packToBaseUnit,
+  baseToLayerQty,
+  updateLooseStock,
+  formatLooseStock,
+  deriveStockFromBase,
+} from '@/shared/lib/loose-utils';
 
 export function computeDueDate(invoiceDate: string | null | undefined, paymentTerms: string | null | undefined, customDueDate: string | null | undefined): Date | null {
   if (paymentTerms === 'custom' && customDueDate) return new Date(customDueDate);
@@ -301,9 +308,30 @@ async function handlePOST(req: NextRequest) {
       for (const item of items) {
         const product = productMap.get(item.productId);
         if (!product.active) throw new Error(`Product "${product.name}" is archived and cannot be used in new transactions.`);
-        if (product.stock < item.qty) throw new Error(`Insufficient stock for ${product.name}`);
+
+        if (product.allowLooseSale) {
+          // ── Loose-enabled product: check against baseStock ──
+          const currentBaseStock = Number(product.baseStock) || 0;
+          const packaging = item.packagingId
+            ? product.packagingOptions?.find((p: any) => p.id === item.packagingId)
+            : null;
+          const factor = packaging ? Number(packaging.conversionFactor) : 1;
+          const deduction = Number(item.saleQty || item.qty) * factor;
+          if (deduction > currentBaseStock) {
+            const primaryPkg = product.packagingOptions?.find((p: any) => p.isPurchaseUnit);
+            const pFactor = primaryPkg ? Number(primaryPkg.conversionFactor) : 1;
+            const display = formatLooseStock(currentBaseStock, pFactor, primaryPkg?.unit || product.unit, product.baseUnit || 'units');
+            throw new Error(`Insufficient stock for ${product.name} (have ${display.display})`);
+          }
+        } else {
+          // ── Standard product: existing integer check ──
+          if (product.stock < item.qty) throw new Error(`Insufficient stock for ${product.name}`);
+        }
+
+        // Use saleQty for invoice total if present, otherwise qty
+        const effectiveQty = item.saleQty || item.qty;
         invoiceLines.push({
-          qty: item.qty,
+          qty: effectiveQty,
           price: product.sellingPrice,
           discount: item.discount || 0,
           gstRate: item.gstRate || product.gstRate || 0,
@@ -367,9 +395,12 @@ async function handlePOST(req: NextRequest) {
           items: {
             create: items.map((item: any) => {
               const product = productMap.get(item.productId);
+              const effectiveSaleQty = item.saleQty || item.qty;
               return {
                 productId: item.productId,
-                qty: item.qty,
+                qty: product.allowLooseSale
+                  ? Math.round(Number(effectiveSaleQty))  // Legacy Int — derived
+                  : item.qty,
                 price: item.price,
                 purchasePrice: 0, // Will be updated after layer consumption
                 discount: parseFloat(item.discount) || 0,
@@ -377,6 +408,12 @@ async function handlePOST(req: NextRequest) {
                 gstRate: parseFloat(item.gstRate) || 0,
                 originalPrice: item.originalPrice ?? null,
                 priceOverrideReason: item.priceOverrideReason || null,
+                // ── Loose Sale Fields ──
+                saleQty: product.allowLooseSale ? effectiveSaleQty : item.qty,
+                saleUnit: item.saleUnit || product.unit,
+                isLoose: item.isLoose ?? false,
+                packagingId: item.packagingId ?? null,
+                packagingLabel: item.packagingLabel ?? null,
                 ...buildProductSnapshot(product),
               };
             })
@@ -398,43 +435,144 @@ async function handlePOST(req: NextRequest) {
       // 4. Stock auto-deduction via Layer-Aware Stock Engine
       let totalSaleCOGS = 0;
       for (const item of items) {
-        if (layerEngineEnabled) {
-          const layerResult = await adjustStockWithLayers({
-            productId: item.productId,
-            qty: item.qty,
-            type: 'sale',
-            businessId: session.user.businessId,
-            transactionId: sale.id,
-            transactionType: 'sale',
-            tx,
+        const product = productMap.get(item.productId);
+
+        if (product.allowLooseSale) {
+          // ── Loose-enabled product: deduct from baseStock, consume layers in bag-equivalent ──
+          const packaging = item.packagingId
+            ? product.packagingOptions?.find((p: any) => p.id === item.packagingId)
+            : null;
+          const factor = packaging ? Number(packaging.conversionFactor) : 1;
+          const effectiveSaleQty = Number(item.saleQty || item.qty);
+          const baseDeduction = effectiveSaleQty * factor;
+
+          // Get primary packaging for layer conversion
+          const primaryPkg = product.packagingOptions?.find((p: any) => p.isPurchaseUnit);
+          const primaryFactor = primaryPkg ? Number(primaryPkg.conversionFactor) : 1;
+
+          // Track previous baseStock for bag_opened detection
+          const previousBaseStock = Number(product.baseStock) || 0;
+
+          // Update baseStock via write guard (also derives Product.stock)
+          const newBaseStock = await updateLooseStock(tx, item.productId, -baseDeduction, primaryFactor);
+
+          // Layer consumption in bag-equivalent
+          const layerQty = baseToLayerQty(baseDeduction, primaryFactor);
+
+          if (layerEngineEnabled) {
+            const layerResult = await adjustStockWithLayers({
+              productId: item.productId,
+              qty: layerQty,
+              type: 'sale',
+              businessId: session.user.businessId,
+              transactionId: sale.id,
+              transactionType: 'sale',
+              tx,
+              skipStockUpdate: true, // We already updated stock via updateLooseStock
+              skipMovement: true,    // We create our own base-unit movement records
+            });
+
+            if (layerResult && layerResult.totalCOGS > 0) {
+              const actualUnitCost = layerResult.totalCOGS / effectiveSaleQty;
+              await tx.saleItem.updateMany({
+                where: { saleId: sale.id, productId: item.productId },
+                data: { purchasePrice: Math.round(actualUnitCost * 10000) / 10000 },
+              });
+              totalSaleCOGS += layerResult.totalCOGS;
+            }
+          }
+
+          // Create base-unit stock movement for audit trail
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              type: 'OUT',
+              quantity: 0,
+              baseQty: -baseDeduction,
+              baseUnit: product.baseUnit,
+              movementSubtype: item.isLoose ? 'loose_sale' : null,
+              referenceId: sale.id,
+              notes: `Sale ${sale.invoiceNo}: ${effectiveSaleQty} ${item.saleUnit || product.baseUnit}`,
+              businessId: session.user.businessId,
+            },
           });
 
-          // Update SaleItem with actual COGS from consumed layers
-          if (layerResult && layerResult.totalCOGS > 0) {
-            const actualUnitCost = layerResult.totalCOGS / item.qty;
-            await tx.saleItem.updateMany({
-              where: { saleId: sale.id, productId: item.productId },
-              data: { purchasePrice: Math.round(actualUnitCost * 10000) / 10000 },
+          // Detect "bag opened" event for audit trail via exact layer tracking
+          if (layerEngineEnabled && layerResult) {
+            const openedLayers = layerResult.consumptions.filter((c: any) => c.openedNewBag);
+            for (const c of openedLayers) {
+              await tx.stockMovement.create({
+                data: {
+                  productId: item.productId,
+                  type: 'OUT',
+                  quantity: 0,
+                  baseQty: 0,
+                  baseUnit: product.baseUnit,
+                  movementSubtype: 'bag_opened',
+                  referenceId: sale.id,
+                  notes: `Bag opened (Layer: ${c.layerId})`,
+                  businessId: session.user.businessId,
+                },
+              });
+            }
+          }
+
+          // Emit LOOSE_SALE_COMPLETED event
+          await tx.userActivity.create({
+            data: {
+              businessId: session.user.businessId,
+              userId: session.user.id ?? 'unknown',
+              eventType: 'LOOSE_SALE_COMPLETED',
+              metadata: { 
+                saleId: sale.id,
+                productId: item.productId,
+                packagingId: item.packagingId || null,
+                baseUnitsSold: baseDeduction,
+                displayQuantity: `${effectiveSaleQty} ${item.saleUnit || product.baseUnit}`,
+                conversionFactor: factor,
+                layerIdsConsumed: layerResult?.consumptions.map((c: any) => c.layerId) || [],
+                costingMethod: 'LAYER', 
+              },
+            }
+          });
+
+        } else {
+          // ── Standard product: existing flow (unchanged) ──
+          if (layerEngineEnabled) {
+            const layerResult = await adjustStockWithLayers({
+              productId: item.productId,
+              qty: item.qty,
+              type: 'sale',
+              businessId: session.user.businessId,
+              transactionId: sale.id,
+              transactionType: 'sale',
+              tx,
             });
-            totalSaleCOGS += layerResult.totalCOGS;
+
+            if (layerResult && layerResult.totalCOGS > 0) {
+              const actualUnitCost = layerResult.totalCOGS / item.qty;
+              await tx.saleItem.updateMany({
+                where: { saleId: sale.id, productId: item.productId },
+                data: { purchasePrice: Math.round(actualUnitCost * 10000) / 10000 },
+              });
+              totalSaleCOGS += layerResult.totalCOGS;
+            } else {
+              const fallbackCost = (productMap.get(item.productId)?.purchasePrice || 0) * item.qty;
+              totalSaleCOGS += fallbackCost;
+              await tx.saleItem.updateMany({
+                where: { saleId: sale.id, productId: item.productId },
+                data: { purchasePrice: productMap.get(item.productId)?.purchasePrice || 0 },
+              });
+            }
           } else {
-            // Fallback to product-level purchasePrice if no layers exist
+            await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
             const fallbackCost = (productMap.get(item.productId)?.purchasePrice || 0) * item.qty;
-            totalSaleCOGS += fallbackCost;
             await tx.saleItem.updateMany({
               where: { saleId: sale.id, productId: item.productId },
               data: { purchasePrice: productMap.get(item.productId)?.purchasePrice || 0 },
             });
+            totalSaleCOGS += fallbackCost;
           }
-        } else {
-          // Layer engine disabled (tables not migrated) — fall back to simple stock deduction
-          await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
-          const fallbackCost = (productMap.get(item.productId)?.purchasePrice || 0) * item.qty;
-          await tx.saleItem.updateMany({
-            where: { saleId: sale.id, productId: item.productId },
-            data: { purchasePrice: productMap.get(item.productId)?.purchasePrice || 0 },
-          });
-          totalSaleCOGS += fallbackCost;
         }
       }
 

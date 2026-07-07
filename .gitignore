@@ -4,3 +4,5 @@ bizflow/apps/web/train-*.js
 
 # Sample docs / PDFs
 bizflow/docs/*.pdf
+
+.vercel

@@ -142,8 +142,8 @@ export default function EditProductModal({ product, onClose }: { product: any; o
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <FormField label="Opening Stock">
-            <ModalInput type="number" min="0" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
+          <FormField label={product?.allowLooseSale ? "Stock (Read-only for loose products)" : "Opening Stock"}>
+            <ModalInput type="number" min="0" value={form.stock} disabled={product?.allowLooseSale} onChange={(e) => setForm({ ...form, stock: e.target.value })} />
           </FormField>
           <FormField label="Reorder Level">
             <ModalInput type="number" min="0" value={form.minStock} onChange={(e) => setForm({ ...form, minStock: e.target.value })} />

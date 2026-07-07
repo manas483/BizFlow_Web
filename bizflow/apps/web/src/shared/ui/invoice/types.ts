@@ -14,6 +14,13 @@ export interface LineItem {
   gstRate: number;
   originalGstRate: number;
   unit: string;
+  // ── Loose Sale Fields ──
+  saleQty?: number | string;      // Canonical sold quantity
+  saleUnit?: string;              // Unit of saleQty
+  isLoose?: boolean;
+  packagingId?: string | null;
+  packagingLabel?: string | null;
+  allowLooseSale?: boolean;       // Cached from product for UI conditionals
 }
 
 /** Computed totals for display in InvoiceSummary */
@@ -49,6 +56,13 @@ export function createEmptyLineItem(): LineItem {
     gstRate: 0,
     originalGstRate: 0,
     unit: "pcs",
+    // Loose sale fields default to standard mode
+    saleQty: 1,
+    saleUnit: "pcs",
+    isLoose: false,
+    packagingId: null,
+    packagingLabel: null,
+    allowLooseSale: false,
   };
 }
 
@@ -58,10 +72,16 @@ export function createLineItemFromProduct(
   qty: number,
   resolvedPrice: number,
 ): LineItem {
+  // For loose products with a default packaging, auto-fill from that packaging
+  const defaultPkg = product.packagingOptions?.find(p => p.isDefault);
+  const effectivePrice = defaultPkg?.defaultPrice != null
+    ? Number(defaultPkg.defaultPrice)
+    : resolvedPrice;
+
   return {
     productId: product.id,
     qty,
-    price: resolvedPrice,
+    price: effectivePrice,
     originalPrice: resolvedPrice,
     priceOverrideReason: "",
     discount: 0,
@@ -71,6 +91,13 @@ export function createLineItemFromProduct(
     gstRate: product.gstRate || 0,
     originalGstRate: product.gstRate || 0,
     unit: product.unit || "pcs",
+    // Loose sale fields
+    saleQty: qty,
+    saleUnit: defaultPkg?.label || product.unit || "pcs",
+    isLoose: defaultPkg?.isLoose ?? false,
+    packagingId: defaultPkg?.id ?? null,
+    packagingLabel: defaultPkg?.label ?? null,
+    allowLooseSale: product.allowLooseSale ?? false,
   };
 }
 
@@ -85,6 +112,12 @@ export function lineItemToPayload(item: LineItem) {
     gstRate: item.gstRate,
     originalPrice: item.originalPrice,
     priceOverrideReason: item.priceOverrideReason,
+    // Loose sale fields
+    saleQty: item.saleQty != null ? Number(item.saleQty) : Number(item.qty) || 0,
+    saleUnit: item.saleUnit || item.unit,
+    isLoose: item.isLoose ?? false,
+    packagingId: item.packagingId ?? null,
+    packagingLabel: item.packagingLabel ?? null,
   };
 }
 

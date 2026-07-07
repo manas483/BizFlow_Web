@@ -15,6 +15,7 @@ import { getBusinessProfile } from "@/shared/lib/business-intelligence";
 import { useProductCategories } from "@/shared/hooks/useProducts";
 import Pagination from "@/shared/ui/ui/Pagination";
 import { formatCurrency, exportToCSV } from "@/shared/lib/utils";
+import { formatLooseStock } from "@/shared/lib/loose-utils";
 import { Package, Plus, Search, AlertTriangle, TrendingUp, Download, Pencil, Trash2, Upload } from "lucide-react";
 import AddProductModal from "@/shared/ui/modals/AddProductModal";
 import EditProductModal from "@/shared/ui/modals/EditProductModal";
@@ -27,6 +28,7 @@ export default function InventoryPage() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const [page, setPage] = useState(1);
 
@@ -49,11 +51,20 @@ export default function InventoryPage() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteProduct.mutateAsync(deleteTarget.id);
+      if (deleteTarget.id === "bulk-delete") {
+        for (const id of selectedIds) {
+          await deleteProduct.mutateAsync(id);
+        }
+        setSelectedIds([]);
+        toast.success(`Deleted ${selectedIds.length} products`);
+      } else {
+        await deleteProduct.mutateAsync(deleteTarget.id);
+        toast.success("Product deleted");
+      }
       setDeleteTarget(null);
     } catch {
       setDeleteTarget(null);
-      toast.error("Failed to delete product");
+      toast.error("Failed to delete product(s)");
     }
   };
 
@@ -81,10 +92,18 @@ export default function InventoryPage() {
           <p className="text-primary/40 text-sm mt-0.5">Track stock levels, prices and suppliers</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={handleExport}>Export</Button>
-          <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setIsImportOpen(true)}
-            className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10">Import</Button>
-          <Button size="sm" icon={<Plus size={14} />} onClick={() => setIsAddOpen(true)}>Add Product</Button>
+          {selectedIds.length > 0 ? (
+            <Button variant="danger" size="sm" icon={<Trash2 size={14} />} onClick={() => setDeleteTarget({ id: "bulk-delete", name: `${selectedIds.length} selected products` })}>
+              Delete Selected ({selectedIds.length})
+            </Button>
+          ) : (
+            <>
+              <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={handleExport}>Export</Button>
+              <Button variant="secondary" size="sm" icon={<Upload size={14} />} onClick={() => setIsImportOpen(true)}
+                className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10">Import</Button>
+              <Button size="sm" icon={<Plus size={14} />} onClick={() => setIsAddOpen(true)}>Add Product</Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -116,6 +135,19 @@ export default function InventoryPage() {
           <table className="w-full min-w-[720px]">
             <thead>
               <tr className="border-b border-primary/10">
+                <th className="text-left px-5 py-3 w-10">
+                  <input type="checkbox" 
+                    checked={products.length > 0 && selectedIds.length === products.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedIds(products.map((p: any) => p.id));
+                      } else {
+                        setSelectedIds([]);
+                      }
+                    }}
+                    className="rounded border-primary/20 bg-transparent text-violet-500 focus:ring-violet-500/20 w-4 h-4 cursor-pointer"
+                  />
+                </th>
                 {["SKU", "Product Name", "Category", "Stock", "Standard Cost", "Selling Price", "Margin", "Supplier", "Status", ""].map((h) => (
                   <th key={h} className="text-left px-5 py-3 text-primary/40 text-xs font-medium whitespace-nowrap">{h}</th>
                 ))}
@@ -123,9 +155,9 @@ export default function InventoryPage() {
             </thead>
             <tbody className="divide-y divide-primary/10">
               {isLoading ? (
-                <tr><td colSpan={10} className="text-center py-12 text-primary/40 text-sm">Loading products...</td></tr>
+                <tr><td colSpan={11} className="text-center py-12 text-primary/40 text-sm">Loading products...</td></tr>
               ) : products.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-12 text-primary/40 text-sm">No products found. Click "Add Product" to get started.</td></tr>
+                <tr><td colSpan={11} className="text-center py-12 text-primary/40 text-sm">No products found. Click "Add Product" to get started.</td></tr>
               ) : products.map((product: any) => {
                 const margin = product.standardCost > 0
                   ? (((product.sellingPrice - product.standardCost) / product.standardCost) * 100).toFixed(1)
@@ -134,6 +166,19 @@ export default function InventoryPage() {
                 const isLow = product.stock > 0 && product.stock <= product.minStock;
                 return (
                   <tr key={product.id} className="hover:bg-primary/5 transition-colors group">
+                    <td className="px-5 py-3.5 w-10">
+                      <input type="checkbox"
+                        checked={selectedIds.includes(product.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedIds(prev => [...prev, product.id]);
+                          } else {
+                            setSelectedIds(prev => prev.filter(id => id !== product.id));
+                          }
+                        }}
+                        className="rounded border-primary/20 bg-transparent text-violet-500 focus:ring-violet-500/20 w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      />
+                    </td>
                     <td className="px-5 py-3.5 text-primary/40 text-xs font-mono">{product.sku || "—"}</td>
                     <td className="px-5 py-3.5">
                       <span className="text-primary text-sm font-medium group-hover:text-violet-400 transition-colors">{product.name}</span>
@@ -141,7 +186,16 @@ export default function InventoryPage() {
                     <td className="px-5 py-3.5"><Badge variant="violet">{product.category}</Badge></td>
                     <td className="px-5 py-3.5">
                       <div className="flex flex-col">
-                        <span className={`text-sm font-semibold ${isOut ? "text-rose-400" : isLow ? "text-amber-400" : "text-primary"}`}>{product.stock}</span>
+                        <span className={`text-sm font-semibold ${isOut ? "text-rose-400" : isLow ? "text-amber-400" : "text-primary"}`}>
+                          {product.allowLooseSale
+                            ? formatLooseStock(
+                                product.baseStock || 0,
+                                Number(product.packagingOptions?.find((p: any) => p.isPurchaseUnit)?.conversionFactor || 1),
+                                product.packagingOptions?.find((p: any) => p.isPurchaseUnit)?.unit || product.unit,
+                                product.baseUnit || 'units'
+                              ).display
+                            : product.stock}
+                        </span>
                         <div className="w-16 h-1 bg-primary/5 rounded-full mt-1">
                           <div className={`h-1 rounded-full ${isOut ? "bg-rose-500" : isLow ? "bg-amber-500" : "bg-emerald-500"}`}
                             style={{ width: `${Math.min(100, product.minStock > 0 ? (Math.max(0, product.stock) / (product.minStock * 3)) * 100 : 100)}%` }} />

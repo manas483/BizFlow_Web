@@ -74,6 +74,33 @@ body {
 
 
 /* ═══════════════════════════════════════════
+   INTERACTIVE CURSOR — pointer for clickables
+═══════════════════════════════════════════ */
+a,
+button,
+select,
+summary,
+label[for],
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+input[type="file"],
+input[type="submit"],
+input[type="reset"],
+input[type="button"],
+input[type="image"],
+[role="button"],
+[role="link"],
+[role="tab"],
+[role="menuitem"],
+[role="option"],
+[role="switch"],
+[tabindex]:not([tabindex="-1"]),
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════
    MOBILE / RESPONSIVE UTILITIES
 ═══════════════════════════════════════════ */
 

@@ -101,6 +101,7 @@ model User {
   employee            Employee?
   refreshTokens       RefreshToken[]
   deviceTokens        DeviceToken[]
+  createdBackups      BackupRecord[]
 }
 
 /// Stores hashed OTPs for email verification. Auto-cleaned on use or expiry.
@@ -167,8 +168,37 @@ model Product {
   supplierId  String?
   supplierRef Supplier? @relation(fields: [supplierId], references: [id])
 
+  // ── Loose Sale Configuration ──
+  allowLooseSale    Boolean            @default(false)
+  baseUnit          String?            // "Kg", "Liter", "g", "ml" — smallest inventory unit
+  baseStock         Decimal?           // THE source of truth for loose products (e.g., 4995.0 Kg)
+  packagingOptions  ProductPackaging[]
+
   @@index([businessId, deletedAt])
   @@index([businessId, createdAt])
+}
+
+/// Pack variants for sale and purchase. Each product can have multiple packaging
+/// options (e.g., 50 Kg Bag, 25 Kg Bag, 10 Kg Pack, Loose Kg).
+model ProductPackaging {
+  id                String   @id @default(cuid())
+  productId         String
+  label             String   // Display name: "50 Kg Bag", "25 Kg Bag", "Loose"
+  unit              String   // "Bag", "Pack", "Kg", "g", "Liter"
+  conversionFactor  Decimal  // 1 of this pack = N base units (50, 25, 1, 0.5, etc.)
+  defaultPrice      Decimal? // Default selling price per pack (₹1350/Bag, null for loose)
+  isPurchaseUnit    Boolean  @default(false) // Primary purchase packaging (one per product)
+  isLoose           Boolean  @default(false) // True for loose variants ("Loose Kg")
+  isDefault         Boolean  @default(false) // Default sale option in UI
+  sortOrder         Int      @default(0)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  saleItems SaleItem[]
+
+  @@index([productId])
+  @@index([productId, active])
 }
 
 model Customer {
@@ -258,8 +288,15 @@ model SaleItem {
   // ── Phase 2: Price override audit ──
   originalPrice       Float? // price from product master before override
   priceOverrideReason String? // reason code: customer_negotiation, clearance_sale, etc.
+  // ── Loose Sale Fields ──
+  saleQty             Decimal?         // Canonical sold quantity: 5 (Kg), 2 (Bags), 500 (g)
+  saleUnit            String?          // Unit of saleQty: "Kg", "50 Kg Bag", "500 ml"
+  isLoose             Boolean          @default(false)
+  packagingId         String?          // FK → ProductPackaging (for active reference)
+  packagingLabel      String?          // Snapshot: "25 Kg Bag", "Loose Kg"
   product             Product @relation(fields: [productId], references: [id], onDelete: Restrict)
   sale                Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  packaging           ProductPackaging? @relation(fields: [packagingId], references: [id])
 
   @@index([saleId])
   @@index([productId])
@@ -985,19 +1022,26 @@ model AuditLog {
 
 /// Backup Record — tracks manual and automated data backups.
 model BackupRecord {
-  id          String   @id @default(cuid())
-  businessId  String
-  type        String   @default("MANUAL") // MANUAL | SCHEDULED | AUTO
-  status      String   @default("COMPLETED") // IN_PROGRESS | COMPLETED | FAILED
-  fileSize    Int? // bytes
-  fileName    String?
-  storageUrl  String? // S3/R2 URL if cloud-synced
-  triggeredBy String? // userId
-  notes       String?
-  createdAt   DateTime @default(now())
-  business    Business @relation(fields: [businessId], references: [id])
+  id              String    @id @default(cuid())
+  businessId      String
+  fileName        String?
+  fileSize        Int?      // bytes
+  checksum        String?
+  status          String    @default("PENDING") // PENDING | VERIFIED | FAILED | DELETED
+  backupType      String    @default("MANUAL") // MANUAL | AUTOMATIC | PRE_RESTORE
+  formatVersion   String    @default("1.0")
+  schemaVersion   String?
+  storageUrl      String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime?
+  createdByUserId String?
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([businessId, createdAt])
+  @@index([status])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1077,6 +1121,11 @@ model StockMovement {
   product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
   warehouse Warehouse? @relation(fields: [warehouseId], references: [id])
   business  Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  // ── Base-Unit Movement (loose-enabled products) ──
+  baseQty          Decimal?    // Movement in base units (e.g., -5 Kg, -100 Kg)
+  baseUnit         String?     // "Kg", "ml", etc.
+  movementSubtype  String?     // "bag_opened", "loose_sale", "adjustment_spillage", etc.
 
   @@index([businessId, productId])
   @@index([businessId, createdAt])

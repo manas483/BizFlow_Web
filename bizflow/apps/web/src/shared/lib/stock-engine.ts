@@ -224,6 +224,8 @@ export interface AdjustStockWithLayersParams {
   transactionId: string;
   transactionType: string;
   specificLayerId?: string;    // For SPECIFIC identification method
+  skipStockUpdate?: boolean;   // If true, skip Product.stock update (caller manages stock, e.g. loose products)
+  skipMovement?: boolean;      // If true, skip StockMovement creation (caller creates its own)
   tx?: any;
 }
 
@@ -237,7 +239,9 @@ export interface AdjustStockWithLayersParams {
  * For inbound movements (purchase, sale_return):
  *   Only adjusts the product stock count (layers are created separately by createLayer).
  *
- * Always updates Product.stock and creates a StockMovement record.
+ * Always updates Product.stock and creates a StockMovement record,
+ * unless skipStockUpdate / skipMovement are set (used for loose-enabled products
+ * where the caller manages baseStock and stock movements directly).
  */
 export async function adjustStockWithLayers(params: AdjustStockWithLayersParams): Promise<LayerConsumptionResult | null> {
   const {
@@ -249,6 +253,8 @@ export async function adjustStockWithLayers(params: AdjustStockWithLayersParams)
     transactionId,
     transactionType,
     specificLayerId,
+    skipStockUpdate = false,
+    skipMovement = false,
     tx = prisma,
   } = params;
 
@@ -293,28 +299,32 @@ export async function adjustStockWithLayers(params: AdjustStockWithLayersParams)
     }
   }
 
-  // Update product stock count
-  const updatedProduct = await tx.product.update({
-    where: { id: productId },
-    data: { stock: { increment } },
-  });
+  // Update product stock count (skip for loose products — caller manages baseStock)
+  if (!skipStockUpdate) {
+    const updatedProduct = await tx.product.update({
+      where: { id: productId },
+      data: { stock: { increment } },
+    });
 
-  // Create stock movement record
-  await tx.stockMovement.create({
-    data: {
-      productId,
-      warehouseId: warehouseId || null,
-      type: increment > 0 ? 'IN' : 'OUT',
-      quantity: increment,
-      referenceId: transactionId,
-      notes: `${transactionType}: ${transactionId}`,
-      businessId,
-    },
-  });
+    // Check reorder level
+    if (updatedProduct.stock <= (updatedProduct.reorderLevel || updatedProduct.minStock)) {
+      await checkAndNotifyReorder(updatedProduct, businessId, tx);
+    }
+  }
 
-  // Check reorder level
-  if (updatedProduct.stock <= (updatedProduct.reorderLevel || updatedProduct.minStock)) {
-    await checkAndNotifyReorder(updatedProduct, businessId, tx);
+  // Create stock movement record (skip for loose products — caller creates its own)
+  if (!skipMovement) {
+    await tx.stockMovement.create({
+      data: {
+        productId,
+        warehouseId: warehouseId || null,
+        type: increment > 0 ? 'IN' : 'OUT',
+        quantity: increment,
+        referenceId: transactionId,
+        notes: `${transactionType}: ${transactionId}`,
+        businessId,
+      },
+    });
   }
 
   return layerResult;

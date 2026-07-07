@@ -9,6 +9,7 @@ import { GST_RATE_OPTIONS, UNIT_OPTIONS, PRICE_OVERRIDE_REASONS } from "./consta
 import DiscountInput from "./DiscountInput";
 import ProductInfoTooltip from "./ProductInfoTooltip";
 import { formatCurrency } from "@/shared/lib/utils";
+import { formatLooseStock } from "@/shared/lib/loose-utils";
 
 interface LineItemRowProps {
   item: LineItem;
@@ -122,7 +123,16 @@ export default function LineItemRow({
                     : "bg-emerald-500/10 text-emerald-400/70"
               }`}
             >
-              {isOutOfStock ? "Out of Stock" : `${product.stock} ${product.unit}`}
+              {isOutOfStock ? "Out of Stock" : (
+                product.allowLooseSale
+                  ? formatLooseStock(
+                      product.baseStock || 0,
+                      Number(product.packagingOptions?.find(p => p.isPurchaseUnit)?.conversionFactor || 1),
+                      product.packagingOptions?.find(p => p.isPurchaseUnit)?.unit || product.unit,
+                      product.baseUnit || 'units'
+                    ).display
+                  : `${product.stock} ${product.unit}`
+              )}
               {isLowStock && !isOutOfStock && " ⚠"}
             </span>
             <ProductInfoTooltip product={product}>
@@ -140,25 +150,59 @@ export default function LineItemRow({
         <input
           ref={qtyRef}
           type="number"
-          min="1"
+          min={item.allowLooseSale ? "0.01" : "1"}
+          step={item.allowLooseSale ? "any" : "1"}
           required
           className="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-violet-500/50"
-          value={item.qty}
+          value={item.saleQty ?? item.qty}
           onFocus={(e) => e.target.select()}
           onChange={(e) => {
-            const val = e.target.value === "" ? "" : parseInt(e.target.value) || 0;
-            onUpdate(index, { qty: val });
+            const val = e.target.value === "" ? "" : item.allowLooseSale ? parseFloat(e.target.value) || 0 : parseInt(e.target.value) || 0;
+            if (item.allowLooseSale) {
+              onUpdate(index, { saleQty: val, qty: 1 }); // saleQty takes precedence
+            } else {
+              onUpdate(index, { qty: val });
+            }
           }}
         />
-        <select
-          value={item.unit}
-          onChange={(e) => onUpdate(index, { unit: e.target.value })}
-          className="w-full mt-1 bg-white/5 border border-white/10 rounded-md px-1.5 py-0.5 text-[10px] text-white/50 focus:outline-none focus:border-violet-500/50 cursor-pointer"
-        >
-          {UNIT_OPTIONS.map((u) => (
-            <option key={u.value} value={u.value}>{u.label}</option>
-          ))}
-        </select>
+        {item.allowLooseSale && product?.packagingOptions ? (
+          <select
+            value={item.packagingId || ""}
+            onChange={(e) => {
+              const pkgId = e.target.value;
+              const pkg = product.packagingOptions?.find(p => p.id === pkgId);
+              if (pkg) {
+                const updates: Partial<LineItem> = {
+                  packagingId: pkg.id,
+                  packagingLabel: pkg.label,
+                  saleUnit: pkg.unit,
+                  isLoose: pkg.isLoose,
+                  unit: pkg.unit,
+                };
+                if (pkg.defaultPrice != null) {
+                  updates.price = Number(pkg.defaultPrice);
+                  updates.originalPrice = updates.price;
+                }
+                onUpdate(index, updates);
+              }
+            }}
+            className="w-full mt-1 bg-violet-500/10 border border-violet-500/30 rounded-md px-1.5 py-0.5 text-[10px] text-violet-300 focus:outline-none focus:border-violet-500/50 cursor-pointer"
+          >
+            {product.packagingOptions.map(p => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+          </select>
+        ) : (
+          <select
+            value={item.unit}
+            onChange={(e) => onUpdate(index, { unit: e.target.value, saleUnit: e.target.value })}
+            className="w-full mt-1 bg-white/5 border border-white/10 rounded-md px-1.5 py-0.5 text-[10px] text-white/50 focus:outline-none focus:border-violet-500/50 cursor-pointer"
+          >
+            {UNIT_OPTIONS.map((u) => (
+              <option key={u.value} value={u.value}>{u.label}</option>
+            ))}
+          </select>
+        )}
       </td>
 
       {/* Rate (₹) */}

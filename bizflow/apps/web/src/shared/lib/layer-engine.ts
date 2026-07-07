@@ -63,6 +63,7 @@ export interface LayerConsumptionResult {
     amount: number;
     batchNo?: string | null;
     lotNo?: string | null;
+    openedNewBag: boolean;
   }>;
 }
 
@@ -405,6 +406,7 @@ async function consumeFIFOLIFO(
       amount,
       batchNo: layer.batchNo,
       lotNo: layer.lotNo,
+      openedNewBag: layer.remainingQty === layer.quantity,
     });
 
     remaining = round4(remaining - consumeQty);
@@ -434,7 +436,7 @@ async function consumeWAC(tx: any, params: ConsumeLayersParams): Promise<LayerCo
   const layers = await tx.inventoryLayer.findMany({
     where,
     orderBy: [{ receiptDate: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, remainingQty: true, unitCost: true, batchNo: true, lotNo: true },
+    select: { id: true, quantity: true, remainingQty: true, unitCost: true, batchNo: true, lotNo: true },
   });
 
   const totalAvailable = layers.reduce((sum: number, l: any) => sum + l.remainingQty, 0);
@@ -492,6 +494,7 @@ async function consumeWAC(tx: any, params: ConsumeLayersParams): Promise<LayerCo
       amount,
       batchNo: layer.batchNo,
       lotNo: layer.lotNo,
+      openedNewBag: layer.remainingQty === layer.quantity,
     });
 
     remaining = round4(remaining - consumeQty);

@@ -42,6 +42,8 @@ export class InventoryService {
             select: {
               id: true, name: true, sku: true, category: true, stock: true,
               minStock: true, sellingPrice: true, gstRate: true, hsnCode: true, unit: true,
+              allowLooseSale: true, baseUnit: true, baseStock: true,
+              packagingOptions: { orderBy: { sortOrder: 'asc' } },
             },
             // Order by stock (favorites/top sellers approximation) if no search, else recent
             orderBy: search ? { createdAt: 'desc' } : { stock: 'desc' },
@@ -61,7 +63,13 @@ export class InventoryService {
       }
 
       const [products, total] = await Promise.all([
-        prisma.product.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+        prisma.product.findMany({ 
+          where, 
+          orderBy: { createdAt: 'desc' }, 
+          skip, 
+          take: limit,
+          include: { packagingOptions: { orderBy: { sortOrder: 'asc' } } }
+        }),
         prisma.product.count({ where }),
       ]);
 
@@ -103,6 +111,36 @@ export class InventoryService {
           businessId: session.user.businessId,
         }
       });
+
+      // ── Loose Sale: Initialize baseStock and create packaging options ──
+      if (product.allowLooseSale && data.packagingOptions?.length > 0) {
+        // Create packaging options
+        for (const pkg of data.packagingOptions) {
+          await (tx as any).productPackaging.create({
+            data: {
+              productId: product.id,
+              label: pkg.label,
+              unit: pkg.unit,
+              conversionFactor: pkg.conversionFactor,
+              defaultPrice: pkg.defaultPrice ?? null,
+              isPurchaseUnit: pkg.isPurchaseUnit ?? false,
+              isLoose: pkg.isLoose ?? false,
+              isDefault: pkg.isDefault ?? false,
+              sortOrder: pkg.sortOrder ?? 0,
+            },
+          });
+        }
+
+        // Calculate baseStock from opening stock × primary packaging factor
+        const primaryPkg = data.packagingOptions.find((p: any) => p.isPurchaseUnit);
+        if (primaryPkg && product.stock > 0) {
+          const baseStock = product.stock * Number(primaryPkg.conversionFactor);
+          await tx.product.update({
+            where: { id: product.id },
+            data: { baseStock },
+          });
+        }
+      }
 
       if (product.stock > 0) {
         await tx.stockMovement.create({

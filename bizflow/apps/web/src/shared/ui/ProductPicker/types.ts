@@ -1,3 +1,14 @@
+export interface PackagingOption {
+  id: string;
+  label: string;
+  unit: string;
+  conversionFactor: number;
+  defaultPrice?: number | null;
+  isPurchaseUnit: boolean;
+  isLoose: boolean;
+  isDefault: boolean;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -13,6 +24,11 @@ export interface Product {
   unit: string;
   supplier?: string | null;
   active?: boolean;
+  // ── Loose Sale Fields ──
+  allowLooseSale?: boolean;
+  baseUnit?: string | null;
+  baseStock?: number | null;
+  packagingOptions?: PackagingOption[];
 }
 
 export interface Customer {

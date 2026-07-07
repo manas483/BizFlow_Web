@@ -64,7 +64,7 @@ async function handler(req: NextRequest) {
     const saleDateFilter = {
       OR: [
         { invoiceDate: { gte: from, lte: to } },
-        { invoiceDate: null, ...saleDateFilter }
+        { invoiceDate: null, createdAt: { gte: from, lte: to } }
       ]
     };
 
@@ -134,7 +134,7 @@ async function handler(req: NextRequest) {
       // COGS calculation & GST calculation
       prisma.saleItem.findMany({
         where: { sale: { businessId, ...saleDateFilter, status: { not: 'CANCELLED' }, workflowState: { not: 'voided' } } },
-        select: { qty: true, price: true, purchasePrice: true, gstRate: true, discount: true, sale: { select: { createdAt: true } } },
+        select: { qty: true, price: true, purchasePrice: true, gstRate: true, discount: true, sale: { select: { createdAt: true } }, product: { select: { standardCost: true } } },
       }),
 
       // Top customers by revenue
@@ -160,7 +160,7 @@ async function handler(req: NextRequest) {
 
       // Credit Notes (Refunds/Returns)
       prisma.creditNote.aggregate({
-        where: { businessId, ...saleDateFilter },
+        where: { businessId, createdAt: { gte: from, lte: to } },
         _sum: { amount: true, taxAmount: true }
       }),
       
@@ -192,7 +192,7 @@ async function handler(req: NextRequest) {
     ]);
 
     // Calculate COGS
-    const cogs = cogsItems.reduce((acc: number, item: any) => acc + (item.qty * (item.purchasePrice || 0)), 0);
+    const cogs = cogsItems.reduce((acc: number, item: any) => acc + (item.qty * (item.purchasePrice || item.product?.standardCost || 0)), 0);
 
     // Calculate Sales & Profits
     const grossSales = salesAgg._sum.total ?? 0;

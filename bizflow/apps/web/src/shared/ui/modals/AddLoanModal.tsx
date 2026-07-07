@@ -20,6 +20,7 @@ export default function AddLoanModal({ open, onClose }: { open: boolean; onClose
     lender: "",
     purpose: "Business Expansion",
     notes: "",
+    emiDay: "",
   });
 
   const createLoan = useCreateLoan();
@@ -36,6 +37,7 @@ export default function AddLoanModal({ open, onClose }: { open: boolean; onClose
         lender: "",
         purpose: "Business Expansion",
         notes: "",
+        emiDay: "",
       });
     }
   }, [open]);
@@ -50,9 +52,10 @@ export default function AddLoanModal({ open, onClose }: { open: boolean; onClose
   const dateObj = form.startDate ? new Date(form.startDate) : new Date();
 
   let preview = { emiAmount: 0, totalInterest: 0, totalPayable: 0 };
+  const emiDayNum = form.emiDay ? parseInt(form.emiDay) : undefined;
   if (amt > 0 && rate >= 0 && tenureMonths > 0) {
     try {
-      const res = generateEMISchedule(amt, rate, tenureMonths, dateObj);
+      const res = generateEMISchedule(amt, rate, tenureMonths, dateObj, emiDayNum);
       preview = { emiAmount: res.emiAmount, totalInterest: res.totalInterest, totalPayable: res.totalPayable };
     } catch (e) {
       console.error(e);
@@ -73,6 +76,7 @@ export default function AddLoanModal({ open, onClose }: { open: boolean; onClose
         lender: form.lender || null,
         purpose: form.purpose || null,
         notes: form.notes || null,
+        emiDay: form.emiDay ? parseInt(form.emiDay) : null,
       });
       toast.success("Loan Master profile created and EMI schedule generated!");
       onClose();
@@ -135,9 +139,19 @@ export default function AddLoanModal({ open, onClose }: { open: boolean; onClose
           </FormField>
         </div>
 
-        <FormField label="Disbursement / Start Date" required>
-          <ModalInput type="date" required value={form.startDate} onChange={set("startDate")} />
-        </FormField>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField label="Disbursement / Start Date" required>
+            <ModalInput type="date" required value={form.startDate} onChange={set("startDate")} />
+          </FormField>
+          <FormField label="Preferred EMI Date">
+            <ModalSelect value={form.emiDay} onChange={set("emiDay")}>
+              <option value="">Same as Start Date</option>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                <option key={day} value={day}>{day}</option>
+              ))}
+            </ModalSelect>
+          </FormField>
+        </div>
 
         {/* Real-time EMI Schedule Preview */}
         {amt > 0 && rate >= 0 && tenureMonths > 0 && (

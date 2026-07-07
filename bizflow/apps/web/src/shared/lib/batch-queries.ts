@@ -15,7 +15,13 @@ export async function loadProductsForDocument(
     where: {
       id: { in: uniqueIds },
       businessId
-    }
+    },
+    include: {
+      packagingOptions: {
+        where: { active: true },
+        orderBy: { sortOrder: 'asc' },
+      },
+    },
   });
 
   // Create O(1) lookup map

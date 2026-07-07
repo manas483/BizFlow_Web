@@ -12,6 +12,7 @@ import { cn } from "@/shared/lib/utils";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import SessionTimeoutWatcher from "./SessionTimeoutWatcher";
 
 const mobileNav = [
   { href: "/", icon: LayoutDashboard, label: "Home" },
@@ -38,9 +39,12 @@ export default function DashboardLayoutInner({
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/login");
+      // Use window.location.href instead of router.push to force a full page reload.
+      // This bypasses the Next.js client router cache and prevents an infinite
+      // redirect loop if the user has a cached 307 redirect for /login.
+      window.location.href = "/login";
     }
-  }, [status, router]);
+  }, [status]);
 
   if (status === "loading" || status === "unauthenticated") {
     return (
@@ -52,6 +56,7 @@ export default function DashboardLayoutInner({
 
   return (
     <div className="flex h-screen bg-app text-primary overflow-hidden">
+      <SessionTimeoutWatcher />
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Topbar title={title} />

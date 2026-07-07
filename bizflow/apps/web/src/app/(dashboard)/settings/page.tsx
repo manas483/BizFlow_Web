@@ -16,6 +16,7 @@ import { useSetup2FA, useVerify2FA, useDisable2FA } from "@/shared/hooks/useTwoF
 import { useBackupHistory, useExportBackup, useDeleteBackup } from "@/shared/hooks/useBackup";
 import TwoFactorSetupModal from "@/shared/ui/modals/TwoFactorSetupModal";
 import { useAutomationSettings, useUpdateAutomationSettings } from "@/shared/hooks/useAutomationSettings";
+import BackupDashboard from "./backup/page";
 
 function EmployeeSettingsView() {
   const { data: profile, isLoading } = useProfile();
@@ -587,11 +588,11 @@ export default function SettingsPage() {
                     <div className="relative">
                       <input type={showCurrent ? "text" : "password"} value={passForm.current}
                         onChange={(e) => { setPassError(""); setPassForm({ ...passForm, current: e.target.value }); }}
-                        autoComplete="current-password" placeholder="Enter current password"
+                        autoComplete="new-password" placeholder="Enter current password"
                         className="w-full bg-primary/5 border border-primary/10 rounded-xl px-4 py-2.5 pr-10 text-sm text-primary focus:outline-none focus:border-violet-500/50" />
                       <button type="button" onClick={() => setShowCurrent(v => !v)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-primary/40 hover:text-primary transition-colors">
-                        {showCurrent ? <EyeOff size={14} /> : <Eye size={14} />}
+                        {showCurrent ? <Eye size={14} /> : <EyeOff size={14} />}
                       </button>
                     </div>
                   </div>
@@ -604,7 +605,7 @@ export default function SettingsPage() {
                         className="w-full bg-primary/5 border border-primary/10 rounded-xl px-4 py-2.5 pr-10 text-sm text-primary focus:outline-none focus:border-violet-500/50" />
                       <button type="button" onClick={() => setShowNew(v => !v)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-primary/40 hover:text-primary transition-colors">
-                        {showNew ? <EyeOff size={14} /> : <Eye size={14} />}
+                        {showNew ? <Eye size={14} /> : <EyeOff size={14} />}
                       </button>
                     </div>
                   </div>
@@ -743,130 +744,7 @@ export default function SettingsPage() {
           )}
 
           {activeTab === "backup" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Database size={18} /> Data Backup & Export
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
-                  <p className="text-emerald-400 text-sm font-medium">✓ Neon Serverless Postgres</p>
-                  <p className="text-primary/40 text-xs mt-0.5">
-                    Your database is automatically backed up daily by Neon's built-in point-in-time recovery. No manual action required.
-                  </p>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="text-primary text-sm font-medium">Manual Backup Export</p>
-                      <p className="text-primary/40 text-xs">Generate and download a complete export of all business data.</p>
-                    </div>
-                    <Button
-                      disabled={exportBackup.isPending}
-                      icon={<Database size={14} />}
-                      onClick={async () => {
-                        try {
-                          await exportBackup.mutateAsync();
-                          toast.success("Backup downloaded successfully!");
-                        } catch (err: any) {
-                          toast.error(err.message || "Failed to generate backup");
-                        }
-                      }}
-                    >
-                      {exportBackup.isPending ? "Generating..." : "Export Now"}
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="pt-6 border-t border-primary/10">
-                  <h3 className="text-sm font-semibold text-primary/70 mb-3">Backup History</h3>
-                  {loadingHistory ? (
-                    <p className="text-primary/40 text-xs py-4">Loading history...</p>
-                  ) : !backupHistory?.data?.length ? (
-                    <p className="text-primary/40 text-xs py-4">No backups found</p>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-xs text-primary/70">
-                          <thead>
-                            <tr className="border-b border-primary/10 text-primary/40">
-                              <th className="py-2 font-medium">Date & Time</th>
-                              <th className="py-2 font-medium">Type</th>
-                              <th className="py-2 font-medium">Status</th>
-                              <th className="py-2 font-medium">File Size</th>
-                              <th className="py-2 font-medium text-right">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {backupHistory.data.map((b) => (
-                              <tr key={b.id} className="border-b border-primary/5 hover:bg-primary/3">
-                                <td className="py-2.5 font-mono">{new Date(b.createdAt).toLocaleString()}</td>
-                                <td className="py-2.5">
-                                  <Badge variant={b.type === "MANUAL" ? "violet" : "info"}>{b.type}</Badge>
-                                </td>
-                                <td className="py-2.5">
-                                  <Badge variant={b.status === "COMPLETED" ? "success" : b.status === "FAILED" ? "danger" : "warning"}>
-                                    {b.status}
-                                  </Badge>
-                                </td>
-                                <td className="py-2.5 text-primary/50 font-mono">
-                                  {b.fileSize ? `${(b.fileSize / 1024).toFixed(2)} KB` : "—"}
-                                </td>
-                                <td className="py-2.5 text-right font-mono">
-                                  <button
-                                    disabled={deleteBackup.isPending}
-                                    onClick={async () => {
-                                      if (confirm("Delete this backup record?")) {
-                                        try {
-                                          await deleteBackup.mutateAsync(b.id);
-                                          toast.success("Backup record deleted");
-                                        } catch (err: any) {
-                                          toast.error(err.message);
-                                        }
-                                      }
-                                    }}
-                                    className="p-1.5 rounded-lg hover:bg-rose-500/10 text-primary/40 hover:text-rose-400 transition-all"
-                                    title="Delete Record"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      {/* Pagination */}
-                      {backupHistory.pagination && backupHistory.pagination.totalPages > 1 && (
-                        <div className="flex justify-end gap-2 pt-2">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={backupPage === 1}
-                            onClick={() => setBackupPage(p => p - 1)}
-                          >
-                            Previous
-                          </Button>
-                          <span className="text-xs text-primary/40 self-center">
-                            Page {backupPage} of {backupHistory.pagination.totalPages}
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={backupPage === backupHistory.pagination.totalPages}
-                            onClick={() => setBackupPage(p => p + 1)}
-                          >
-                            Next
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <BackupDashboard />
           )}
         </div>
       </div>

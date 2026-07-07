@@ -1,6 +1,18 @@
 import { z } from 'zod';
 import { isValidGSTIN, isValidIFSC, isValidHSN } from './indian-validators';
 
+export const productPackagingSchema = z.object({
+  label: z.string().min(1, "Label is required").max(50),
+  unit: z.string().min(1, "Unit is required").max(20),
+  conversionFactor: z.coerce.number().positive("Conversion factor must be positive"),
+  defaultPrice: z.coerce.number().min(0, "Default price cannot be negative").optional().nullable(),
+  isPurchaseUnit: z.boolean().default(false),
+  isLoose: z.boolean().default(false),
+  isDefault: z.boolean().default(false),
+  sortOrder: z.coerce.number().int().default(0),
+  active: z.boolean().default(true),
+});
+
 export const productSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   sku: z.string().max(50).optional().default(''),
@@ -21,7 +33,69 @@ export const productSchema = z.object({
   purchaseDate: z.string().optional().nullable(),
   purchaseFrom: z.string().max(100).optional().nullable(),
   purchaseInvoiceNo: z.string().max(100).optional().nullable(),
+  // ── Loose Sale Configuration ──
+  allowLooseSale: z.boolean().default(false),
+  baseUnit: z.string().max(20).optional().nullable(),
+  packagingOptions: z.array(productPackagingSchema).optional().nullable(),
+}).superRefine((data, ctx) => {
+  if (data.allowLooseSale) {
+    if (!data.baseUnit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Base unit is required for loose sale products",
+        path: ["baseUnit"],
+      });
+    }
+
+    if (data.packagingOptions && data.packagingOptions.length > 0) {
+      const labels = new Set<string>();
+      const factors = new Set<number>();
+      let purchaseUnitCount = 0;
+
+      data.packagingOptions.forEach((pkg, index) => {
+        const normalizedLabel = pkg.label.trim().toLowerCase();
+        
+        // 1. Base unit cannot appear as a packaging label
+        //    (but loose packaging variants CAN have their unit == baseUnit — that's the point)
+        if (data.baseUnit) {
+          if (normalizedLabel === data.baseUnit.trim().toLowerCase()) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Base unit cannot be used as a packaging label", path: ["packagingOptions", index, "label"] });
+          }
+          // Non-loose packaging variants should not use the base unit as their unit
+          // (e.g., a bag/pack shouldn't have unit="Kg" if baseUnit is "Kg")
+          if (!pkg.isLoose && pkg.unit.trim().toLowerCase() === data.baseUnit.trim().toLowerCase()) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Base unit cannot be used as a packaging unit for non-loose variants", path: ["packagingOptions", index, "unit"] });
+          }
+        }
+
+        // 2. Unique Labels
+        if (labels.has(normalizedLabel)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Duplicate packaging label", path: ["packagingOptions", index, "label"] });
+        }
+        labels.add(normalizedLabel);
+
+        // 3. Unique Conversion Factors
+        if (factors.has(pkg.conversionFactor)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Duplicate conversion factor", path: ["packagingOptions", index, "conversionFactor"] });
+        }
+        factors.add(pkg.conversionFactor);
+
+        // 4. Primary purchase unit count
+        if (pkg.isPurchaseUnit) purchaseUnitCount++;
+      });
+
+      // Exactly one purchase unit
+      if (purchaseUnitCount !== 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Exactly one primary/purchase packaging variant is required",
+          path: ["packagingOptions"],
+        });
+      }
+    }
+  }
 });
+
 
 export const customerSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
@@ -42,7 +116,7 @@ export const customerSchema = z.object({
 
 export const saleItemSchema = z.object({
   productId: z.string().min(1, "Product ID is required"),
-  qty: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+  qty: z.coerce.number().int().min(0).default(0),              // Legacy: auto-set to round(saleQty)
   price: z.coerce.number().min(0),
   discount: z.coerce.number().min(0).default(0),
   hsnCode: z.string().optional().nullable(),
@@ -50,6 +124,12 @@ export const saleItemSchema = z.object({
   // Phase 2: Price override audit
   originalPrice: z.coerce.number().min(0).optional().nullable(),
   priceOverrideReason: z.string().max(100).optional().nullable(),
+  // ── Loose Sale Fields ──
+  saleQty: z.coerce.number().positive().optional().nullable(),      // Canonical quantity (5 Kg, 2 Bags)
+  saleUnit: z.string().min(1).max(50).optional().nullable(),        // Unit of saleQty
+  isLoose: z.boolean().default(false),
+  packagingId: z.string().optional().nullable(),
+  packagingLabel: z.string().max(50).optional().nullable(),
 });
 
 export const salePaymentSchema = z.object({
@@ -80,6 +160,21 @@ export const saleSchema = z.object({
   approvedBy: z.string().optional().nullable(),
   approvedAt: z.string().optional().nullable(),
 });
+
+// ── Loose Sale: Packaging & Adjustments ──
+
+// (Moved productPackagingSchema above productSchema)
+
+export const inventoryAdjustmentSchema = z.object({
+  productId: z.string().min(1, "Product ID is required"),
+  adjustmentType: z.enum(["add", "remove"]),
+  baseQty: z.coerce.number().positive("Quantity must be positive"),
+  reason: z.enum(["spillage", "damage", "sampling", "physical_count", "other"]),
+  notes: z.string().max(200).optional().nullable(),
+}).refine(
+  (data) => data.reason !== "other" || (data.notes && data.notes.trim().length > 0),
+  { message: "Notes are required for 'other' reason", path: ["notes"] }
+);
 
 /** Relaxed schema for draft saves (allows 0 items) */
 export const draftSaleSchema = saleSchema.extend({
@@ -344,6 +439,7 @@ export const loanMasterSchema = z.object({
   lender: z.string().max(100).optional().nullable(),
   purpose: z.string().max(100).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
+  emiDay: z.coerce.number().min(1).max(31).optional().nullable(),
 });
 
 export const loanPaymentSchema = z.object({
