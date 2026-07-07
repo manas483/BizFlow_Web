@@ -1,5 +1,7 @@
 # Project Rules
 
+> **BizFlow exists to provide businesses with reliable, trustworthy operational data. Every engineering decision should reinforce that trust.**
+
 ## Authentication Safety Policy (Mandatory)
 
 **CRITICAL RULE: The authentication system is completely frozen.**
@@ -179,5 +181,48 @@ This includes:
 * Removing the topological dependency resolution during restore
 * Removing the pre-restore or post-restore integrity validations
 * Skipping transaction boundaries during restore
-* Modifying the manifest format (unless explicit `schemaVersion` upgrade is initiated)
 * Weakening RBAC on the API endpoints
+
+## BizFlow Engineering Principles
+
+### 1. Data Integrity First
+No feature is worth risking business data. Protect inventory, accounting, customers, suppliers, and financial records above all else.
+
+### 2. Preserve the Core
+Core business engines (inventory costing, accounting, authentication, backups) should be **extended**, not rewritten, unless there is a compelling architectural reason.
+
+### 3. Backwards Compatibility
+Schema and API changes should avoid breaking existing production workflows whenever practical. Prefer additive, reversible changes.
+
+### 4. Every Critical Change Must Be Recoverable
+Before shipping a high-impact change:
+* verified backup,
+* rollback plan,
+* deployment checklist,
+* post-deployment verification.
+
+### 5. Test Before Trust
+Critical business logic should be covered by:
+* unit tests,
+* integration tests,
+* concurrency tests where applicable,
+* manual business workflow validation.
+
+### 6. Observability is Part of the Feature
+If a feature cannot be monitored or diagnosed, it is not complete.
+
+### 7. Performance is Measured
+Optimize only after measuring. Keep benchmarks and monitor regressions.
+
+### 8. Security by Default
+Protect authentication, authorization, secrets, and sensitive business data in every change.
+
+### 9. Simplicity Over Cleverness
+Prefer straightforward, maintainable designs over complex solutions that are difficult to reason about.
+
+### 10. Earn User Trust Every Day
+Every deployment should increase confidence in the system—not merely add functionality.
+
+---
+
+> **Good engineering is measured not by how quickly features are delivered, but by how confidently businesses can depend on the software every day.**
