@@ -1,5 +1,10 @@
 import { PrismaClient } from '@prisma/client';
-import { PrismaNeonHttp } from '@prisma/adapter-neon';
+import { PrismaNeon } from '@prisma/adapter-neon';
+import { neonConfig } from '@neondatabase/serverless';
+import ws from 'ws';
+
+// Required for Node.js: provide a WebSocket implementation for the Neon driver
+neonConfig.webSocketConstructor = ws;
 
 const globalForPrisma = globalThis as unknown as {
   prisma_v4: PrismaClient | undefined;
@@ -14,8 +19,8 @@ function createPrismaClient() {
   // Remove any quotes, whitespace, or carriage returns
   connectionString = connectionString.replace(/^"|"$/g, '').trim();
 
-  // Use HTTP fetch adapter which takes the connection string directly
-  const adapter = new PrismaNeonHttp(connectionString);
+  // Use WebSocket adapter which supports both simple queries AND interactive transactions
+  const adapter = new PrismaNeon({ connectionString });
 
   const prismaBase = new PrismaClient({
     adapter,
