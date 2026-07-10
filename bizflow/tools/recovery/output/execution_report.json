@@ -1,0 +1,363 @@
+{
+  "applied": 71,
+  "skipped_already_repaired": 0,
+  "skipped_not_ready": 0,
+  "failed": 0,
+  "details": [
+    {
+      "invoiceNo": "INV-2026-072",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-071",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-070",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-069",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-068",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-067",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-066",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-065",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-064",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-063",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-062",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-061",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-060",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-059",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-057",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-056",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-055",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-054",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-053",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-052",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-051",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-050",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-049",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-048",
+      "status": "SUCCESS",
+      "itemsRepaired": 3
+    },
+    {
+      "invoiceNo": "INV-2026-047",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-046",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-045",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-044",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-043",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-042",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-041",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-040",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-039",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-038",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-037",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-036",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-035",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-034",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-033",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-032",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-031",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-030",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-029",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-028",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-027",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-026",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-025",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-024",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-023",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-022",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-021",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-020",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-019",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-018",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-017",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-016",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-015",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-014",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-013",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-012",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-011",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-010",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-009",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-008",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-007",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-006",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-005",
+      "status": "SUCCESS",
+      "itemsRepaired": 3
+    },
+    {
+      "invoiceNo": "INV-2026-004",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    },
+    {
+      "invoiceNo": "INV-2026-003",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-002",
+      "status": "SUCCESS",
+      "itemsRepaired": 1
+    },
+    {
+      "invoiceNo": "INV-2026-001",
+      "status": "SUCCESS",
+      "itemsRepaired": 2
+    }
+  ]
+}

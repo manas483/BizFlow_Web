@@ -1,0 +1,111 @@
+
+
+Tax Invoice
+Original for Buyer
+e-Invoice
+R. K SACHAN & SACHAN
+AT/PO-BHUASUNI,PS-BANGIRIPOSI,MAYURBHANJ,757092
+8984328645
+GSTIN: 21HUJPS8049R2ZJ
+Consignee (Ship to)
+Dubul Singh
+Gendapukhuri
+State Name     : Odisha, Code : 21
+Buyer (Bill to)
+Dubul Singh
+Gendapukhuri
+State Name     : Odisha, Code : 21
+Invoice No.
+INV-2026-072
+Dated
+01-Jul-26
+Delivery NoteMode/Terms of Payment
+Reference No. & DateOther References
+Buyer's Order No.Dated
+Dispatch Doc No.Delivery Note Date
+Dispatched throughDestination
+Terms of Delivery
+S.NO.ITEMSHSNQTY.RATEDISC.TAXAMOUNT
+1Ashirwad -Kalachampa Gold120999901 pcs850.000.000.00
+(0%)
+850.00
+TOTAL-Rs. 0.00Rs. 850.00
+HSN/SACTaxable
+Value
+Central Tax
+RateAmount
+State Tax
+RateAmount
+Total
+Tax Amount
+12099990850.000%0.000%0.00Rs. 0.00
+Total850.000.000.00Rs. 0.00
+Total Amount (in words)
+Indian Rupee Eight Hundred Fifty Only
+Bank Details
+Account Name:R K SACHAN AND SONS
+IFSC Code:UBIN0934798
+Account No:347921010000157
+Bank & Branch:UNION BANK OF INDIA
+Terms and Conditions
+1. Item will be dispatched after full payment is made
+2. It will take at least 6 to 7 days for the goods to 
+arrive
+Hidden
+Authorised Signatory For
+R. K SACHAN & SACHAN
+This is a Computer Generated Invoice
+
+Tax Invoice
+Original for Buyer
+e-Invoice
+R. K SACHAN & SACHAN
+AT/PO-BHUASUNI,PS-BANGIRIPOSI,MAYURBHANJ,757092
+8984328645
+GSTIN: 21HUJPS8049R2ZJ
+Consignee (Ship to)
+Laxman
+State Name     : Odisha, Code : 21
+Buyer (Bill to)
+Laxman
+State Name     : Odisha, Code : 21
+Invoice No.
+INV-2026-071
+Dated
+01-Jul-26
+Delivery NoteMode/Terms of Payment
+Reference No. & DateOther References
+Buyer's Order No.Dated
+Dispatch Doc No.Delivery Note Date
+Dispatched throughDestination
+Terms of Delivery
+S.NO.ITEMSHSNQTY.RATEDISC.TAXAMOUNT
+1Vishal Gaurav120999901 pcs650.000.000.00
+(0%)
+650.00
+TOTAL-Rs. 0.00Rs. 650.00
+HSN/SACTaxable
+Value
+Central Tax
+RateAmount
+State Tax
+RateAmount
+Total
+Tax Amount
+12099990650.000%0.000%0.00Rs. 0.00
+Total650.000.000.00Rs. 0.00
+Total Amount (in words)
+Indian Rupee Six Hundred Fifty Only
+Bank Details
+Account Name:R K SACHAN AND SONS
+IFSC Code:UBIN0934798
+Account No:347921010000157
+Bank & Branch:UNION BANK OF INDIA
+Terms and Conditions
+1. Item will be dispatched after full payment is made
+2. It will take at least 6 to 7 days for the goods to 
+arrive
+Hidden
+Authorised Signatory For
+R. K SACHAN & SACHAN
+This is a Computer Generated Invoice

@@ -1,0 +1,1561 @@
+[
+  {
+    "invoiceNo": "INV-2026-072",
+    "customerName": "Laxman",
+    "date": "01-Jul-26",
+    "total": 850,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 850,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 850
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-071",
+    "customerName": "Sunil Kumar Mohanta",
+    "date": "01-Jul-26",
+    "total": 650,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-070",
+    "customerName": "Kanhei Patra",
+    "date": "01-Jul-26",
+    "total": 1200,
+    "items": [
+      {
+        "productName": "Pan 849 Ahana",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 1200,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1200
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-069",
+    "customerName": "Samu Sing",
+    "date": "01-Jul-26",
+    "total": 850,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 850,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 850
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-068",
+    "customerName": "Chahabala",
+    "date": "01-Jul-26",
+    "total": 1700,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 850,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1700
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-067",
+    "customerName": "Laxian",
+    "date": "30-Jun-26",
+    "total": 680,
+    "items": [
+      {
+        "productName": "NP-7061 Indrani",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 680,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 680
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-066",
+    "customerName": "Maka Murmu",
+    "date": "30-Jun-26",
+    "total": 3050,
+    "items": [
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1450
+      },
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 800,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1600
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-065",
+    "customerName": "Dulu",
+    "date": "30-Jun-26",
+    "total": 2025,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1300
+      },
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 725
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-064",
+    "customerName": "Bapi Singh",
+    "date": "30-Jun-26",
+    "total": 650,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-063",
+    "customerName": "Sushanta Naik",
+    "date": "30-Jun-26",
+    "total": 1375,
+    "items": [
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 725
+      },
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-062",
+    "customerName": "Pradeep Kumar Mohapatra",
+    "date": "30-Jun-26",
+    "total": 1950,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 3,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1950
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-061",
+    "customerName": "Milan sing",
+    "date": "30-Jun-26",
+    "total": 810,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-060",
+    "customerName": "Mathura Naik",
+    "date": "30-Jun-26",
+    "total": 850,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 850,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 850
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-059",
+    "customerName": "Jakta Murmu",
+    "date": "30-Jun-26",
+    "total": 1300,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1300
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-057",
+    "customerName": "SALHA HEMBRAM",
+    "date": "30-Jun-26",
+    "total": 1450,
+    "items": [
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1450
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-056",
+    "customerName": "Relamal Soren",
+    "date": "29-Jun-26",
+    "total": 1360,
+    "items": [
+      {
+        "productName": "NP-7061 Indrani",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 680,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1360
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-055",
+    "customerName": "Mathura Marandi",
+    "date": "29-Jun-26",
+    "total": 1300,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1300
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-054",
+    "customerName": "Santilata Naik",
+    "date": "29-Jun-26",
+    "total": 680,
+    "items": [
+      {
+        "productName": "NP-7061 Indrani",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 680,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 680
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-053",
+    "customerName": "Dhurbendra Naik",
+    "date": "29-Jun-26",
+    "total": 1600,
+    "items": [
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 800,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1600
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-052",
+    "customerName": "Duli Singh",
+    "date": "29-Jun-26",
+    "total": 680,
+    "items": [
+      {
+        "productName": "NP-7061 Indrani",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 680,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 680
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-051",
+    "customerName": "Arsu Marandi",
+    "date": "29-Jun-26",
+    "total": 1300,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1300
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-050",
+    "customerName": "Parbati Hansda",
+    "date": "29-Jun-26",
+    "total": 650,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-049",
+    "customerName": "Chitta Hembram",
+    "date": "29-Jun-26",
+    "total": 650,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-048",
+    "customerName": "N/A",
+    "date": "29-Jun-26",
+    "total": 3670,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      },
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1560
+      },
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1300
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-047",
+    "customerName": "N/A",
+    "date": "28-Jun-26",
+    "total": 1300,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1300
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-046",
+    "customerName": "N/A",
+    "date": "28-Jun-26",
+    "total": 3250,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 5,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 3250
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-045",
+    "customerName": "N/A",
+    "date": "28-Jun-26",
+    "total": 2680,
+    "items": [
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1560
+      },
+      {
+        "productName": "Yashraj",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 560,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1120
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-044",
+    "customerName": "Sriram Murmu",
+    "date": "28-Jun-26",
+    "total": 1720,
+    "items": [
+      {
+        "productName": "Vishal Sona Bold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 700,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 700
+      },
+      {
+        "productName": "Sindhu",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 1020,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1020
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-043",
+    "customerName": "Somnath Mohanta",
+    "date": "24-Jun-26",
+    "total": 725,
+    "items": [
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 725
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-042",
+    "customerName": "Singray Marandi",
+    "date": "28-Jun-26",
+    "total": 810,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-041",
+    "customerName": "Thakura Prasad Murmu",
+    "date": "21-Jun-26",
+    "total": 780,
+    "items": [
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 780
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-040",
+    "customerName": "Chandra Mohan",
+    "date": "21-Jun-26",
+    "total": 810,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-039",
+    "customerName": "Rashimani Murmu",
+    "date": "28-Jun-26",
+    "total": 810,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-038",
+    "customerName": "Pradeep Kumar Mohapatra",
+    "date": "20-Jun-26",
+    "total": 1745,
+    "items": [
+      {
+        "productName": "Sindhu",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 1020,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1020
+      },
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 725
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-037",
+    "customerName": "Atul Kumar Sing",
+    "date": "25-Jun-26",
+    "total": 810,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-036",
+    "customerName": "Maka Murmu",
+    "date": "22-Jun-26",
+    "total": 2100,
+    "items": [
+      {
+        "productName": "Vishal Sona Bold",
+        "hsnCode": "12099990",
+        "qty": 3,
+        "unit": "pcs",
+        "rate": 700,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 2100
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-035",
+    "customerName": "Sriram Murmu",
+    "date": "25-Jun-26",
+    "total": 2270,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1620
+      },
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-034",
+    "customerName": "Debendra Mohanta",
+    "date": "26-Jun-26",
+    "total": 780,
+    "items": [
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 780
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-033",
+    "customerName": "Surendra Mohanta",
+    "date": "26-Jun-26",
+    "total": 2210,
+    "items": [
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1560
+      },
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-032",
+    "customerName": "Ganesh Mohanta",
+    "date": "26-Jun-26",
+    "total": 2990,
+    "items": [
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 3,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 2340
+      },
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-031",
+    "customerName": "Dayanidhi Mohanta",
+    "date": "25-Jun-26",
+    "total": 810,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-030",
+    "customerName": "Karan Murmu",
+    "date": "24-Jun-26",
+    "total": 810,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-029",
+    "customerName": "Ram Das Marndi",
+    "date": "24-Jun-26",
+    "total": 725,
+    "items": [
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 725
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-028",
+    "customerName": "Bagha Nayak",
+    "date": "23-Jun-26",
+    "total": 1120,
+    "items": [
+      {
+        "productName": "Yashraj",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 560,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1120
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-027",
+    "customerName": "Paran Marandi",
+    "date": "23-Jun-26",
+    "total": 1560,
+    "items": [
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1560
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-026",
+    "customerName": "Ganga Murmu",
+    "date": "23-Jun-26",
+    "total": 810,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-025",
+    "customerName": "Radha Mohan",
+    "date": "20-Jun-26",
+    "total": 2510,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 3,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1950
+      },
+      {
+        "productName": "Yashraj",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 560,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 560
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-024",
+    "customerName": "Sanatan Mohanta",
+    "date": "23-Jun-26",
+    "total": 1400,
+    "items": [
+      {
+        "productName": "Vishal Sona Bold",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 700,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1400
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-023",
+    "customerName": "Dayanidhi Mohanta",
+    "date": "28-Jun-26",
+    "total": 2270,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      },
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1620
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-022",
+    "customerName": "Iswar Mohanta",
+    "date": "22-Jun-26",
+    "total": 1340,
+    "items": [
+      {
+        "productName": "Yashraj",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 560,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 560
+      },
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 780
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-021",
+    "customerName": "Ganga Murmu",
+    "date": "28-Jun-26",
+    "total": 650,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-020",
+    "customerName": "Saiba Hembram",
+    "date": "21-Jun-26",
+    "total": 1300,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1300
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-019",
+    "customerName": "Pradeep Kumar Mohapatra",
+    "date": "20-Jun-26",
+    "total": 1210,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      },
+      {
+        "productName": "Yashraj",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 560,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 560
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-018",
+    "customerName": "Pradeep Kumar Mohapatra",
+    "date": "22-Jun-26",
+    "total": 1050,
+    "items": [
+      {
+        "productName": "Trump-162LS",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 1050,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1050
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-017",
+    "customerName": "San Kanhu Murmu",
+    "date": "20-Jun-26",
+    "total": 1050,
+    "items": [
+      {
+        "productName": "Trump-162LS",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 1050,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1050
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-016",
+    "customerName": "Bagdha Murmu(Tukulu)",
+    "date": "19-Jun-26",
+    "total": 1800,
+    "items": [
+      {
+        "productName": "Sindhu",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 1020,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1020
+      },
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 780
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-015",
+    "customerName": "Balram Mohanta",
+    "date": "19-Jun-26",
+    "total": 725,
+    "items": [
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 725
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-014",
+    "customerName": "Duli Hembram",
+    "date": "19-Jun-26",
+    "total": 3660,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1620
+      },
+      {
+        "productName": "Sindhu",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 1020,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 2040
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-013",
+    "customerName": "Karmi Soren",
+    "date": "28-Jun-26",
+    "total": 1560,
+    "items": [
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1560
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-012",
+    "customerName": "Papu Mohanta",
+    "date": "19-Jun-26",
+    "total": 650,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-011",
+    "customerName": "Budhia Hembram",
+    "date": "17-Jun-26",
+    "total": 1620,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1620
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-010",
+    "customerName": "Laxman Murmu",
+    "date": "17-Jun-26",
+    "total": 810,
+    "items": [
+      {
+        "productName": "Ashirwad -Kalachampa Gold",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 810,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 810
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-009",
+    "customerName": "Pradhan Hansda",
+    "date": "17-Jun-26",
+    "total": 725,
+    "items": [
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 725
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-008",
+    "customerName": "Budhuram Murmu",
+    "date": "17-Jun-26",
+    "total": 650,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-007",
+    "customerName": "Pinaki Patra",
+    "date": "17-Jun-26",
+    "total": 1020,
+    "items": [
+      {
+        "productName": "Sindhu",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 1020,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1020
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-006",
+    "customerName": "Mahendra Tudu",
+    "date": "16-Jun-26",
+    "total": 650,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-005",
+    "customerName": "Ajen Tudu",
+    "date": "16-Jun-26",
+    "total": 4010,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      },
+      {
+        "productName": "Pan 804 (Jamuna)",
+        "hsnCode": "100610",
+        "qty": 3,
+        "unit": "pcs",
+        "rate": 780,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 2340
+      },
+      {
+        "productName": "Sindhu",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 1020,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1020
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-004",
+    "customerName": "Rabindra Singhdev Sachan",
+    "date": "16-Jun-26",
+    "total": 2170,
+    "items": [
+      {
+        "productName": "Trump-162LS",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 1050,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1050
+      },
+      {
+        "productName": "Yashraj",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 560,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1120
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-003",
+    "customerName": "Kathia Patra",
+    "date": "10-Jun-26",
+    "total": 725,
+    "items": [
+      {
+        "productName": "NP-7075",
+        "hsnCode": "120999",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 725,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 725
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-002",
+    "customerName": "Sujit Ku. Patra",
+    "date": "09-Jun-26",
+    "total": 650,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 1,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 650
+      }
+    ],
+    "mathValid": true
+  },
+  {
+    "invoiceNo": "INV-2026-001",
+    "customerName": "",
+    "date": "09-Jun-26",
+    "total": 2420,
+    "items": [
+      {
+        "productName": "Vishal Gaurav",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 650,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1300
+      },
+      {
+        "productName": "Yashraj",
+        "hsnCode": "12099990",
+        "qty": 2,
+        "unit": "pcs",
+        "rate": 560,
+        "discount": 0,
+        "tax": 0,
+        "lineTotal": 1120
+      }
+    ],
+    "mathValid": true
+  }
+]
