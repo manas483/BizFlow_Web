@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
       ...(search ? { OR: [{ invoiceNo: { contains: search, mode: 'insensitive' as const } }, { customer: { name: { contains: search, mode: 'insensitive' as const } } }] } : {}),
       ...(status ? { status } : {}),
       ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to + 'T23:59:59') } : {}) } } : {}),
+      workflowState: { notIn: ['voided', 'draft'] },
     };
 
     const allowedSort = ['invoiceNo', 'total', 'paid', 'createdAt', 'status', 'invoiceDate'];

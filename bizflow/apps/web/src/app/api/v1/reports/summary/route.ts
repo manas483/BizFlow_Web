@@ -30,9 +30,9 @@ export async function GET(req: NextRequest) {
     const gstInclusive = business?.gstInclusive ?? false;
 
     const [salesAgg, expensesAgg, cogsItems, creditNotesAgg, customersAgg, inventoryProducts] = await Promise.all([
-      prisma.sale.aggregate({ where: { businessId: biz, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } }, _sum: { total: true, paid: true }, _count: true }),
+      prisma.sale.aggregate({ where: { businessId: biz, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' }, workflowState: { notIn: ['voided', 'draft'] } }, _sum: { total: true, paid: true }, _count: true }),
       prisma.expense.aggregate({ where: { businessId: biz, date: { gte: from, lte: to } }, _sum: { amount: true } }),
-      prisma.saleItem.findMany({ where: { sale: { businessId: biz, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' } } }, select: { qty: true, purchasePrice: true } }),
+      prisma.saleItem.findMany({ where: { sale: { businessId: biz, createdAt: { gte: from, lte: to }, status: { not: 'CANCELLED' }, workflowState: { notIn: ['voided', 'draft'] } } }, select: { qty: true, purchasePrice: true } }),
       prisma.creditNote.aggregate({ where: { businessId: biz, createdAt: { gte: from, lte: to } }, _sum: { amount: true } }),
       prisma.customer.aggregate({ where: { businessId: biz }, _sum: { dues: true } }),
       prisma.product.findMany({ where: { businessId: biz }, select: { stock: true, standardCost: true } }),

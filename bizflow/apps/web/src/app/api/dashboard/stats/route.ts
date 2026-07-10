@@ -37,12 +37,12 @@ async function handler(req: NextRequest) {
         prevCustomers
       ] = await Promise.all([
         prisma.sale.aggregate({
-          where: { businessId, createdAt: { gte: startOfMonth, lte: endOfMonth }, status: { not: 'CANCELLED' } },
+          where: { businessId, createdAt: { gte: startOfMonth, lte: endOfMonth }, status: { not: 'CANCELLED' }, workflowState: { notIn: ['voided', 'draft'] } },
           _sum: { total: true },
           _count: true,
         }),
         prisma.sale.aggregate({
-          where: { businessId, createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth }, status: { not: 'CANCELLED' } },
+          where: { businessId, createdAt: { gte: startOfPrevMonth, lte: endOfPrevMonth }, status: { not: 'CANCELLED' }, workflowState: { notIn: ['voided', 'draft'] } },
           _sum: { total: true },
           _count: true,
         }),

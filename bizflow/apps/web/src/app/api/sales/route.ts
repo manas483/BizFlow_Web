@@ -56,7 +56,7 @@ async function handleGET(req: NextRequest) {
         ]
       } : {}),
       ...(status && status.toLowerCase() !== 'all' ? { status: status.toLowerCase() } : {}),
-      ...(workflowState ? { workflowState } : { workflowState: { not: 'draft' } }), // Hide drafts by default
+      ...(workflowState ? { workflowState } : { workflowState: { notIn: ['draft', 'voided'] } }), // Hide drafts and voided by default
     };
 
     timer?.phase('db_query');
