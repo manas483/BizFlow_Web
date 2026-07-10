@@ -34,15 +34,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    const validatedData = productSchema.partial().parse(body);
+    const validatedData = productSchema.parse(body);
     const product = await InventoryService.updateProduct(id, existing, validatedData, session);
 
     return NextResponse.json(product);
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: 'Validation Error', details: error.issues }, { status: 400 });
     if (error instanceof AuthError) return error.response;
     console.error(error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal Server Error', stack: String(error) }, { status: 500 });
   }
 }
 

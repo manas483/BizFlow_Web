@@ -60,9 +60,10 @@ export async function POST(req: NextRequest) {
 
     // Calculate total (no GST for bill of supply)
     let total = 0;
-    for (const item of items) {
-      total += item.qty * item.price;
-    }
+    items.forEach((item: any) => {
+      const effectiveQty = item.saleQty != null ? item.saleQty : item.qty;
+      total += effectiveQty * item.price;
+    });
     const paidAmt = typeof paid === 'number' ? paid : parseFloat(String(paid)) || 0;
     const status = paidAmt >= total ? 'paid' : paidAmt > 0 ? 'partial' : 'unpaid';
 

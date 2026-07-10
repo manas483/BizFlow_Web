@@ -77,8 +77,10 @@ export default function ReportsPage() {
   // Prepare trend data based on period
   const trendData = useMemo(() => {
     const map: Record<string, number> = {};
+    const dateMap: Record<string, number> = {}; // track earliest timestamp per bucket for sorting
     for (const s of salesByMonthRaw) {
       const d = new Date(s.createdAt);
+      const ts = d.getTime();
       let key = "";
       if (period === "daily" || period === "weekly") {
         key = d.toLocaleDateString("default", { weekday: "short", month: "short", day: "numeric" });
@@ -88,8 +90,13 @@ export default function ReportsPage() {
         key = d.toLocaleDateString("default", { day: "numeric", month: "short" });
       }
       map[key] = (map[key] ?? 0) + (s._sum?.total ?? 0);
+      if (!(key in dateMap) || ts < dateMap[key]) {
+        dateMap[key] = ts;
+      }
     }
-    return Object.entries(map).map(([time, revenue]) => ({ time, revenue }));
+    return Object.entries(map)
+      .sort((a, b) => (dateMap[a[0]] ?? 0) - (dateMap[b[0]] ?? 0))
+      .map(([time, revenue]) => ({ time, revenue }));
   }, [salesByMonthRaw, period]);
 
   // Gross vs Net Profit Chart Data

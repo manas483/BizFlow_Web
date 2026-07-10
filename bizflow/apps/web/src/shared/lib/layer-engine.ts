@@ -406,7 +406,7 @@ async function consumeFIFOLIFO(
       amount,
       batchNo: layer.batchNo,
       lotNo: layer.lotNo,
-      openedNewBag: layer.remainingQty === layer.quantity,
+      openedNewBag: layer.remainingQty === layer.originalQty,
     });
 
     remaining = round4(remaining - consumeQty);
@@ -436,7 +436,7 @@ async function consumeWAC(tx: any, params: ConsumeLayersParams): Promise<LayerCo
   const layers = await tx.inventoryLayer.findMany({
     where,
     orderBy: [{ receiptDate: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, quantity: true, remainingQty: true, unitCost: true, batchNo: true, lotNo: true },
+    select: { id: true, originalQty: true, remainingQty: true, unitCost: true, batchNo: true, lotNo: true },
   });
 
   const totalAvailable = layers.reduce((sum: number, l: any) => sum + l.remainingQty, 0);
@@ -494,7 +494,7 @@ async function consumeWAC(tx: any, params: ConsumeLayersParams): Promise<LayerCo
       amount,
       batchNo: layer.batchNo,
       lotNo: layer.lotNo,
-      openedNewBag: layer.remainingQty === layer.quantity,
+      openedNewBag: layer.remainingQty === layer.originalQty,
     });
 
     remaining = round4(remaining - consumeQty);
@@ -572,6 +572,7 @@ async function consumeSpecific(
       amount,
       batchNo: layer.batchNo,
       lotNo: layer.lotNo,
+      openedNewBag: layer.remainingQty === layer.originalQty,
     }],
   };
 }
@@ -659,6 +660,7 @@ async function consumeStandard(tx: any, params: ConsumeLayersParams): Promise<La
       amount,
       batchNo: layer.batchNo,
       lotNo: layer.lotNo,
+      openedNewBag: layer.remainingQty === layer.originalQty,
     });
 
     remaining = round4(remaining - consumeQty);

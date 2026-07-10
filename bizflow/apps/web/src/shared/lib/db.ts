@@ -69,7 +69,7 @@ function createPrismaClient() {
             const dashboardTriggers = ['Sale', 'Expense', 'Customer', 'Purchase', 'Product', 'StockMovement', 'InventoryLayer', 'SaleItem', 'PurchaseItem'];
             if (dashboardTriggers.includes(model ?? '')) {
               const { CacheInvalidation } = require('./cache-invalidator');
-              const bId = businessId || (args?.data as any)?.businessId;
+              const bId = businessId || (args as any)?.data?.businessId;
               if (bId) {
                 switch (model) {
                   case 'Sale':
@@ -81,10 +81,10 @@ function createPrismaClient() {
                     CacheInvalidation.invalidatePurchase(bId).catch(console.error);
                     break;
                   case 'Product':
-                    CacheInvalidation.invalidateProduct(bId, (args?.where as any)?.id).catch(console.error);
+                    CacheInvalidation.invalidateProduct(bId, (args as any)?.where?.id).catch(console.error);
                     break;
                   case 'Customer':
-                    CacheInvalidation.invalidateCustomer(bId, (args?.where as any)?.id).catch(console.error);
+                    CacheInvalidation.invalidateCustomer(bId, (args as any)?.where?.id).catch(console.error);
                     break;
                   case 'Expense':
                     CacheInvalidation.invalidateExpense(bId).catch(console.error);
@@ -143,11 +143,15 @@ function createPrismaClient() {
       },
       product: {
         async update({ args, query }) {
-          const isUpdatingStock = args.data.stock !== undefined;
-          const isUpdatingBaseStock = args.data.baseStock !== undefined;
+          const data = args.data as any;
+          const isUpdatingStock = data.stock !== undefined;
+          const isUpdatingBaseStock = data.baseStock !== undefined;
+          // If the update itself is setting allowLooseSale, the caller is
+          // the inventory service managing loose-sale lifecycle — allow it.
+          const isSettingLooseFlag = data.allowLooseSale !== undefined;
 
-          if (isUpdatingStock && !isUpdatingBaseStock) {
-            const current = await (this as any).findUnique({
+          if (isUpdatingStock && !isUpdatingBaseStock && !isSettingLooseFlag) {
+            const current = await prismaBase.product.findUnique({
               where: args.where,
               select: { allowLooseSale: true },
             });
@@ -158,11 +162,13 @@ function createPrismaClient() {
           return query(args);
         },
         async updateMany({ args, query }) {
-          const isUpdatingStock = (args.data as any)?.stock !== undefined;
-          const isUpdatingBaseStock = (args.data as any)?.baseStock !== undefined;
+          const data = args.data as any;
+          const isUpdatingStock = data?.stock !== undefined;
+          const isUpdatingBaseStock = data?.baseStock !== undefined;
+          const isSettingLooseFlag = data?.allowLooseSale !== undefined;
 
-          if (isUpdatingStock && !isUpdatingBaseStock) {
-            const products = await (this as any).findMany({
+          if (isUpdatingStock && !isUpdatingBaseStock && !isSettingLooseFlag) {
+            const products = await prismaBase.product.findMany({
               where: args.where,
               select: { allowLooseSale: true },
             });

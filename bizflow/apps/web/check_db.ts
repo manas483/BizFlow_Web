@@ -1,6 +1,6 @@
 import { config } from 'dotenv';
 config();
-import { prisma } from './src/shared/lib/db.ts';
+import { prisma } from './src/shared/lib/db';
 
 async function run() {
   const users = await prisma.user.count();

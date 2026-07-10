@@ -72,7 +72,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     await prisma.$transaction(async (tx: any) => {
       // Restore stock
       for (const item of sale.items) {
-        await tx.product.update({ where: { id: item.productId }, data: { stock: { increment: item.qty } } }).catch(() => {});
+        await tx.$executeRaw`UPDATE "Product" SET "stock" = "stock" + ${Math.round(Number(item.qty))}, "baseStock" = COALESCE("baseStock", 0) + ${Number(item.qty)} WHERE id = ${item.productId}`.catch(() => {});
       }
       // Restore customer dues
       const outstanding = sale.total - sale.paid;

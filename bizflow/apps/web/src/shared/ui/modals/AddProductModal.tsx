@@ -114,10 +114,12 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
     setLoading(true);
     try {
       // Build packaging options for loose-enabled products
+      const finalBaseUnit = form.allowLooseSale ? (form.baseUnit || "Kg") : null;
+      
       const packagingOptions = form.allowLooseSale
         ? packagingRows.filter(p => p.label && p.conversionFactor).map((p, i) => ({
             label: p.label,
-            unit: p.unit || form.baseUnit,
+            unit: p.unit || finalBaseUnit,
             conversionFactor: parseFloat(p.conversionFactor) || 1,
             defaultPrice: p.defaultPrice ? parseFloat(p.defaultPrice) : null,
             isPurchaseUnit: p.isPurchaseUnit,
@@ -141,7 +143,7 @@ export default function AddProductModal({ open, onClose }: { open: boolean; onCl
         reorderLevel: parseInt(form.reorderLevel) || 0,
         preferredSupplier: form.preferredSupplier || null,
         allowLooseSale: form.allowLooseSale,
-        baseUnit: form.allowLooseSale ? form.baseUnit : null,
+        baseUnit: finalBaseUnit,
         packagingOptions,
       });
       setForm({ name: "", sku: "", category: "Grains", unit: "pcs", noOfBags: "", unitsPerBag: "1", stock: "", minStock: "", standardCost: "", sellingPrice: "", supplier: "", hsnCode: "", gstRate: "0", purchaseDate: "", purchaseFrom: "", purchaseInvoiceNo: "", reorderLevel: "", preferredSupplier: "", allowLooseSale: false, baseUnit: "" });

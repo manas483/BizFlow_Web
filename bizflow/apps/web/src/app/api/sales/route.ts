@@ -145,7 +145,8 @@ async function handlePOST(req: NextRequest) {
         const gstInclusive = business?.gstInclusive ?? false;
         let total = 0;
         items.forEach((item: any) => {
-          const grossAmt = (item.qty * item.price) - (item.discount || 0);
+          const effectiveQty = item.saleQty != null ? item.saleQty : item.qty;
+          const grossAmt = (effectiveQty * item.price) - (item.discount || 0);
           const rate = item.gstRate || 0;
           if (gstInclusive && rate > 0) { total += grossAmt; }
           else { total += grossAmt + grossAmt * (rate / 100); }
@@ -329,10 +330,10 @@ async function handlePOST(req: NextRequest) {
         }
 
         // Use saleQty for invoice total if present, otherwise qty
-        const effectiveQty = item.saleQty || item.qty;
+        const effectiveQty = item.saleQty != null ? item.saleQty : item.qty;
         invoiceLines.push({
           qty: effectiveQty,
-          price: product.sellingPrice,
+          price: item.price,
           discount: item.discount || 0,
           gstRate: item.gstRate || product.gstRate || 0,
         });
@@ -459,8 +460,9 @@ async function handlePOST(req: NextRequest) {
           // Layer consumption in bag-equivalent
           const layerQty = baseToLayerQty(baseDeduction, primaryFactor);
 
+          let layerResult: any = null;
           if (layerEngineEnabled) {
-            const layerResult = await adjustStockWithLayers({
+            layerResult = await adjustStockWithLayers({
               productId: item.productId,
               qty: layerQty,
               type: 'sale',
@@ -565,7 +567,7 @@ async function handlePOST(req: NextRequest) {
               });
             }
           } else {
-            await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.qty } } });
+            await tx.$executeRaw`UPDATE "Product" SET "stock" = "stock" - ${Math.round(Number(item.qty))}, "baseStock" = COALESCE("baseStock", 0) - ${Number(item.qty)} WHERE id = ${item.productId}`;
             const fallbackCost = (productMap.get(item.productId)?.purchasePrice || 0) * item.qty;
             await tx.saleItem.updateMany({
               where: { saleId: sale.id, productId: item.productId },

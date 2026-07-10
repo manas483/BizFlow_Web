@@ -257,7 +257,7 @@ function getQueryBudget(method: string, route: string): number {
  * code (like requireAuth) can add their own phases.
  */
 export function withPerf(
-  handler: (req: NextRequest, ...args: any[]) => Promise<NextResponse> | NextResponse
+  handler: (req: NextRequest, ...args: any[]) => Promise<Response> | Response
 ) {
   return async (req: NextRequest, ...args: any[]) => {
     const timer = new RequestTimer();
@@ -369,6 +369,6 @@ export function getTimer(): RequestTimer | null {
 // New routes should use withPerf instead.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function withTelemetry(handler: (req: NextRequest, ...args: any[]) => Promise<NextResponse> | NextResponse) {
+export function withTelemetry(handler: (req: NextRequest, ...args: any[]) => Promise<Response> | Response) {
   return withPerf(handler);
 }

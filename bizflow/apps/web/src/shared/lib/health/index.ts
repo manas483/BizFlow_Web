@@ -143,7 +143,7 @@ export async function checkLooseStockIntegrity(): Promise<LooseStockIntegrityRes
         // ── 3. Layer sum vs baseStock ────────────────────────────────────────
         const layers = await prisma.inventoryLayer.findMany({
           where: { itemId: product.id, status: 'ACTIVE', remainingQty: { gt: 0 } },
-          select: { remainingQty: true, quantity: true },
+          select: { remainingQty: true, originalQty: true },
         });
 
         if (layers.length > 0) {

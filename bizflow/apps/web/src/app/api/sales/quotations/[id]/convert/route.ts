@@ -66,12 +66,10 @@ export async function POST(
 
       // Stock auto-deduction & low stock check
       for (const item of quotation.items) {
-        const updatedProduct = await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.qty } }
-        });
+        await tx.$executeRaw`UPDATE "Product" SET "stock" = "stock" - ${Math.round(Number(item.qty))}, "baseStock" = COALESCE("baseStock", 0) - ${Number(item.qty)} WHERE id = ${item.productId}`;
+        const updatedProduct = await tx.product.findUnique({ where: { id: item.productId } });
 
-        if (updatedProduct.stock <= updatedProduct.minStock) {
+        if (updatedProduct && updatedProduct.stock <= updatedProduct.minStock) {
           const recentNotif = await tx.notification.findFirst({
             where: {
               businessId: session.user.businessId,

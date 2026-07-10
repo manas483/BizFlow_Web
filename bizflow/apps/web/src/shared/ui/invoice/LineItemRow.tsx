@@ -52,8 +52,8 @@ export default function LineItemRow({
     }
   }, [autoFocusQty]);
 
-  const qty = Number(item.qty) || 0;
-  const lineAmount = qty * item.price;
+  const displayQty = item.allowLooseSale ? (Number(item.saleQty) || 0) : (Number(item.qty) || 0);
+  const lineAmount = displayQty * item.price;
   const grossAmt = lineAmount - item.discount;
   const rate = item.gstRate || 0;
 
@@ -159,25 +159,31 @@ export default function LineItemRow({
           onChange={(e) => {
             const val = e.target.value === "" ? "" : item.allowLooseSale ? parseFloat(e.target.value) || 0 : parseInt(e.target.value) || 0;
             if (item.allowLooseSale) {
-              onUpdate(index, { saleQty: val, qty: 1 }); // saleQty takes precedence
+              const pkg = product?.packagingOptions?.find((p: any) => p.id === item.packagingId);
+              const factor = pkg ? Number(pkg.conversionFactor) || 1 : 1;
+              const baseQty = typeof val === "number" ? val * factor : 1;
+              onUpdate(index, { saleQty: val, qty: baseQty });
             } else {
               onUpdate(index, { qty: val });
             }
           }}
         />
-        {item.allowLooseSale && product?.packagingOptions ? (
+        {item.allowLooseSale && product?.packagingOptions && product.packagingOptions.length > 0 ? (
           <select
             value={item.packagingId || ""}
             onChange={(e) => {
               const pkgId = e.target.value;
               const pkg = product.packagingOptions?.find(p => p.id === pkgId);
               if (pkg) {
+                const factor = Number(pkg.conversionFactor) || 1;
+                const saleQty = Number(item.saleQty) || 0;
                 const updates: Partial<LineItem> = {
                   packagingId: pkg.id,
                   packagingLabel: pkg.label,
                   saleUnit: pkg.unit,
                   isLoose: pkg.isLoose,
                   unit: pkg.unit,
+                  qty: saleQty * factor,
                 };
                 if (pkg.defaultPrice != null) {
                   updates.price = Number(pkg.defaultPrice);

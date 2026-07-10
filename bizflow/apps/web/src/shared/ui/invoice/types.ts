@@ -77,10 +77,11 @@ export function createLineItemFromProduct(
   const effectivePrice = defaultPkg?.defaultPrice != null
     ? Number(defaultPkg.defaultPrice)
     : resolvedPrice;
+  const baseQty = defaultPkg ? qty * (Number(defaultPkg.conversionFactor) || 1) : qty;
 
   return {
     productId: product.id,
-    qty,
+    qty: baseQty,
     price: effectivePrice,
     originalPrice: resolvedPrice,
     priceOverrideReason: "",

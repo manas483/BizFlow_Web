@@ -67,8 +67,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const computedDueDate = computeDueDate(validatedData.invoiceDate, validatedData.paymentTerms, validatedData.dueDate);
       
       let newTotal = 0;
-      validatedData.items.forEach(item => {
-        const grossAmt = (item.qty * item.price) - (item.discount || 0);
+      body.items.forEach((item: any) => {
+        const effectiveQty = item.saleQty != null ? item.saleQty : item.qty;
+        const grossAmt = (effectiveQty * item.price) - (item.discount || 0);
         const rate = item.gstRate || 0;
         if (gstInclusive && rate > 0) newTotal += grossAmt;
         else newTotal += grossAmt + (grossAmt * (rate / 100));
@@ -134,7 +135,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       let newSubtotal = 0;
       let newTotalGst = 0;
       validatedData.items.forEach(item => {
-        const grossAmt = (item.qty * item.price) - (item.discount || 0);
+        const effectiveQty = item.saleQty != null ? item.saleQty : item.qty;
+        const grossAmt = (effectiveQty * item.price) - (item.discount || 0);
         const rate = item.gstRate || 0;
         if (gstInclusive && rate > 0) {
           const base = grossAmt / (1 + rate / 100);
@@ -153,7 +155,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
       const businessStateCode = business?.stateCode || extractStateCodeFromGST(business?.gstNumber) || null;
       const invoiceLines = validatedData.items.map(item => ({
-        qty: item.qty,
+        qty: item.saleQty != null ? item.saleQty : item.qty,
         price: item.price,
         discount: item.discount || 0,
         gstRate: item.gstRate || 0,
@@ -255,10 +257,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             version: { increment: 1 },
             items: {
               create: validatedData.items.map(item => {
-                const product = productMap[item.productId];
+                const product = productMap[item.productId] || { allowLooseSale: false, unit: 'units' };
+                const effectiveSaleQty = item.saleQty != null ? item.saleQty : item.qty;
                 return {
                   productId: item.productId,
-                  qty: item.qty,
+                  qty: product.allowLooseSale ? Math.round(Number(effectiveSaleQty)) : Math.round(Number(item.qty)),
                   price: item.price,
                   purchasePrice: 0, // Will update below
                   discount: item.discount,
@@ -266,6 +269,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                   gstRate: item.gstRate,
                   originalPrice: item.originalPrice ?? null,
                   priceOverrideReason: item.priceOverrideReason || null,
+                  saleQty: product.allowLooseSale ? effectiveSaleQty : item.qty,
+                  saleUnit: item.saleUnit || product.unit,
+                  isLoose: item.isLoose ?? false,
+                  packagingId: item.packagingId ?? null,
+                  packagingLabel: item.packagingLabel ?? null,
                   ...buildProductSnapshot(product),
                 };
               })
@@ -307,10 +315,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             });
           } else {
             // Basic stock deduction
-            await tx.product.update({
-              where: { id: item.productId },
-              data: { stock: { decrement: item.qty } }
-            });
+            await tx.$executeRaw`UPDATE "Product" SET "stock" = "stock" - ${Math.round(Number(item.qty))}, "baseStock" = COALESCE("baseStock", 0) - ${Number(item.qty)} WHERE id = ${item.productId}`;
           }
         }
 
@@ -456,7 +461,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     let newSubtotal = 0;
     let newTotalGst = 0;
     validatedData.items.forEach(item => {
-      const grossAmt = (item.qty * item.price) - (item.discount || 0);
+      const effectiveQty = item.saleQty != null ? item.saleQty : item.qty;
+      const grossAmt = (effectiveQty * item.price) - (item.discount || 0);
       const rate = item.gstRate || 0;
       if (gstInclusive && rate > 0) {
         const base = grossAmt / (1 + rate / 100);
@@ -468,6 +474,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     });
     const newTotal = newSubtotal + newTotalGst;
+
+    const productIds = validatedData.items.map(i => i.productId);
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      include: { packagingOptions: true }
+    });
+    const productMap = new Map(products.map(p => [p.id, p]));
     
     const sale = await prisma.$transaction(async (tx: any) => {
       const relatedJournals = await tx.journalEntry.findMany({
@@ -484,20 +497,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
 
       for (const item of existing.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.qty } }
-        });
+        await tx.$executeRaw`UPDATE "Product" SET "stock" = "stock" + ${Math.round(Number(item.qty))}, "baseStock" = COALESCE("baseStock", 0) + ${Number(item.qty)} WHERE id = ${item.productId}`;
       }
 
       await tx.saleItem.deleteMany({ where: { saleId: id } });
       await tx.salePayment.deleteMany({ where: { saleId: id } });
 
       for (const item of validatedData.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.qty } }
-        });
+        await tx.$executeRaw`UPDATE "Product" SET "stock" = "stock" - ${Math.round(Number(item.qty))}, "baseStock" = COALESCE("baseStock", 0) - ${Number(item.qty)} WHERE id = ${item.productId}`;
       }
 
       let status = 'unpaid';
@@ -519,14 +526,23 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           invoiceDate: validatedData.invoiceDate ? new Date(validatedData.invoiceDate) : null,
           version: { increment: 1 },
           items: {
-            create: validatedData.items.map(item => ({
-              productId: item.productId,
-              qty: item.qty,
-              price: item.price,
-              discount: item.discount,
-              hsnCode: item.hsnCode,
-              gstRate: item.gstRate,
-            }))
+            create: validatedData.items.map(item => {
+              const product = productMap.get(item.productId) || { allowLooseSale: false, unit: 'units' };
+              const effectiveSaleQty = item.saleQty != null ? item.saleQty : item.qty;
+              return {
+                productId: item.productId,
+                qty: product.allowLooseSale ? Math.round(Number(effectiveSaleQty)) : Math.round(Number(item.qty)),
+                price: item.price,
+                discount: item.discount,
+                hsnCode: item.hsnCode,
+                gstRate: item.gstRate,
+                saleQty: product.allowLooseSale ? effectiveSaleQty : item.qty,
+                saleUnit: item.saleUnit || product.unit,
+                isLoose: item.isLoose ?? false,
+                packagingId: item.packagingId ?? null,
+                packagingLabel: item.packagingLabel ?? null,
+              };
+            })
           }
         },
         include: { customer: true, items: { include: { product: true } } }
@@ -559,7 +575,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     
     const businessStateCode = business?.stateCode || extractStateCodeFromGST(business?.gstNumber) || null;
     const invoiceLines = validatedData.items.map(item => ({
-      qty: item.qty,
+      qty: item.saleQty != null ? item.saleQty : item.qty,
       price: item.price,
       discount: item.discount || 0,
       gstRate: item.gstRate || 0,
@@ -608,10 +624,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await prisma.$transaction(async (tx: any) => {
       if (existing.workflowState !== 'draft') {
         for (const item of existing.items) {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { increment: item.qty } }
-          });
+          await tx.$executeRaw`UPDATE "Product" SET "stock" = "stock" + ${Math.round(Number(item.qty))}, "baseStock" = COALESCE("baseStock", 0) + ${Number(item.qty)} WHERE id = ${item.productId}`;
         }
 
         if (existing.customerId) {

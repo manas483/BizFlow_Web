@@ -81,10 +81,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             data: { purchasePrice: item.qty > 0 ? cogs / item.qty : 0 },
           });
         } else {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { decrement: item.qty } }
-          });
+          await tx.$executeRaw`UPDATE "Product" SET "stock" = "stock" - ${Math.round(Number(item.qty))}, "baseStock" = COALESCE("baseStock", 0) - ${Number(item.qty)} WHERE id = ${item.productId}`;
         }
       }
 

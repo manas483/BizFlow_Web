@@ -39,7 +39,11 @@ export function useCreateProduct() {
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to create product");
+        let errorMessage = errorData.error || "Failed to create product";
+        if (errorData.details && Array.isArray(errorData.details)) {
+          errorMessage += ": " + errorData.details.map((d: any) => `${d.path.join('.')}: ${d.message}`).join(', ');
+        }
+        throw new Error(errorMessage);
       }
       return res.json();
     },
@@ -58,7 +62,11 @@ export function useUpdateProduct() {
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to update product");
+        let errorMessage = errorData.error || "Failed to update product";
+        if (errorData.details && Array.isArray(errorData.details)) {
+          errorMessage += ": " + errorData.details.map((d: any) => `${d.path.join('.')}: ${d.message}`).join(', ');
+        }
+        throw new Error(errorMessage);
       }
       return res.json();
     },

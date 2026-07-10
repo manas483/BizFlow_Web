@@ -62,9 +62,11 @@ export async function POST(req: NextRequest) {
     const parsed  = productSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error.issues);
 
+    const { packagingOptions, ...dataToInsert } = parsed.data;
+
     const product = await prisma.product.create({
       data: {
-        ...parsed.data,
+        ...dataToInsert,
         businessId: session.user.businessId,
       },
     });

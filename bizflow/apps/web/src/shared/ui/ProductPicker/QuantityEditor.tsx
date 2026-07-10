@@ -1,24 +1,36 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Minus } from "lucide-react";
 
 interface QuantityEditorProps {
   value: number;
   onChange: (qty: number) => void;
   maxStock?: number;
+  allowDecimals?: boolean;
 }
 
 export const QuantityEditor: React.FC<QuantityEditorProps> = ({
   value,
   onChange,
   maxStock,
+  allowDecimals = false,
 }) => {
+  const [localVal, setLocalVal] = useState<string>(value.toString());
+
+  useEffect(() => {
+    if (parseFloat(localVal) !== value) {
+      setLocalVal(value.toString());
+    }
+  }, [value]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
+    setLocalVal(val);
+
     if (val === "") {
       onChange(0);
       return;
     }
-    const num = parseInt(val, 10);
+    const num = allowDecimals ? parseFloat(val) : parseInt(val, 10);
     if (isNaN(num)) return;
     const sanitized = Math.max(0, num);
     onChange(maxStock !== undefined ? Math.min(sanitized, maxStock) : sanitized);
@@ -44,10 +56,10 @@ export const QuantityEditor: React.FC<QuantityEditorProps> = ({
         <Minus size={12} />
       </button>
       <input
-        type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        value={value === 0 ? "" : value}
+        type="number"
+        min={allowDecimals ? "0.01" : "0"}
+        step={allowDecimals ? "any" : "1"}
+        value={localVal}
         placeholder="0"
         onChange={handleInputChange}
         onFocus={(e) => e.target.select()}

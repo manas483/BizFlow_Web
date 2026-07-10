@@ -319,7 +319,7 @@ export function useDropdownKeyboard({
             for (let i = 0; i < len; i++) {
               if (
                 !items[i].disabled &&
-                items[i].label.toLowerCase().startsWith(char)
+                items[i].label.toLowerCase().includes(char)
               ) {
                 matchingIndices.push(i);
               }
@@ -344,7 +344,7 @@ export function useDropdownKeyboard({
               const idx = (startFrom + i) % len;
               if (
                 !items[idx].disabled &&
-                items[idx].label.toLowerCase().startsWith(buffer)
+                items[idx].label.toLowerCase().includes(buffer)
               ) {
                 foundIndex = idx;
                 break;

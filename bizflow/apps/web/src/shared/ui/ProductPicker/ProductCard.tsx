@@ -4,6 +4,7 @@ import { Product } from "./types";
 import { QuantityEditor } from "./QuantityEditor";
 import { formatCurrency } from "@/shared/lib/utils";
 import { cn } from "@/shared/lib/utils";
+import { formatLooseStock } from "@/shared/lib/loose-utils";
 
 interface ProductCardProps {
   product: Product;
@@ -117,13 +118,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 <span className="text-rose-400 font-medium flex items-center gap-1">
                   🔴 Out of Stock
                 </span>
-              ) : isLowStock ? (
-                <span className="text-amber-400 font-medium flex items-center gap-1">
-                  🟡 {product.stock} {product.unit} (Low Stock)
-                </span>
               ) : (
-                <span className="text-emerald-400 font-medium flex items-center gap-1">
-                  🟢 {product.stock} {product.unit} Available
+                <span className={cn(
+                  "font-medium flex items-center gap-1",
+                  isLowStock ? "text-amber-400" : "text-emerald-400"
+                )}>
+                  {isLowStock ? "🟡" : "🟢"} {
+                    product.allowLooseSale
+                      ? formatLooseStock(
+                          product.baseStock || 0,
+                          Number(product.packagingOptions?.find(p => p.isPurchaseUnit)?.conversionFactor || 1),
+                          product.packagingOptions?.find(p => p.isPurchaseUnit)?.unit || product.unit,
+                          product.baseUnit || 'units'
+                        ).display
+                      : `${product.stock} ${product.unit}`
+                  } {isLowStock && !isOutOfStock && "(Low Stock)"}
                 </span>
               )}
             </div>
@@ -147,6 +156,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               value={selectedQty}
               onChange={onQtyChange}
               maxStock={product.stock}
+              allowDecimals={product.allowLooseSale}
             />
           )}
 
@@ -237,16 +247,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <span className="text-[9px] opacity-40">GST {product.gstRate}%</span>
           </div>
 
-          <div>
+          <div className="flex justify-between items-center text-xs mt-2">
             {isOutOfStock ? (
-              <span className="text-[10px] text-rose-400 font-medium">Out of Stock</span>
-            ) : isLowStock ? (
-              <span className="text-[10px] text-amber-400 font-medium">
-                🟡 {product.stock} left ({product.unit})
-              </span>
+              <span className="text-rose-400 font-medium flex items-center gap-1">🔴 Out of Stock</span>
             ) : (
-              <span className="text-[10px] text-emerald-400 font-medium">
-                🟢 {product.stock} {product.unit}
+              <span className={cn(
+                "font-medium flex items-center gap-1",
+                isLowStock ? "text-amber-400" : "text-emerald-400/90"
+              )}>
+                {isLowStock ? "🟡" : "🟢"} {
+                  product.allowLooseSale
+                    ? formatLooseStock(
+                        product.baseStock || 0,
+                        Number(product.packagingOptions?.find(p => p.isPurchaseUnit)?.conversionFactor || 1),
+                        product.packagingOptions?.find(p => p.isPurchaseUnit)?.unit || product.unit,
+                        product.baseUnit || 'units'
+                      ).display
+                    : `${product.stock} ${product.unit}`
+                }
               </span>
             )}
           </div>
@@ -259,6 +277,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               value={selectedQty}
               onChange={onQtyChange}
               maxStock={product.stock}
+              allowDecimals={product.allowLooseSale}
             />
           )}
         </div>

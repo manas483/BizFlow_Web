@@ -35,14 +35,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const clientVersion = body.version;
 
-    const parsed = productSchema.partial().safeParse(body);
+    const parsed = productSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error.issues);
+
+    const { packagingOptions, ...dataToUpdate } = parsed.data;
 
     if (typeof clientVersion === 'number') {
       const result = await prisma.product.updateMany({
         where: { id, businessId: session.user.businessId, version: clientVersion },
         data: {
-          ...parsed.data,
+          ...dataToUpdate,
           version: { increment: 1 }
         },
       });
@@ -62,7 +64,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       await prisma.product.update({
         where: { id },
         data: {
-          ...parsed.data,
+          ...dataToUpdate,
           version: { increment: 1 }
         },
       });

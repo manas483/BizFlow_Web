@@ -13,9 +13,9 @@ export const POST = withAuth(async () => {
   const record = await prisma.backupRecord.create({
     data: {
       businessId,
-      type:        'MANUAL',
+      backupType:  'MANUAL',
       status:      'IN_PROGRESS',
-      triggeredBy: session.user.id,
+      createdByUserId: session.user.id,
     },
   });
 

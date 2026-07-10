@@ -67,10 +67,7 @@ export async function POST(req: NextRequest) {
               tx
             });
             // Update product stock since restoreLayer only updates the layer
-            await tx.product.update({
-              where: { id: item.productId },
-              data: { stock: { increment: item.qty } }
-            });
+            await tx.$executeRaw`UPDATE "Product" SET "stock" = "stock" + ${Math.round(Number(item.qty))}, "baseStock" = COALESCE("baseStock", 0) + ${Number(item.qty)} WHERE id = ${item.productId}`;
           }
         }
       }

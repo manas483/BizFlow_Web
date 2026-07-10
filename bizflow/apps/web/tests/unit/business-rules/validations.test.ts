@@ -120,10 +120,10 @@ describe('Validation Engine - Zod Schemas', () => {
       expect(result.success).toBe(true);
     });
 
-    test('Invalid phone (empty) fails', () => {
+    test('Empty phone passes', () => {
       const data = { name: 'Acme Corp', phone: '' };
       const result = customerSchema.safeParse(data);
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
   });
 

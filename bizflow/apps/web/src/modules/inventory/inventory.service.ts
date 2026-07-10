@@ -234,16 +234,57 @@ export class InventoryService {
   }
 
   static async updateProduct(id: string, existing: any, data: any, session: any) {
-    const { purchaseDate, ...rest } = data;
+    const { purchaseDate, packagingOptions, ...rest } = data;
     
     // Check if stock is manually changed (not through adjustStock)
     const stockDiff = (data.stock ?? existing.stock) - existing.stock;
 
     const product = await prisma.$transaction(async (tx) => {
+      // ── Loose Sale: Update packaging options if provided ──
+      let baseStockUpdate = {};
+      if (rest.allowLooseSale && packagingOptions && packagingOptions.length > 0) {
+        const primaryPkg = packagingOptions.find((p: any) => p.isPurchaseUnit);
+        
+        // If product didn't have allowLooseSale before, initialize baseStock
+        if (!existing.allowLooseSale && primaryPkg && (data.stock ?? existing.stock) > 0) {
+           const currentStock = data.stock ?? existing.stock;
+           baseStockUpdate = { baseStock: currentStock * Number(primaryPkg.conversionFactor) };
+        }
+
+        // Delete existing packagings
+        await (tx as any).productPackaging.deleteMany({
+          where: { productId: id }
+        });
+
+        // Create new packagings
+        for (const pkg of packagingOptions) {
+          await (tx as any).productPackaging.create({
+            data: {
+              productId: id,
+              label: pkg.label,
+              unit: pkg.unit,
+              conversionFactor: pkg.conversionFactor,
+              defaultPrice: pkg.defaultPrice ?? null,
+              isPurchaseUnit: pkg.isPurchaseUnit ?? false,
+              isLoose: pkg.isLoose ?? false,
+              isDefault: pkg.isDefault ?? false,
+              sortOrder: pkg.sortOrder ?? 0,
+            },
+          });
+        }
+      } else if (rest.allowLooseSale === false && existing.allowLooseSale === true) {
+        // If disabling loose sale, remove packagings and clear baseStock
+        await (tx as any).productPackaging.deleteMany({
+          where: { productId: id }
+        });
+        baseStockUpdate = { baseStock: null, baseUnit: null };
+      }
+
       const updated = await tx.product.update({
         where: { id },
         data: {
           ...rest,
+          ...baseStockUpdate,
           ...(purchaseDate !== undefined ? { purchaseDate: purchaseDate ? new Date(purchaseDate) : null } : {}),
         },
       });

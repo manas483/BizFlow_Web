@@ -50,6 +50,10 @@ export async function executeRestore(options: RestoreOptions): Promise<RestoreRe
       throw new Error('Tenant isolation violation: Attempted to restore a backup belonging to another business.');
     }
 
+    if (!backupRecord.fileName) {
+      throw new Error('Backup record is missing a fileName.');
+    }
+
     // 3. Decrypt and parse payload
     const storage = getStorageProvider();
     const encryptedPayload = await storage.download(backupRecord.fileName);

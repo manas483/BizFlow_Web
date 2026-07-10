@@ -3,10 +3,13 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check, X } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
+import { useDropdownKeyboard } from "@/shared/hooks/useDropdownKeyboard";
+import type { DropdownItem } from "@/shared/hooks/useDropdownKeyboard";
 
 interface Option {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
 interface CustomMultiSelectProps {
@@ -20,6 +23,7 @@ interface CustomMultiSelectProps {
 export function CustomMultiSelect({ value = [], onChange, options, placeholder, className }: CustomMultiSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   // Close on outside click
   useEffect(() => {
@@ -38,12 +42,43 @@ export function CustomMultiSelect({ value = [], onChange, options, placeholder, 
     }
   };
 
+  // Keyboard navigation — closeOnSelect is false for multi-select
+  const {
+    highlightedIndex,
+    setHighlightedIndex,
+    handleKeyDown,
+    listboxId,
+    getOptionId,
+    activeDescendantId,
+    listRef,
+  } = useDropdownKeyboard({
+    items: options as DropdownItem[],
+    isOpen: open,
+    onSelect: (val) => {
+      handleToggle(val);
+      // Highlight stays on the toggled item (no reset)
+    },
+    onClose: () => {
+      setOpen(false);
+      triggerRef.current?.focus();
+    },
+    onOpen: () => setOpen(true),
+    closeOnSelect: false, // Multi-select: Enter toggles but keeps dropdown open
+  });
+
   return (
     <div ref={ref} className={cn("relative w-full", className)}>
       {/* Trigger */}
       <button
+        ref={triggerRef}
         type="button"
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={open ? listboxId : undefined}
+        aria-activedescendant={activeDescendantId}
         onClick={() => setOpen(o => !o)}
+        onKeyDown={handleKeyDown}
         className="w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm transition-all focus:outline-none min-h-[42px]"
         style={{
           backgroundColor: "var(--input-bg)",
@@ -88,6 +123,10 @@ export function CustomMultiSelect({ value = [], onChange, options, placeholder, 
       {/* Dropdown panel */}
       {open && (
         <div
+          ref={listRef}
+          id={listboxId}
+          role="listbox"
+          aria-multiselectable="true"
           className="absolute z-50 w-full mt-1.5 rounded-xl overflow-y-auto shadow-2xl max-h-60 custom-scrollbar"
           style={{
             backgroundColor: "var(--bg-surface-2)",
@@ -99,16 +138,33 @@ export function CustomMultiSelect({ value = [], onChange, options, placeholder, 
               No invoices available
             </div>
           ) : (
-            options.map(opt => {
+            options.map((opt, index) => {
               const isSelected = value.includes(opt.value);
+              const isHighlighted = index === highlightedIndex;
+              const isDisabled = !!opt.disabled;
+
               return (
                 <button
                   key={opt.value}
+                  id={getOptionId(index)}
                   type="button"
-                  onClick={() => handleToggle(opt.value)}
+                  role="option"
+                  aria-selected={isSelected}
+                  aria-disabled={isDisabled || undefined}
+                  data-option-index={index}
+                  disabled={isDisabled}
+                  onClick={() => {
+                    if (!isDisabled) handleToggle(opt.value);
+                  }}
+                  onMouseEnter={() => {
+                    if (!isDisabled) setHighlightedIndex(index);
+                  }}
                   className={cn(
-                    "w-full flex items-center px-3.5 py-2.5 text-sm text-left transition-colors hover:bg-white/5",
-                    isSelected && "text-violet-400 font-medium"
+                    "w-full flex items-center px-3.5 py-2.5 text-sm text-left transition-colors",
+                    isDisabled && "opacity-40 cursor-not-allowed",
+                    !isDisabled && isHighlighted && "bg-white/10",
+                    !isDisabled && !isHighlighted && "hover:bg-white/5",
+                    isSelected && "text-violet-400 font-medium",
                   )}
                   style={{ color: isSelected ? undefined : "var(--text-secondary)" }}
                 >
