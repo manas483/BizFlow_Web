@@ -189,6 +189,22 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
   const [deletedItems, setDeletedItems] = useState<{item: LineItem, index: number, timer: any}[]>([]);
   const [workflowState, setWorkflowState] = useState<"draft" | "posted">("draft");
 
+  // ── Fallback product data from sale API (snapshot + embedded product) ──
+  type SaleProductFallback = {
+    id: string;
+    name: string;
+    sku?: string;
+    category?: string;
+    unit?: string;
+    hsnCode?: string;
+    gstRate?: number;
+    sellingPrice?: number;
+    standardCost?: number;
+    stock?: number;
+    minStock?: number;
+  };
+  const [saleProducts, setSaleProducts] = useState<Map<string, SaleProductFallback>>(new Map());
+
   // ── Permissions ──
   const { data: session } = useSession();
   const permissions = ((session?.user as any)?.permissions ?? []) as string[];
@@ -250,16 +266,45 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
                 productId: i.productId,
                 qty: i.qty,
                 price: i.price,
-                originalPrice: i.price,
-                priceOverrideReason: "",
+                originalPrice: i.priceOverrideReason ? (i.originalPrice || i.price) : i.price,
+                priceOverrideReason: i.priceOverrideReason || "",
                 discount: i.discount || 0,
                 discountType: "flat" as const,
                 discountInput: i.discount || 0,
                 hsnCode: i.hsnCode || "",
                 gstRate: i.gstRate || 0,
-                originalGstRate: i.gstRate || 0,
+                originalGstRate: i.productGstRate || i.gstRate || 0,
                 unit: i.productUnit || "pcs",
+                // Loose sale fields
+                saleQty: i.saleQty != null ? i.saleQty : i.qty,
+                saleUnit: i.saleUnit || i.productUnit || "pcs",
+                isLoose: i.isLoose || false,
+                packagingId: i.packagingId || null,
+                packagingLabel: i.packagingLabel || null,
               })));
+
+              // ── Build fallback product map from sale API response ──
+              // Merges snapshot fields (productName, productSku, etc.) with the
+              // embedded product relation, mirroring the PDF generation approach.
+              const prodMap = new Map<string, SaleProductFallback>();
+              data.items.forEach((i: any) => {
+                const resolvedProduct: SaleProductFallback = {
+                  ...(i.product ?? {}),
+                  id: i.productId,
+                  name: i.productName ?? i.product?.name ?? "Unknown Product",
+                  sku: i.productSku ?? i.product?.sku ?? "",
+                  category: i.productCategory ?? i.product?.category ?? "",
+                  unit: i.productUnit ?? i.product?.unit ?? "pcs",
+                  gstRate: i.productGstRate ?? i.gstRate ?? i.product?.gstRate ?? 0,
+                  hsnCode: i.productHsnCode ?? i.hsnCode ?? i.product?.hsnCode ?? "",
+                  sellingPrice: i.price,
+                  standardCost: i.product?.standardCost ?? 0,
+                  stock: i.product?.stock ?? 0,
+                  minStock: i.product?.minStock ?? 0,
+                };
+                prodMap.set(i.productId, resolvedProduct);
+              });
+              setSaleProducts(prodMap);
             }
             setPaid(data.paid > 0 ? String(data.paid) : "");
             setPlaceOfSupply(data.placeOfSupply || "");
@@ -284,6 +329,13 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
     }
   }, [open, editSaleId]);
 
+  // Clear fallback products when switching from Edit → Create
+  useEffect(() => {
+    if (!editSaleId) {
+      setSaleProducts(new Map());
+    }
+  }, [editSaleId]);
+
   const placeOfSupplyOptions = INDIAN_STATES.map(s => ({ value: s, label: s }));
 
   const resetForm = () => {
@@ -294,6 +346,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
     setLastAddedIndex(null);
     setPaymentTerms("immediate"); setCustomDueDate(""); setPayments([]); setWorkflowState("draft");
     deletedItems.forEach(d => clearTimeout(d.timer)); setDeletedItems([]);
+    setSaleProducts(new Map());
   };
 
   const handleCustomerChange = (val: string) => {
@@ -331,8 +384,14 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
         remainingSelections.forEach((sel: any) => {
           const existingIdx = newItems.findIndex(i => i.productId === sel.product.id);
           if (existingIdx !== -1) {
-            const currentQty = Number(newItems[existingIdx].qty) || 0;
-            newItems[existingIdx] = { ...newItems[existingIdx], qty: currentQty + sel.qty };
+            const newItem = createLineItemFromProduct(sel.product, sel.qty, sel.resolvedPrice);
+            const currentSaleQty = Number(newItems[existingIdx].saleQty) || Number(newItems[existingIdx].qty) || 0;
+            const currentBaseQty = Number(newItems[existingIdx].qty) || 0;
+            newItems[existingIdx] = { 
+              ...newItems[existingIdx], 
+              saleQty: currentSaleQty + sel.qty,
+              qty: currentBaseQty + newItem.qty
+            };
             toast.success(`Merged quantity for ${sel.product.name}`);
           } else {
             newItems.push(createLineItemFromProduct(sel.product, sel.qty, sel.resolvedPrice));
@@ -349,8 +408,14 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
       selectedList.forEach((sel: any) => {
         const existingIdx = newItems.findIndex(i => i.productId === sel.product.id);
         if (existingIdx !== -1) {
-          const currentQty = Number(newItems[existingIdx].qty) || 0;
-          newItems[existingIdx] = { ...newItems[existingIdx], qty: currentQty + sel.qty };
+          const newItem = createLineItemFromProduct(sel.product, sel.qty, sel.resolvedPrice);
+          const currentSaleQty = Number(newItems[existingIdx].saleQty) || Number(newItems[existingIdx].qty) || 0;
+          const currentBaseQty = Number(newItems[existingIdx].qty) || 0;
+          newItems[existingIdx] = { 
+            ...newItems[existingIdx], 
+            saleQty: currentSaleQty + sel.qty,
+            qty: currentBaseQty + newItem.qty
+          };
           toast.success(`Merged quantity for ${sel.product.name}`);
         } else {
           newItems.push(createLineItemFromProduct(sel.product, sel.qty, sel.resolvedPrice));
@@ -375,15 +440,15 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
 
     items.forEach(item => {
       if (!item.productId) return;
-      const qty = Number(item.qty) || 0;
-      const lineAmount = qty * item.price;
+      const displayQty = item.allowLooseSale ? (Number(item.saleQty) || 0) : (Number(item.qty) || 0);
+      const lineAmount = displayQty * item.price;
       const lineDiscount = item.discount || 0;
       const grossAmt = lineAmount - lineDiscount;
       const rate = item.gstRate || 0;
 
       subtotal += lineAmount;
       lineDiscountTotal += lineDiscount;
-      totalQty += qty;
+      totalQty += displayQty;
       itemCount++;
 
       let lineTax: number;
@@ -659,7 +724,7 @@ export default function NewSaleModal({ open, onClose, editSaleId }: { open: bool
                     key={index}
                     item={item}
                     index={index}
-                    product={products.find((p: any) => p.id === item.productId)}
+                    product={products.find((p: any) => p.id === item.productId) ?? saleProducts.get(item.productId)}
                     gstInclusive={gstInclusive}
                     canOverridePrice={canOverridePrice}
                     canOverrideGst={canOverrideGst}
